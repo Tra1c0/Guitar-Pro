@@ -53,6 +53,7 @@ import kotlin.math.roundToLong
             OutlinedButton(onClick = vm::clearLoop, enabled = practice.loop != null) { Text(tr("Loop aus", "Loop off")) }
         }
         ToggleRow(stringResource(R.string.metronome), practice.metronome, vm::setMetronome)
+        ToggleRow(tr("Visuelles Metronom (Zählzeiten in der Transportleiste)", "Visual metronome (beats in the transport bar)"), practice.visualMetronome, { on -> vm.updatePractice { it.copy(visualMetronome = on) } })
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.count_in), style = MaterialTheme.typography.bodyMedium)
             (0..2).forEach { bars -> FilterChip(practice.countInBars == bars, { vm.setCountIn(bars) }, label = { Text(if (bars == 0) tr("aus", "off") else "$bars ${tr("Takt", "bar")}") }) }

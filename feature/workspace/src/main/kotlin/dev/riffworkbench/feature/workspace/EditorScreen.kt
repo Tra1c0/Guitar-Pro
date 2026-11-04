@@ -1,8 +1,10 @@
 package dev.riffworkbench.feature.workspace
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,6 +15,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -226,7 +229,21 @@ import dev.riffworkbench.ui.score.ScoreCursor
                     bar != null && bar > 0 -> "${stringResource(R.string.measure)} $bar"
                     else -> ""
                 }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontFamily = FontFamily.Monospace)
+                val beat = position?.let { p -> ws.editor?.project?.measures?.firstOrNull { it.id == p.position.measureId }?.let { it.signature to p.position.offset } }
+                if (practice.visualMetronome && playing && !transport.countingIn && beat != null) BeatDots(beat.first, beat.second)
             }
+        }
+    }
+}
+
+/** Visual metronome: one dot per beat of the current bar, driven by the audio-clock position (downbeat larger). */
+@Composable private fun BeatDots(signature: TimeSignature, offset: Fraction) {
+    val beats = signature.numerator.coerceIn(1, 16)
+    val current = (offset.toDouble() * signature.denominator + 1e-9).toInt().coerceIn(0, beats - 1)
+    Row(Modifier.clearAndSetSemantics { }, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        repeat(beats) { i ->
+            val color = if (i == current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+            Box(Modifier.size(if (i == 0) 12.dp else 9.dp).background(color, CircleShape))
         }
     }
 }

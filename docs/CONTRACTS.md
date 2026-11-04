@@ -247,7 +247,7 @@ Aktuelle native Speicherung garantiert atomare Sichtbarkeit eines vollständig g
 - Grenze: PracticeSettings, SpeedTrainer, Transport und AudioClip.
 - Ein-/Ausgabe: Geschwindigkeit 25–150 %, Count-in (0–4 Takte), Metronom, Loop über Taktbereich, Speed-Trainer, Cursor folgt der Wiedergabe. Referenzaufnahmen mit Offset, Pegel, Pan, Mute und Solo unter derselben Uhr wie der Synthesizer.
 - Ausführung und Fehler: UI liest die Audio-Uhr; Geschwindigkeitswechsel kompiliert neu und bleibt an derselben musikalischen Position. Trainer erhöht nach N Loop-Durchläufen bis zum Zieltempo. Bei Tempo ≠ 100 % bleiben Clips stumm und die Audio-Seite sagt das, bis C-STRETCH umgesetzt ist.
-- Abnahme: Loop, Count-in, Trainer (AudioAdapterTest), Clip-Synchronität (AudioClipTest), Import/Ausrichten/Entfernen im ViewModel (ReferenceAudioTest). Visuelles Metronom und Playback-Griffbrett offen.
+- Abnahme: Loop, Count-in, Trainer (AudioAdapterTest), Clip-Synchronität (AudioClipTest), Import/Ausrichten/Entfernen im ViewModel (ReferenceAudioTest). Visuelles Metronom als Zählzeit-Punkte an der Audio-Uhr; Playback-Griffbrett offen.
 
 ## C-TUNER
 
