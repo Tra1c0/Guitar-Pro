@@ -13,3 +13,7 @@ data class ExportRequest(val project: Project, val formatId: String, val render:
 data class RenderedScore(val projectRevision: Long, val elements: List<ScoreElementBounds>)
 data class ScoreElementBounds(val entityId: EntityId, val x: Float, val y: Float, val width: Float, val height: Float)
 data class ExternalDevice(val id: String, val name: String, val integrationId: String)
+
+/** Streaming byte destination for large exports (rendered audio). Implementations may block. */
+fun interface ByteSink { fun write(bytes: ByteArray, offset: Int, length: Int) }
+data class RenderSummary(val frames: Long, val sampleRate: Int, val channels: Int, val peak: Double, val clippedSamples: Long, val bytes: Long)
