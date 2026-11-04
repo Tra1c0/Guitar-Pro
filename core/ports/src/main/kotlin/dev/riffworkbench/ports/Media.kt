@@ -22,7 +22,7 @@ interface ScoreExporter {
 /** C-REPEAT: finite route with occurrence identity; malformed jumps fail with diagnostics. */
 interface RepeatCompiler { fun compile(project: Project): Outcome<List<PlaybackOccurrence>> }
 /** C-SEQUENCER: exact rhythm -> sample events; each note owns its pitch curve. Off the real-time thread. */
-interface PlaybackCompiler { suspend fun compile(project: Project, sampleRate: Int): Outcome<PlaybackPlan> }
+interface PlaybackCompiler { suspend fun compile(project: Project, sampleRate: Int, options: PlaybackOptions = PlaybackOptions()): Outcome<PlaybackPlan> }
 interface TempoMapper { fun toMicros(position: PlaybackOccurrence, project: Project): Outcome<Long> }
 interface AudioSyncMapper { fun toAudioMicros(position: PlaybackOccurrence, map: SyncMap): Outcome<Long> }
 

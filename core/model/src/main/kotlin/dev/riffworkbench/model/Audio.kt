@@ -33,10 +33,112 @@ enum class SoundBankFormat { SF2, SF3, ARTICULATION_SAMPLES }
 enum class CursorMode { FIXED, FOLLOW, FREE }
 @Serializable data class LiveRouting(val midiDeviceId: String? = null, val audioInputId: String? = null, val monitor: Boolean = false, val record: Boolean = false)
 
-/** Each note has an independent voice: channel-wide bend is not the engine contract. */
-data class ScheduledNote(val noteId: EntityId, val trackId: EntityId, val frame: Long, val endFrame: Long, val pitch: Pitch, val velocity: Int, val string: Int?, val articulations: List<Articulation>)
-data class PlaybackPlan(val projectRevision: Long, val sampleRate: Int, val route: List<PlaybackOccurrence>, val notes: List<ScheduledNote>)
-data class TransportState(val status: TransportStatus = TransportStatus.UNAVAILABLE, val position: PlaybackOccurrence? = null, val sample: SamplePosition? = null, val underruns: Long = 0, val reason: String? = "Native engine is not implemented in phase 1")
+/**
+ * Resolved performance of one note occurrence. Frames are absolute plan frames (speed already applied).
+ * Each note owns its pitch curve; nothing here is a channel-wide controller, so a bend on one string
+ * cannot drag a held note on another string.
+ */
+data class ScheduledNote(
+    val noteId: EntityId,
+    val trackId: EntityId,
+    val frame: Long,
+    val endFrame: Long,
+    val pitch: Pitch,
+    val velocity: Int,
+    val string: Int?,
+    val articulations: List<Articulation>,
+    val trackIndex: Int = 0,
+    val routeIndex: Int = 0,
+    /** Sounding pitch in fractional MIDI units: written pitch, harmonic shift and fine tuning. */
+    val soundingPitch: Double = pitch.midiNumber + pitch.cents / 100.0,
+    /** Pitch offsets in cents relative to [soundingPitch]; frames relative to [frame], ascending. */
+    val curve: List<CurvePoint> = emptyList(),
+    val vibrato: VibratoSpec? = null,
+    val attack: AttackKind = AttackKind.PICK,
+    val palmMute: Boolean = false,
+    val dead: Boolean = false,
+    val harmonic: HarmonicKind? = null,
+    val letRing: Boolean = false,
+    val drumStroke: DrumStroke = DrumStroke.NORMAL,
+    val chokeGroup: Int? = null,
+    /** Element gain/pan for percussion kits; 1.0/0.0 for pitched instruments. */
+    val elementGain: Double = 1.0,
+    val elementPan: Double = 0.0,
+)
+data class CurvePoint(val frame: Long, val cents: Double)
+data class VibratoSpec(val depthCents: Double, val rateHz: Double, val startFrame: Long)
+enum class AttackKind { PICK, LEGATO, TAP, SLAP, POP, GRACE }
+enum class DrumStroke { NORMAL, RIMSHOT, CROSS_STICK, CHOKE }
+data class MetronomeClick(val frame: Long, val level: Int)
+
+/** One played measure of the unfolded route with its local time map (written offset -> plan frame). */
+class RouteSpan(
+    val routeIndex: Int,
+    val measureId: EntityId,
+    val measureIndex: Int,
+    val occurrence: Int,
+    val length: Fraction,
+    /** Written offsets in whole notes, ascending, first 0 and last length. */
+    val offsets: DoubleArray,
+    /** Plan frames (fractional) for each entry in [offsets]. */
+    val frames: DoubleArray,
+) {
+    init { require(offsets.size == frames.size && offsets.size >= 2) }
+    val startFrame: Long get() = kotlin.math.round(frames.first()).toLong()
+    val endFrame: Long get() = kotlin.math.round(frames.last()).toLong()
+    fun frameAt(offset: Double): Double {
+        if (offset <= offsets[0]) return frames[0]
+        for (i in 1 until offsets.size) if (offset <= offsets[i]) {
+            val span = offsets[i] - offsets[i - 1]
+            return if (span <= 0.0) frames[i] else frames[i - 1] + (offset - offsets[i - 1]) / span * (frames[i] - frames[i - 1])
+        }
+        return frames.last()
+    }
+    fun offsetAt(frame: Double): Double {
+        if (frame <= frames[0]) return offsets[0]
+        for (i in 1 until frames.size) if (frame <= frames[i]) {
+            val span = frames[i] - frames[i - 1]
+            return if (span <= 0.0) offsets[i] else offsets[i - 1] + (frame - frames[i - 1]) / span * (offsets[i] - offsets[i - 1])
+        }
+        return offsets.last()
+    }
+}
+
+data class PlaybackOptions(val speed: Double = 1.0, val metronome: Boolean = false, val includeMutedTracks: Boolean = true) {
+    init { require(speed.isFinite() && speed in 0.1..4.0) { "Geschwindigkeit außerhalb von 10–400 %" } }
+}
+
+data class PlaybackPlan(
+    val projectRevision: Long,
+    val sampleRate: Int,
+    val route: List<PlaybackOccurrence>,
+    /** Sorted by [ScheduledNote.frame]. */
+    val notes: List<ScheduledNote>,
+    val spans: List<RouteSpan> = emptyList(),
+    val clicks: List<MetronomeClick> = emptyList(),
+    val speed: Double = 1.0,
+    val trackIds: List<EntityId> = emptyList(),
+    val diagnostics: List<Diagnostic> = emptyList(),
+) {
+    /** End of the written route (without release tails). */
+    val totalFrames: Long get() = spans.lastOrNull()?.endFrame ?: (notes.maxOfOrNull { it.endFrame } ?: 0L)
+    fun spanAt(frame: Long): RouteSpan? {
+        if (spans.isEmpty()) return null
+        var low = 0; var high = spans.lastIndex
+        while (low < high) { val mid = (low + high + 1) / 2; if (spans[mid].startFrame <= frame) low = mid else high = mid - 1 }
+        return spans[low]
+    }
+    /** Playhead position for a plan frame; offset is quantized to 1/3840 of a whole note for display. */
+    fun positionAt(frame: Long): PlaybackOccurrence? {
+        val span = spanAt(frame) ?: return null
+        val offset = span.offsetAt(frame.toDouble()).coerceIn(0.0, span.length.toDouble())
+        val ticks = kotlin.math.floor(offset * 3840).toLong().coerceAtLeast(0)
+        return PlaybackOccurrence(ScorePosition(span.measureId, Fraction.of(ticks, 3840)), span.occurrence, span.routeIndex)
+    }
+    fun frameOf(routeIndex: Int, offset: Fraction = Fraction.ZERO): Long? =
+        spans.getOrNull(routeIndex)?.let { kotlin.math.round(it.frameAt(offset.toDouble())).toLong() }
+}
+data class TransportState(val status: TransportStatus = TransportStatus.UNAVAILABLE, val position: PlaybackOccurrence? = null, val sample: SamplePosition? = null, val underruns: Long = 0, val reason: String? = "Audio-Engine nicht verbunden", val speed: Double = 1.0, val loop: LoopRange? = null, val countingIn: Boolean = false, val latencyMs: Double? = null)
 enum class TransportStatus { UNAVAILABLE, STOPPED, PREPARING, PLAYING, PAUSED, INTERRUPTED, FAILED }
 data class AudioDevice(val id: String, val name: String, val sampleRates: List<Int>, val input: Boolean, val estimatedLatencyMs: Double?)
 data class WaveformLevel(val samplesPerPeak: Int, val minimum: List<Float>, val maximum: List<Float>)
