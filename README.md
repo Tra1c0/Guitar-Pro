@@ -1,17 +1,62 @@
 # RiffWorkbench
 
-Android-first Offline-Editor für TAB und Partitur. Phase 1 setzt das vollständige Anwendungsgerüst des [Briefings](docs/BRIEFING.md) um: **17 Module, 178 registrierte Merkmale, 32 Dienstverträge und 13 Projektansichten**. Ein kleiner echter Editor ist nutzbar; Desktop-Parität ist das weitere Entwicklungsziel.
+Android-first Offline-Editor für TAB und Partitur mit eigenem Notensatz, eigener Klangerzeugung und Guitar-Pro-Austausch. Die App läuft komplett offline; es werden keine fremden Tabs, Soundbanks, RSE-Inhalte oder Impulsantworten mitgeliefert. Grundlage ist das [Briefing](docs/BRIEFING.md); welche Merkmale in welcher Tiefe fertig sind, steht in der [Paritätsmatrix](docs/PARITY.md).
 
-## Bereits nutzbar
+## Was die App kann
 
-- Projekte für siebensaitige Drop-A-Gitarre, Bass und Drums erstellen; weitere Gitarren-, Bass-, Drum- und Pianospuren ergänzen, umsortieren und entfernen.
-- Saite, Takt und eine von vier Stimmen wählen. Bünde einschließlich 10–24 mit Vorschau/Commit, Notenwerte, Punktierung, Pausen, Palm-Mute und Dead Notes eingeben. Akkordmodus hält die Position.
-- Drumgrid auf demselben Beat-/Notenmodell; Kick/HH-Akkorde bleiben beim Entfernen eines einzelnen Elements erhalten.
-- Undo/Redo, Tempo, 4/4-/7/8-Takte, gespeicherte Mixerwerte und benannte Schnappschüsse.
-- Autosave mit Konflikterkennung, vorherigem Commit und sichtbaren Speicherfehlern; native `.riffproj`-Dateien per Android-Dateiauswahl öffnen/exportieren.
-- Deutsche und vorbereitete englische Oberfläche, dunkles/helles Design, Querformat-/Tabletstruktur und externe Tastatur.
+**Eingabe und Bearbeitung**
+- Projekte mit Gitarren (3–10 Saiten, freie Stimmungen, Teil-Capo), Bass, Drums und Keys; Spuren anlegen, duplizieren, umbenennen, umsortieren, Instrument wechseln (Tonhöhe oder Griff erhalten).
+- Bünde mit Vorschau und Commit, Notenwerte, Punktierung, Tuplets, Pausen, Akkordmodus, vier unabhängige Stimmen. Jede eingetragene Note wird angespielt.
+- Quick-Bar und Effektseite: Palm-Mute, Dead, Ghost, Akzente, Staccato, Let Ring, Haltebögen, Hammer-on/Pull-off, alle Slide-Arten, Bends (voll, ½, ¼, Release, Prebend), Whammy, Vibrato, Flageoletts (natürlich, künstlich, Pinch, Tap, Semi), Tapping, Slap/Pop, Tremolo-Picking, Triller, Vorschläge, Dynamik, Fermaten, Strum/Arpeggio/Rasgueado, Pickstroke.
+- Takte einfügen, löschen, duplizieren, kopieren/einfügen (auch über alle Spuren), Bereichsauswahl, Transposition, Taktart, Tonart, Swing/Triplet Feel, Tempowechsel, Abschnitte, Wiederholungen mit Voltas, D.C./D.S./Coda/Fine.
+- Drumgrid (1/8 bis 1/32 und Triolenraster) mit Artikulationen und Velocity auf demselben Notenmodell.
+- Undo/Redo, benannte Schnappschüsse, Autosave mit Konflikterkennung, externe Tastatur mit Kürzeln (Ziffern, Pfeile, Strg+Z/Y/C/V/D, Leertaste, F4 wiederholt die letzte Aktion).
 
-**GP-Import/-Export, echter Notensatz und Audio sind noch nicht implementiert.** Die App gibt dafür einen erklärten Status aus. Es gibt keine simulierte Wiedergabe, leeren Erfolgsdateien oder mitgelieferten RSE-/SoundFont-Inhalte. Jede offene Fähigkeit verweist auf ihren Implementierungsvertrag.
+**Notensatz**
+- TAB mit Rhythmus, Standardnotation (Schlüssel, Vorzeichen, Balken, Haltebögen, Hilfslinien) oder beides; Drum-Notation; fortlaufend oder umbrochen; Zoom per Pinch, Tippen setzt den Cursor, mitlaufender Playhead.
+
+**Wiedergabe und Klang**
+- Eigener Synthesizer: physikalisch modellierte Saiten mit Bends und Vibrato pro Note, PM/Dead/Flageolett/Legato, synthetische Drums mit Choke-Gruppen, Keys. Ton-Presets (High-Gain, Crunch, Clean, Akustik, Bass Pick/Finger, Keys) und editierbare Effektkette (Gate, Overdrive, Amp, Cabinet, EQ, Kompressor, Chorus, Delay, Reverb).
+- Mixer mit Volume, Pan, Mute, Solo, Master. Wiederholungen werden korrekt aufgelöst, Tempo und Swing wirken auf die Wiedergabe.
+
+**Üben**
+- Geschwindigkeit 25–150 %, Loop über Taktbereich, Count-in, Metronom, Speed-Trainer, Stimmgerät über das Mikrofon.
+- Referenz-Audio: eigene Aufnahmen (WAV, MP3, AAC/M4A, Ogg, FLAC) importieren, per Wellenform „Takt 1“ setzen, Pegel/Pan/Mute/Solo. Clips laufen sample-genau zur Partitur, auch bei Loop und Sprüngen – vorerst nur bei 100 % Tempo.
+
+**Austausch**
+- Import mit Inhaltserkennung: Guitar Pro 3/4/5; weitere Formate siehe [Formatstand](#formatstand). Die Originaldatei bleibt im Projekt erhalten, nicht übernommene Merkmale stehen im Verlustbericht.
+- Export: natives `.riffproj` (vollständig, inklusive Audio), SVG, PDF (A4), WAV-Mix (48 kHz, 24 Bit) und Stems für die DAW als ZIP mit gemeinsamem Startpunkt.
+
+## Formatstand
+
+| Format | Import | Export |
+|---|---|---|
+| RiffWorkbench `.riffproj` | ja | ja |
+| Guitar Pro 3, 4, 5 | ja (gegen eigene Fixtures geprüft) | – |
+
+Guitar-Pro-Treue ist nur gegen selbst erzeugte Dateien geprüft, nicht gegen Guitar Pro Desktop. Siehe [offene Abnahmen](docs/SPIKES.md).
+
+## Eigene Entscheidungen
+
+- **Eigener Notensatz statt alphaTab** – alphaTab 1.9.0 passt nicht zur gepinnten Toolchain (SDK 37, Kotlin 2.4), und Bearbeitung über fremde Bounds wäre eine zusätzliche Übersetzungsschicht.
+- **Eigener Synthesizer statt SoundFont/RSE** – keine Klangbank mit ungeklärten Rechten; Bends und Techniken pro Note statt Kanal-Controller; vollständig auf der JVM testbar.
+- **AudioTrack in Kotlin statt Oboe/NDK** – Low-Latency-Float-Ausgabe mit Hardware-Zeitstempeln; die Engine bleibt testbar, ein Oboe-Adapter wäre nur eine weitere Ausgabe.
+- **Referenz-Audio nur bei 100 %** – lieber stumm als falsch synchron, bis Time-Stretch existiert.
+- **Schema 1 unverändert** – alle Phase-1-Projekte öffnen weiter.
+
+Begründungen und Folgen: [Architektur](docs/ARCHITECTURE.md), [Abhängigkeiten und Rechte](docs/DEPENDENCIES.md).
+
+## Was noch offen ist
+
+- Geräte-Abnahmen: Latenz, Underruns, Bluetooth/USB-Routing, Thermik, Hörvergleich des Synthesizers, Stimmgerät mit echter Saite.
+- Gegencheck in Guitar Pro Desktop und Cubase.
+- Time-Stretch und Anker-Sync für frei gespielte Aufnahmen, SF2/eigene Samplebank, Bus-Routing und Automation, USB-MIDI-Eingabe, Line-in, Befehlspalette, Slash/Jianpu, Lyrics- und Akkordsymbol-Satz.
+
+Jede offene Fähigkeit meldet in der App einen erklärten Status mit Vertrags-ID ([Verträge](docs/CONTRACTS.md)); es gibt keine vorgetäuschte Wiedergabe und keine leeren Erfolgsdateien.
+
+## Installieren
+
+Die CI baut bei jedem Push eine Debug-APK (Artefakt `riffworkbench-debug-apk` im jeweiligen Lauf unter *Actions*). Eine vorher installierte RiffWorkbench-Debug-APK mit anderer Signatur muss zuerst deinstalliert werden; Projekte vorher als `.riffproj` exportieren und danach wieder öffnen. Release-Signatur und Veröffentlichung sind nicht eingerichtet.
 
 ## Bauen und prüfen
 
@@ -23,19 +68,19 @@ Voraussetzung: JDK 17, Android SDK Platform 36, Build Tools 36.0.0 und Python 3.
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Die Debug-APK ist ein installierbares Entwicklungsartefakt. Release-Signatur und Veröffentlichung sind nicht eingerichtet. Die CI führt dieselben Prüfungen aus und archiviert APK sowie Berichte. UI-Tests laufen auf Robolectric API 35; das ersetzt keinen Xiaomi-15-Gerätetest.
+UI-Tests laufen auf Robolectric API 35; das ersetzt keinen Gerätetest. Stand der Prüfungen: [Verifikation](docs/VALIDATION.md).
 
-## Architektur und weitere Arbeit
+## Weitere Dokumente
 
 - [Architektur, Datenmodell und Zustandsflüsse](docs/ARCHITECTURE.md)
 - [Vollständige Paritätsmatrix](docs/PARITY.md) und [maschinenlesbares Register](spec/features.json)
-- [Dienstverträge und offene Implementierungen](docs/CONTRACTS.md)
-- [Machbarkeitstests A/B und Roadmap](docs/SPIKES.md)
+- [Dienstverträge](docs/CONTRACTS.md)
+- [Offene Abnahmen und Roadmap](docs/SPIKES.md)
 - [Testanleitung und Verifikationsstand](docs/VALIDATION.md)
 - [Native Datei und Wiederherstellung](docs/PROJECT_FORMAT.md)
 - [Quellen, Abhängigkeiten und Rechte](docs/DEPENDENCIES.md)
 - [Eigene Fixtures](fixtures/README.md)
 
-Nach einer Änderung an `spec/features.json`: `python3 tools/generate_registry.py`. `verifyArchitecture` verhindert veraltete Ableitungen, unbekannte Routen/Verträge, Kernimporte von Android/Java und zyklische Modulabhängigkeiten. Architekturabdeckung bedeutet, dass jede erfasste Anforderung einen Bereich, Vertrag, Zustand und eine Ausbauetappe hat. Sie bedeutet keine fertig implementierte Desktop-Parität.
+Nach einer Änderung an `spec/features.json`: `python3 tools/generate_registry.py`. `verifyArchitecture` verhindert veraltete Ableitungen, unbekannte Routen/Verträge, Kernimporte von Android/Java und zyklische Modulabhängigkeiten.
 
-Für die eigenen Anwendungsquellen ist noch keine Veröffentlichungslizenz festgelegt. Drittanbieter behalten ihre jeweiligen Lizenzbedingungen; das synthetische Testsignal ist separat als CC0 ausgewiesen.
+Für die eigenen Anwendungsquellen ist noch keine Veröffentlichungslizenz festgelegt. Drittanbieter behalten ihre jeweiligen Lizenzbedingungen; die synthetischen Testsignale und Fixtures sind separat als CC0 ausgewiesen.
