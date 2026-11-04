@@ -4,6 +4,8 @@ import dev.riffworkbench.model.*
 import dev.riffworkbench.ports.*
 import java.io.ByteArrayInputStream
 import dev.riffworkbench.adapter.formats.gp.GpBinaryDetector
+import dev.riffworkbench.adapter.formats.gpif.GpifDetector
+import dev.riffworkbench.adapter.formats.gpif.GpifFamily
 import java.util.zip.ZipInputStream
 
 /**
@@ -43,7 +45,7 @@ class DefaultFormatCatalog(private val importers: Map<String, ScoreImporter> = e
         } catch (e: Exception) { return Outcome.Failure(FailureCode.CORRUPT, "Beschädigtes ZIP-Archiv", contractId = "C-FORMAT") }
         return when {
             "manifest.json" in names || "project.json" in names -> Outcome.Success(NATIVE)
-            "Content/score.gpif" in names -> Outcome.Success(formats.first { it.id == "gp7" })
+            "Content/score.gpif" in names -> Outcome.Success(formats.first { it.id == (if (GpifDetector.classify(bytes).family == GpifFamily.GP8) "gp8" else "gp7") })
             "META-INF/container.xml" in names -> Outcome.Success(formats.first { it.id == "musicxml" })
             else -> Outcome.Failure(FailureCode.UNAVAILABLE, "ZIP-Archiv ohne bekanntes Notenformat", contractId = "C-FORMAT")
         }

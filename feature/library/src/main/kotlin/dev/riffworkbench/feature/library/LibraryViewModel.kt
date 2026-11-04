@@ -6,9 +6,12 @@ import dev.riffworkbench.editor.ProjectFactory
 import dev.riffworkbench.editor.ScoreValidator
 import dev.riffworkbench.model.*
 import dev.riffworkbench.ports.*
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class LibraryViewModel(
     private val repository: ProjectRepository,
@@ -16,6 +19,8 @@ class LibraryViewModel(
     private val ids: IdSource,
     private val formats: FormatCatalog? = null,
     private val assets: AssetStore? = null,
+    /** Parsing runs here; some importers do not switch threads themselves. */
+    private val background: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     val projects = repository.projects
     val issues = repository.issues
@@ -47,12 +52,12 @@ class LibraryViewModel(
         mutableBusy.value = true
         viewModelScope.launch {
             try {
-                val format = formats?.detect(bytes, fileName)
+                val format = formats?.let { catalog -> withContext(background) { catalog.detect(bytes, fileName) } }
                 if (format == null || (format is Outcome.Success && format.value.id == "riffproj")) { importNativeNow(bytes, onOpen); return@launch }
                 if (format is Outcome.Failure) { mutableError.value = format.message; return@launch }
                 val info = (format as Outcome.Success).value
                 val importer = formats.importer(info.id) ?: run { mutableError.value = "${info.displayName}-Import ist nicht verfügbar"; return@launch }
-                val imported = when (val r = importer.import(bytes, ids)) { is Outcome.Failure -> { mutableError.value = r.message; return@launch }; is Outcome.Success -> r.value }
+                val imported = when (val r = withContext(background) { importer.import(bytes, ids) }) { is Outcome.Failure -> { mutableError.value = r.message; return@launch }; is Outcome.Success -> r.value }
                 var project = imported.project.copy(revision = 0)
                 val original = assets?.put(fileName?.take(120) ?: "original.${info.extension}", "application/octet-stream", bytes, AssetRights("Vom Nutzer importierte Originaldatei", "unverified", false))
                 // One canonical provenance entry per import. Importers may describe the original themselves; the library owns the

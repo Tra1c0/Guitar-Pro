@@ -7,7 +7,7 @@ object ForeignFormats {
     val formats = listOf(
         FormatInfo("gp3", "Guitar Pro 3", "gp3", "gp-binary"), FormatInfo("gp4", "Guitar Pro 4", "gp4", "gp-binary"),
         FormatInfo("gp5", "Guitar Pro 5", "gp5", "gp-binary"), FormatInfo("gpx", "Guitar Pro 6", "gpx", "gpx-bcfs"),
-        FormatInfo("gp7", "Guitar Pro 7", "gp", "gpif-zip"), FormatInfo("gp8", "Guitar Pro 8 fidelity", "gp", "gpif-zip"),
+        FormatInfo("gp7", "Guitar Pro 7", "gp", "gpif-zip"), FormatInfo("gp8", "Guitar Pro 8", "gp", "gpif-zip"),
         FormatInfo("musicxml", "MusicXML", "musicxml", "xml"), FormatInfo("midi", "MIDI / Tempo-Map", "mid", "midi"),
         FormatInfo("ascii", "ASCII TAB", "txt", "text"), FormatInfo("powertab", "PowerTab", "ptb", "legacy"),
         FormatInfo("tabledit", "TablEdit", "tef", "legacy"), FormatInfo("pdf", "PDF", "pdf", "visual"),

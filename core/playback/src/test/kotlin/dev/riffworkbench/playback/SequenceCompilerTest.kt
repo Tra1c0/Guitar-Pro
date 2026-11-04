@@ -91,6 +91,20 @@ class SequenceCompilerTest {
         assertEquals(43 + 19.02, notes[4].soundingPitch, 1e-6)
     }
 
+    @Test fun naturalHarmonicsCountFretsFromTheCapo() {
+        // Capo 2 on Drop A: frets are relative to the capo, so "fret 7" is the 3rd-harmonic node of the shortened string.
+        val m = listOf(kit.measure())
+        val capo = InstrumentDefinition(capoByString = List(7) { 2 })
+        val g = kit.guitar(m).let { t -> t.copy(instrument = capo, staves = t.staves.map { st -> st.copy(bars = st.bars.map { b -> b.copy(voices = b.voices.map { v ->
+            if (v.index != 0) v else v.copy(beats = listOf(
+                kit.beat(f(0, 1), 4, Note(EntityId("h7"), Pitch(capo.pitch(0, 7)), 0, 7, articulations = listOf(Articulation.Harmonic(HarmonicKind.NATURAL)))),
+                kit.beat(f(1, 4), 4, Note(EntityId("h12"), Pitch(capo.pitch(0, 12)), 0, 12, articulations = listOf(Articulation.Harmonic(HarmonicKind.NATURAL))))))
+        }) }) }) }
+        val notes = plan(kit.project(m, listOf(g))).notes
+        assertEquals(35 + 19.0196, notes[0].soundingPitch, 1e-3)
+        assertEquals(35 + 12.0, notes[1].soundingPitch, 1e-6)
+    }
+
     @Test fun letRingSustainsUntilSameStringIsPickedAgain() {
         val m = listOf(kit.measure())
         val g = kit.guitar(m, mapOf(0 to listOf(

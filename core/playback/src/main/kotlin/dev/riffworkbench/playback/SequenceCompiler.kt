@@ -293,7 +293,8 @@ class ScorePlaybackCompiler(private val repeats: RepeatCompiler = UnfoldingRepea
                     if (string == null || string !in instrument.tuning.indices) return fretted + 12
                     val open = (instrument.tuning[string] + instrument.capoByString[string] + instrument.transposition).toDouble()
                     val node = h.node?.toDouble()?.takeIf { it > 0.0 && it < 1.0 }
-                    val harmonicNumber = if (node != null) overtoneForNode(node) else overtoneForFret((note.fret ?: 12) - instrument.capoByString[string])
+                    // Frets count from the capo (InstrumentDefinition.pitch), so the node sits at that fret of the shortened string.
+                    val harmonicNumber = if (node != null) overtoneForNode(node) else overtoneForFret(note.fret ?: 12)
                     open + 12.0 * ln(harmonicNumber.toDouble()) / ln(2.0)
                 }
                 HarmonicKind.ARTIFICIAL, HarmonicKind.TAPPED -> fretted + 12

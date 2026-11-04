@@ -44,4 +44,19 @@ class CatalogTest {
         // "L4.06" (a GP4 variant) is still GP4, not an unknown version.
         assertEquals("gp4", id(byteArrayOf(24) + "FICHIER GUITAR PRO L4.06".toByteArray() + ByteArray(40)))
     }
+
+    @Test fun registryRoundTripsGp7ThroughTheCatalog() = kotlinx.coroutines.runBlocking {
+        var n = 0
+        val ids = IdSource { EntityId("r${n++}") }
+        val catalog = FormatRegistry.catalog()
+        val dir = generateSequence(java.io.File("").absoluteFile) { it.parentFile }.map { java.io.File(it, "fixtures/gp") }.first { it.isDirectory }
+        val source = (catalog.importer("gp5")!!.import(java.io.File(dir, "drop-a-band.gp5").readBytes(), ids) {} as Outcome.Success).value.project
+        val exported = (catalog.exporter("gp7")!!.export(ExportRequest(source, "gp7")) {} as Outcome.Success).value
+        assertEquals("gp7", (catalog.detect(exported.bytes, null) as Outcome.Success).value.id)
+        val again = (catalog.importer("gp7")!!.import(exported.bytes, ids) {} as Outcome.Success).value.project
+        assertEquals(source.tracks.map { it.instrument.tuning }, again.tracks.map { it.instrument.tuning })
+        assertEquals(source.measures.size, again.measures.size)
+        fun notes(p: Project) = p.tracks.flatMap { t -> t.staves.flatMap { it.bars }.flatMap { it.voices }.flatMap { it.beats }.flatMap { it.notes } }.size
+        assertEquals(notes(source), notes(again))
+    }
 }

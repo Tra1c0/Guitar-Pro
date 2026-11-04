@@ -65,7 +65,7 @@ class LibraryImportTest {
     private suspend fun TestScope.run(assets: Assets, bytes: ByteArray): Repository {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val repo = Repository()
-        val vm = LibraryViewModel(repo, exchange, ids, Catalog(), assets)
+        val vm = LibraryViewModel(repo, exchange, ids, Catalog(), assets, background = StandardTestDispatcher(testScheduler))
         val store = ViewModelStore(); store.put("lib", vm)
         try {
             var opened: EntityId? = null
