@@ -7,6 +7,7 @@ dependencies {
     api(project(":core:ports"))
     implementation(project(":core:editor"))
     implementation(project(":core:playback"))
+    implementation(libs.coroutines.core)
     testImplementation(libs.junit)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.serialization.json)

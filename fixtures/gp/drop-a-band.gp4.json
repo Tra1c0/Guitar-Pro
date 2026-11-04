@@ -1,0 +1,2480 @@
+{
+ "album": "Eigene Fixtures",
+ "artist": "RiffWorkbench",
+ "copyright": "CC0-1.0",
+ "file": "drop-a-band.gp4",
+ "generator": "PyGuitarPro 0.11",
+ "instructions": "Drop A, Bass, Drums, Akustik mit Kapo",
+ "key": [
+  1,
+  0
+ ],
+ "lyrics": {
+  "lines": [
+   [
+    1,
+    "Riff ein-mal Rif-fe"
+   ],
+   [
+    4,
+    "sie-ben"
+   ],
+   [
+    1,
+    ""
+   ],
+   [
+    1,
+    ""
+   ],
+   [
+    1,
+    ""
+   ]
+  ],
+  "track": 1
+ },
+ "measures": [
+  {
+   "alternative": 0,
+   "denominator": 4,
+   "direction": null,
+   "doubleBar": false,
+   "fromDirection": null,
+   "key": [
+    1,
+    1
+   ],
+   "marker": {
+    "color": [
+     255,
+     0,
+     0
+    ],
+    "title": "Intro"
+   },
+   "number": 1,
+   "numerator": 4,
+   "repeatClose": -1,
+   "repeatOpen": true,
+   "start": 960,
+   "tripletFeel": 1
+  },
+  {
+   "alternative": 1,
+   "denominator": 4,
+   "direction": null,
+   "doubleBar": false,
+   "fromDirection": null,
+   "key": [
+    1,
+    1
+   ],
+   "marker": null,
+   "number": 2,
+   "numerator": 4,
+   "repeatClose": 1,
+   "repeatOpen": false,
+   "start": 4800,
+   "tripletFeel": 1
+  },
+  {
+   "alternative": 2,
+   "denominator": 4,
+   "direction": null,
+   "doubleBar": false,
+   "fromDirection": null,
+   "key": [
+    1,
+    1
+   ],
+   "marker": null,
+   "number": 3,
+   "numerator": 4,
+   "repeatClose": -1,
+   "repeatOpen": false,
+   "start": 8640,
+   "tripletFeel": 1
+  },
+  {
+   "alternative": 0,
+   "denominator": 8,
+   "direction": null,
+   "doubleBar": true,
+   "fromDirection": null,
+   "key": [
+    -1,
+    1
+   ],
+   "marker": {
+    "color": [
+     0,
+     128,
+     255
+    ],
+    "title": "Riff 7/8"
+   },
+   "number": 4,
+   "numerator": 7,
+   "repeatClose": -1,
+   "repeatOpen": false,
+   "start": 12480,
+   "tripletFeel": 1
+  },
+  {
+   "alternative": 0,
+   "denominator": 8,
+   "direction": null,
+   "doubleBar": false,
+   "fromDirection": null,
+   "key": [
+    -1,
+    1
+   ],
+   "marker": null,
+   "number": 5,
+   "numerator": 7,
+   "repeatClose": -1,
+   "repeatOpen": false,
+   "start": 15840,
+   "tripletFeel": 1
+  },
+  {
+   "alternative": 0,
+   "denominator": 4,
+   "direction": null,
+   "doubleBar": false,
+   "fromDirection": null,
+   "key": [
+    -1,
+    1
+   ],
+   "marker": null,
+   "number": 6,
+   "numerator": 4,
+   "repeatClose": -1,
+   "repeatOpen": false,
+   "start": 19200,
+   "tripletFeel": 1
+  }
+ ],
+ "music": "RiffWorkbench-Team",
+ "notice": [
+  "Eigene Inhalte, keine Fremd-Tabs.",
+  "Gegenprüfung mit PyGuitarPro 0.11."
+ ],
+ "subtitle": "Synthetische Testdaten",
+ "tab": "tools/make_gp_fixtures.py",
+ "tempo": 150,
+ "title": "RiffWorkbench GP4 Übungsdatei",
+ "tracks": [
+  {
+   "capo": 0,
+   "channel": {
+    "balance": 64,
+    "bank": 0,
+    "channel": 0,
+    "chorus": 0,
+    "effectChannel": 1,
+    "instrument": 30,
+    "phaser": 0,
+    "reverb": 0,
+    "tremolo": 0,
+    "volume": 104
+   },
+   "fretCount": 24,
+   "measures": [
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "palmMute": true,
+          "string": 7,
+          "type": "normal",
+          "value": 0,
+          "velocity": 95
+         }
+        ],
+        "offset": "0/1",
+        "status": "normal",
+        "text": "PM ab hier",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "palmMute": true,
+          "string": 7,
+          "type": "normal",
+          "value": 0,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/8",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 7,
+          "type": "dead",
+          "value": 0,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/4",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "slides": [
+           "shiftSlideTo"
+          ],
+          "string": 7,
+          "type": "normal",
+          "value": 3,
+          "velocity": 95
+         }
+        ],
+        "offset": "3/8",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 7,
+          "type": "normal",
+          "value": 5,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/2",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "hammer": true,
+          "string": 6,
+          "type": "normal",
+          "value": 5,
+          "velocity": 95
+         }
+        ],
+        "offset": "5/8",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 6,
+          "type": "normal",
+          "value": 7,
+          "velocity": 95
+         }
+        ],
+        "offset": "3/4",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 5,
+          "type": "normal",
+          "value": 2,
+          "velocity": 95
+         }
+        ],
+        "offset": "7/8",
+        "pickStroke": "down",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    },
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 4,
+        "notes": [
+         {
+          "harmonic": {
+           "type": 1
+          },
+          "string": 3,
+          "type": "normal",
+          "value": 12,
+          "velocity": 95
+         }
+        ],
+        "offset": "0/1",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 4,
+        "notes": [
+         {
+          "bend": {
+           "points": [
+            [
+             0,
+             0,
+             false
+            ],
+            [
+             4,
+             4,
+             false
+            ],
+            [
+             8,
+             4,
+             false
+            ],
+            [
+             12,
+             0,
+             false
+            ]
+           ],
+           "type": 2,
+           "value": 100
+          },
+          "string": 2,
+          "type": "normal",
+          "value": 7,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/4",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "chord": {
+         "barres": 0,
+         "fingerings": [
+          -2,
+          -2,
+          -2,
+          3,
+          2,
+          -1,
+          -2
+         ],
+         "firstFret": 1,
+         "name": "E5",
+         "newFormat": true,
+         "strings": [
+          -1,
+          -1,
+          -1,
+          2,
+          2,
+          0,
+          -1
+         ]
+        },
+        "duration": 4,
+        "notes": [
+         {
+          "letRing": true,
+          "string": 4,
+          "type": "normal",
+          "value": 2,
+          "velocity": 95
+         },
+         {
+          "letRing": true,
+          "string": 5,
+          "type": "normal",
+          "value": 2,
+          "velocity": 95
+         },
+         {
+          "letRing": true,
+          "string": 6,
+          "type": "normal",
+          "value": 0,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/2",
+        "status": "normal",
+        "stroke": [
+         "down",
+         16
+        ],
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 4,
+        "notes": [
+         {
+          "grace": {
+           "dead": false,
+           "duration": 16,
+           "durationCode": 3,
+           "fret": 10,
+           "onBeat": false,
+           "transition": 0,
+           "velocity": 79
+          },
+          "string": 1,
+          "type": "normal",
+          "value": 12,
+          "velocity": 95,
+          "vibrato": true
+         }
+        ],
+        "offset": "3/4",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    },
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 2,
+        "notes": [
+         {
+          "string": 7,
+          "tremoloPicking": 16,
+          "type": "normal",
+          "value": 0,
+          "velocity": 95
+         }
+        ],
+        "offset": "0/1",
+        "status": "normal",
+        "tremoloBar": {
+         "points": [
+          [
+           0,
+           0,
+           false
+          ],
+          [
+           6,
+           -2,
+           false
+          ],
+          [
+           12,
+           0,
+           false
+          ]
+         ],
+         "type": 6,
+         "value": 50
+        },
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 4,
+        "notes": [
+         {
+          "harmonic": {
+           "type": 4
+          },
+          "string": 5,
+          "type": "normal",
+          "value": 2,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/2",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 4,
+        "offset": "3/4",
+        "status": "rest",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    },
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "dotted": true,
+        "duration": 4,
+        "mix": {
+         "balance": null,
+         "chorus": null,
+         "hideTempo": false,
+         "instrument": null,
+         "phaser": null,
+         "reverb": null,
+         "tempo": [
+          120,
+          0
+         ],
+         "tremolo": null,
+         "volume": null,
+         "wah": null
+        },
+        "notes": [
+         {
+          "string": 7,
+          "type": "normal",
+          "value": 0,
+          "velocity": 95
+         }
+        ],
+        "offset": "0/1",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 7,
+          "type": "normal",
+          "value": 1,
+          "velocity": 95
+         }
+        ],
+        "offset": "3/8",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 4,
+        "notes": [
+         {
+          "string": 6,
+          "type": "normal",
+          "value": 2,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/2",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 6,
+          "type": "normal",
+          "value": 3,
+          "velocity": 95
+         }
+        ],
+        "offset": "3/4",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    },
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 6,
+          "type": "tie",
+          "value": 3,
+          "velocity": 95
+         }
+        ],
+        "offset": "0/1",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 5,
+          "type": "normal",
+          "value": 0,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/8",
+        "status": "normal",
+        "tuplet": [
+         3,
+         2
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 5,
+          "type": "normal",
+          "value": 2,
+          "velocity": 95
+         }
+        ],
+        "offset": "5/24",
+        "status": "normal",
+        "tuplet": [
+         3,
+         2
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 5,
+          "type": "normal",
+          "value": 3,
+          "velocity": 95
+         }
+        ],
+        "offset": "7/24",
+        "status": "normal",
+        "tuplet": [
+         3,
+         2
+        ]
+       },
+       {
+        "duration": 4,
+        "notes": [
+         {
+          "string": 4,
+          "trill": {
+           "duration": 16,
+           "fret": 2
+          },
+          "type": "normal",
+          "value": 0,
+          "velocity": 95
+         }
+        ],
+        "offset": "3/8",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 4,
+        "offset": "5/8",
+        "status": "rest",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    },
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 16,
+        "notes": [
+         {
+          "leftFinger": 1,
+          "rightFinger": 2,
+          "staccato": true,
+          "string": 3,
+          "type": "normal",
+          "value": 2,
+          "velocity": 95
+         }
+        ],
+        "offset": "0/1",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 16,
+        "notes": [
+         {
+          "accent": true,
+          "string": 3,
+          "type": "normal",
+          "value": 2,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/16",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 16,
+        "notes": [
+         {
+          "accent": true,
+          "string": 3,
+          "type": "normal",
+          "value": 2,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/8",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 16,
+        "notes": [
+         {
+          "ghost": true,
+          "string": 3,
+          "type": "normal",
+          "value": 2,
+          "velocity": 47
+         }
+        ],
+        "offset": "3/16",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "chord": {
+         "barres": 1,
+         "fingerings": [
+          -2,
+          -2,
+          -2,
+          -2,
+          -2,
+          -2,
+          -2
+         ],
+         "firstFret": 2,
+         "name": "D/A",
+         "newFormat": true,
+         "strings": [
+          2,
+          3,
+          2,
+          -1,
+          -1,
+          -1,
+          -1
+         ]
+        },
+        "duration": 4,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 2,
+          "velocity": 95
+         },
+         {
+          "string": 2,
+          "type": "normal",
+          "value": 3,
+          "velocity": 95
+         },
+         {
+          "string": 3,
+          "type": "normal",
+          "value": 2,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/4",
+        "status": "normal",
+        "stroke": [
+         "up",
+         32
+        ],
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 2,
+        "offset": "1/2",
+        "status": "rest",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    }
+   ],
+   "mute": false,
+   "name": "Gitarre Drop A",
+   "number": 1,
+   "percussion": false,
+   "solo": false,
+   "strings": [
+    [
+     1,
+     64
+    ],
+    [
+     2,
+     59
+    ],
+    [
+     3,
+     55
+    ],
+    [
+     4,
+     50
+    ],
+    [
+     5,
+     45
+    ],
+    [
+     6,
+     40
+    ],
+    [
+     7,
+     33
+    ]
+   ]
+  },
+  {
+   "capo": 0,
+   "channel": {
+    "balance": 32,
+    "bank": 0,
+    "channel": 2,
+    "chorus": 0,
+    "effectChannel": 3,
+    "instrument": 33,
+    "phaser": 0,
+    "reverb": 0,
+    "tremolo": 0,
+    "volume": 96
+   },
+   "fretCount": 24,
+   "measures": [
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 4,
+        "notes": [
+         {
+          "string": 4,
+          "type": "normal",
+          "value": 5,
+          "velocity": 95
+         }
+        ],
+        "offset": "0/1",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 4,
+        "notes": [
+         {
+          "string": 4,
+          "type": "normal",
+          "value": 5,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/4",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 4,
+        "notes": [
+         {
+          "string": 4,
+          "type": "dead",
+          "value": 5,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/2",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 4,
+        "notes": [
+         {
+          "string": 4,
+          "type": "normal",
+          "value": 3,
+          "velocity": 95
+         }
+        ],
+        "offset": "3/4",
+        "slap": "slapping",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    },
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 2,
+        "notes": [
+         {
+          "string": 3,
+          "type": "normal",
+          "value": 0,
+          "velocity": 95
+         }
+        ],
+        "offset": "0/1",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 2,
+        "notes": [
+         {
+          "string": 3,
+          "type": "tie",
+          "value": 0,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/2",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    },
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 1,
+        "notes": [
+         {
+          "letRing": true,
+          "string": 4,
+          "type": "normal",
+          "value": 0,
+          "velocity": 95
+         }
+        ],
+        "offset": "0/1",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    },
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "dotted": true,
+        "duration": 4,
+        "notes": [
+         {
+          "grace": {
+           "dead": true,
+           "duration": 32,
+           "durationCode": 2,
+           "fret": -1,
+           "onBeat": false,
+           "transition": 1,
+           "velocity": 95
+          },
+          "string": 3,
+          "type": "normal",
+          "value": 0,
+          "velocity": 95
+         }
+        ],
+        "offset": "0/1",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 3,
+          "type": "normal",
+          "value": 0,
+          "velocity": 95
+         }
+        ],
+        "offset": "3/8",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 4,
+        "notes": [
+         {
+          "hammer": true,
+          "string": 3,
+          "type": "normal",
+          "value": 5,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/2",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 3,
+          "type": "normal",
+          "value": 3,
+          "velocity": 95
+         }
+        ],
+        "offset": "3/4",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    },
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 3,
+          "type": "normal",
+          "value": 0,
+          "velocity": 95
+         }
+        ],
+        "offset": "0/1",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 3,
+          "type": "normal",
+          "value": 0,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/8",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "slides": [
+           "legatoSlideTo"
+          ],
+          "string": 3,
+          "type": "normal",
+          "value": 0,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/4",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 3,
+          "type": "normal",
+          "value": 0,
+          "velocity": 95
+         }
+        ],
+        "offset": "3/8",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 2,
+          "type": "normal",
+          "value": 2,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/2",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 2,
+          "type": "normal",
+          "value": 2,
+          "velocity": 95
+         }
+        ],
+        "offset": "5/8",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 2,
+          "type": "normal",
+          "value": 2,
+          "velocity": 95
+         }
+        ],
+        "offset": "3/4",
+        "slap": "popping",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    },
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 4,
+        "fadeIn": true,
+        "mix": {
+         "balance": null,
+         "chorus": null,
+         "hideTempo": true,
+         "instrument": [
+          34,
+          0
+         ],
+         "phaser": null,
+         "reverb": null,
+         "tempo": null,
+         "tremolo": null,
+         "volume": [
+          10,
+          0
+         ],
+         "wah": null
+        },
+        "notes": [
+         {
+          "string": 4,
+          "type": "normal",
+          "value": 0,
+          "velocity": 95
+         }
+        ],
+        "offset": "0/1",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ],
+        "wideVibrato": true
+       },
+       {
+        "dotted": true,
+        "duration": 2,
+        "offset": "1/4",
+        "status": "rest",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    }
+   ],
+   "mute": false,
+   "name": "Bass",
+   "number": 2,
+   "percussion": false,
+   "solo": false,
+   "strings": [
+    [
+     1,
+     43
+    ],
+    [
+     2,
+     38
+    ],
+    [
+     3,
+     33
+    ],
+    [
+     4,
+     28
+    ]
+   ]
+  },
+  {
+   "capo": 0,
+   "channel": {
+    "balance": 80,
+    "bank": 0,
+    "channel": 9,
+    "chorus": 0,
+    "effectChannel": 9,
+    "instrument": 0,
+    "phaser": 0,
+    "reverb": 0,
+    "tremolo": 0,
+    "volume": 112
+   },
+   "fretCount": 24,
+   "measures": [
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         },
+         {
+          "string": 5,
+          "type": "normal",
+          "value": 36,
+          "velocity": 95
+         }
+        ],
+        "offset": "0/1",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/8",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         },
+         {
+          "accent": true,
+          "string": 3,
+          "type": "normal",
+          "value": 38,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/4",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         }
+        ],
+        "offset": "3/8",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         },
+         {
+          "string": 5,
+          "type": "normal",
+          "value": 36,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/2",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         }
+        ],
+        "offset": "5/8",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         },
+         {
+          "string": 3,
+          "type": "normal",
+          "value": 38,
+          "velocity": 95
+         }
+        ],
+        "offset": "3/4",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         },
+         {
+          "ghost": true,
+          "string": 3,
+          "type": "normal",
+          "value": 38,
+          "velocity": 31
+         }
+        ],
+        "offset": "7/8",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 3,
+          "type": "normal",
+          "value": 38,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/1",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    },
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 4,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         },
+         {
+          "string": 5,
+          "type": "normal",
+          "value": 36,
+          "velocity": 95
+         }
+        ],
+        "offset": "0/1",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 4,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         },
+         {
+          "accent": true,
+          "string": 3,
+          "type": "normal",
+          "value": 38,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/4",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 4,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         },
+         {
+          "string": 5,
+          "type": "normal",
+          "value": 36,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/2",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 4,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         },
+         {
+          "string": 3,
+          "type": "normal",
+          "value": 38,
+          "velocity": 95
+         }
+        ],
+        "offset": "3/4",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    },
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 4,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         },
+         {
+          "string": 5,
+          "type": "normal",
+          "value": 36,
+          "velocity": 95
+         }
+        ],
+        "offset": "0/1",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 4,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         },
+         {
+          "accent": true,
+          "string": 3,
+          "type": "normal",
+          "value": 38,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/4",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 4,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         },
+         {
+          "string": 5,
+          "type": "normal",
+          "value": 36,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/2",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 4,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         },
+         {
+          "string": 3,
+          "type": "normal",
+          "value": 38,
+          "velocity": 95
+         }
+        ],
+        "offset": "3/4",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    },
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         },
+         {
+          "string": 5,
+          "type": "normal",
+          "value": 36,
+          "velocity": 95
+         }
+        ],
+        "offset": "0/1",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/8",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         },
+         {
+          "accent": true,
+          "string": 3,
+          "type": "normal",
+          "value": 38,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/4",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         },
+         {
+          "string": 5,
+          "type": "normal",
+          "value": 36,
+          "velocity": 95
+         }
+        ],
+        "offset": "3/8",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/2",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         },
+         {
+          "string": 3,
+          "type": "normal",
+          "value": 38,
+          "velocity": 95
+         }
+        ],
+        "offset": "5/8",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         }
+        ],
+        "offset": "3/4",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    },
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         },
+         {
+          "string": 5,
+          "type": "normal",
+          "value": 36,
+          "velocity": 95
+         }
+        ],
+        "offset": "0/1",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/8",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         },
+         {
+          "accent": true,
+          "string": 3,
+          "type": "normal",
+          "value": 38,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/4",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         },
+         {
+          "string": 5,
+          "type": "normal",
+          "value": 36,
+          "velocity": 95
+         }
+        ],
+        "offset": "3/8",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/2",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         },
+         {
+          "string": 3,
+          "type": "normal",
+          "value": 38,
+          "velocity": 95
+         }
+        ],
+        "offset": "5/8",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 8,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 42,
+          "velocity": 95
+         }
+        ],
+        "offset": "3/4",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    },
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 16,
+        "notes": [
+         {
+          "string": 3,
+          "type": "normal",
+          "value": 38,
+          "velocity": 95
+         }
+        ],
+        "offset": "0/1",
+        "status": "normal",
+        "tuplet": [
+         5,
+         4
+        ]
+       },
+       {
+        "duration": 16,
+        "notes": [
+         {
+          "string": 3,
+          "type": "normal",
+          "value": 38,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/20",
+        "status": "normal",
+        "tuplet": [
+         5,
+         4
+        ]
+       },
+       {
+        "duration": 16,
+        "notes": [
+         {
+          "string": 3,
+          "type": "normal",
+          "value": 38,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/10",
+        "status": "normal",
+        "tuplet": [
+         5,
+         4
+        ]
+       },
+       {
+        "duration": 16,
+        "notes": [
+         {
+          "string": 3,
+          "type": "normal",
+          "value": 38,
+          "velocity": 95
+         }
+        ],
+        "offset": "3/20",
+        "status": "normal",
+        "tuplet": [
+         5,
+         4
+        ]
+       },
+       {
+        "duration": 16,
+        "notes": [
+         {
+          "string": 3,
+          "type": "normal",
+          "value": 38,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/5",
+        "status": "normal",
+        "tuplet": [
+         5,
+         4
+        ]
+       },
+       {
+        "duration": 4,
+        "notes": [
+         {
+          "string": 2,
+          "type": "normal",
+          "value": 49,
+          "velocity": 95
+         },
+         {
+          "string": 5,
+          "type": "normal",
+          "value": 36,
+          "velocity": 95
+         }
+        ],
+        "offset": "1/4",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       },
+       {
+        "duration": 2,
+        "offset": "1/2",
+        "status": "rest",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    }
+   ],
+   "mute": false,
+   "name": "Drums",
+   "number": 3,
+   "percussion": true,
+   "solo": false,
+   "strings": [
+    [
+     1,
+     0
+    ],
+    [
+     2,
+     0
+    ],
+    [
+     3,
+     0
+    ],
+    [
+     4,
+     0
+    ],
+    [
+     5,
+     0
+    ],
+    [
+     6,
+     0
+    ]
+   ]
+  },
+  {
+   "capo": 2,
+   "channel": {
+    "balance": 64,
+    "bank": 0,
+    "channel": 4,
+    "chorus": 0,
+    "effectChannel": 5,
+    "instrument": 25,
+    "phaser": 0,
+    "reverb": 40,
+    "tremolo": 0,
+    "volume": 80
+   },
+   "fretCount": 24,
+   "measures": [
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 1,
+        "notes": [
+         {
+          "string": 1,
+          "type": "normal",
+          "value": 0,
+          "velocity": 95
+         },
+         {
+          "string": 2,
+          "type": "normal",
+          "value": 1,
+          "velocity": 95
+         },
+         {
+          "string": 3,
+          "type": "normal",
+          "value": 0,
+          "velocity": 95
+         }
+        ],
+        "offset": "0/1",
+        "rasgueado": true,
+        "status": "normal",
+        "stroke": [
+         "up",
+         16
+        ],
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    },
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 1,
+        "offset": "0/1",
+        "status": "rest",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    },
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 1,
+        "offset": "0/1",
+        "status": "rest",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    },
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 4,
+        "offset": "0/1",
+        "status": "empty",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    },
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 4,
+        "offset": "0/1",
+        "status": "empty",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    },
+    {
+     "lineBreak": 0,
+     "voices": [
+      [
+       {
+        "duration": 1,
+        "notes": [
+         {
+          "harmonic": {
+           "octave": 1,
+           "pitch": 2,
+           "type": 2
+          },
+          "string": 2,
+          "type": "normal",
+          "value": 3,
+          "velocity": 95
+         }
+        ],
+        "offset": "0/1",
+        "status": "normal",
+        "tuplet": [
+         1,
+         1
+        ]
+       }
+      ],
+      []
+     ]
+    }
+   ],
+   "mute": false,
+   "name": "Akustik Kapo 2",
+   "number": 4,
+   "percussion": false,
+   "solo": false,
+   "strings": [
+    [
+     1,
+     64
+    ],
+    [
+     2,
+     59
+    ],
+    [
+     3,
+     55
+    ],
+    [
+     4,
+     50
+    ],
+    [
+     5,
+     45
+    ],
+    [
+     6,
+     40
+    ]
+   ]
+  }
+ ],
+ "version": "FICHIER GUITAR PRO v4.06",
+ "words": "RiffWorkbench-Team"
+}
