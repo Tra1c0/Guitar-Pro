@@ -2,7 +2,7 @@
     <string name="app_tagline">Schreiben. Arrangieren. Weiterspielen.</string>
     <string name="library">Projekte</string>
     <string name="new_project">Neues Projekt</string>
-    <string name="open_native">Projektdatei öffnen</string>
+    <string name="open_native">Datei öffnen</string>
     <string name="empty_library">Dein nächstes Riff beginnt hier.</string>
     <string name="empty_description">Erstelle ein Offline-Projekt für Gitarre, Bass und Drums.</string>
     <string name="project_title">Projektname</string>
@@ -124,7 +124,6 @@
     <string name="stepgrid_hint">Jede Zelle bearbeitet denselben Beat wie die Partitur. Tippe, um einen Schlag zu setzen oder zu entfernen.</string>
     <string name="no_drum_track">Füge zuerst eine Drumspur hinzu.</string>
     <string name="feature_count">Funktionen im Architekturregister</string>
-    <string name="phase1">Phase 1</string>
     <string name="error">Fehler</string>
     <string name="dismiss">Schließen</string>
     <string name="select_track">Spur wählen</string>

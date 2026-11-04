@@ -38,6 +38,8 @@ class RealtimeHost(
     @Volatile private var sink: AudioSink? = null
     @Volatile var format: SinkFormat? = null; private set
     @Volatile private var running = false
+    /** Set when the render thread stopped because of an unexpected error (device or driver). */
+    @Volatile var lastError: String? = null; private set
     @Volatile private var thread: Thread? = null
     private var engine: SynthEngine? = null
     private var buffer = FloatArray(0)
@@ -67,7 +69,11 @@ class RealtimeHost(
         buffer = FloatArray(f.blockFrames * 2)
         written = 0; blocks = 0; idleBlocks = 0
         running = true
-        thread = threadStarter("riff-audio") { while (running && renderBlock()) Unit; closeSink() }
+        thread = threadStarter("riff-audio") {
+            try { while (running && renderBlock()) Unit }
+            catch (t: Throwable) { lastError = t.message ?: t::class.java.simpleName }
+            finally { running = false; closeSink() }
+        }
         return Outcome.Success(f)
     }
 

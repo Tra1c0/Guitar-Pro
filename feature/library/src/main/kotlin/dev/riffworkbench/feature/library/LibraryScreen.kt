@@ -21,6 +21,8 @@ import dev.riffworkbench.ui.components.R
     val error by vm.error.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     val issues by vm.issues.collectAsStateWithLifecycle()
+    val notice by vm.notice.collectAsStateWithLifecycle()
+    var confirmDelete by remember { mutableStateOf<EntityId?>(null) }
     var creating by rememberSaveable { mutableStateOf(false) }
     var title by rememberSaveable { mutableStateOf("") }
     Scaffold { padding ->
@@ -29,7 +31,7 @@ import dev.riffworkbench.ui.components.R
                 Text("RIFF / WORKBENCH", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 TextButton(onClick = onSettings) { Text(stringResource(R.string.settings)) }
             } }
-            item { SectionHeading(stringResource(R.string.library), stringResource(R.string.app_tagline), "OFFLINE / ${stringResource(R.string.phase1)}") }
+            item { SectionHeading(stringResource(R.string.library), stringResource(R.string.app_tagline), "OFFLINE") }
             item { Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = { creating = true }, enabled = !busy, modifier = Modifier.heightIn(min = 48.dp)) { Text("+ ${stringResource(R.string.new_project)}") }
                 OutlinedButton(onClick = onImport, enabled = !busy, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.open_native)) }
@@ -44,6 +46,7 @@ import dev.riffworkbench.ui.components.R
                 }
             } }
             error?.let { message -> item { NoticeCard(message, true); TextButton(onClick = { vm.showError(null) }) { Text(stringResource(R.string.dismiss)) } } }
+            notice?.let { message -> item { NoticeCard(message); TextButton(onClick = vm::dismissNotice) { Text(stringResource(R.string.dismiss)) } } }
             if (busy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             items(issues) { issue -> NoticeCard(issue.message, true) }
             if (projects.isEmpty()) item { OutlinedCard(Modifier.fillMaxWidth()) {
@@ -59,10 +62,19 @@ import dev.riffworkbench.ui.components.R
                         Text(project.title, style = MaterialTheme.typography.titleLarge)
                         Text("${project.tracks} ${stringResource(R.string.track)} · ${stringResource(R.string.revision)} ${project.revision}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text("↗", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { confirmDelete = project.id }) { Text(if (english()) "Delete" else "Löschen") }
+                        Text("↗", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+                    }
                 }
             } }
-            item { Text(stringResource(R.string.available_native), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            item { Text(if (english()) "Open: Guitar Pro 3–8 (.gp3/.gp4/.gp5/.gpx/.gp), MusicXML (.musicxml/.mxl), MIDI and RiffWorkbench projects (.riffproj). The original file is kept with the project." else
+                "Öffnen: Guitar Pro 3–8 (.gp3/.gp4/.gp5/.gpx/.gp), MusicXML (.musicxml/.mxl), MIDI und RiffWorkbench-Projekte (.riffproj). Die Originaldatei bleibt im Projekt erhalten.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
+    confirmDelete?.let { id -> AlertDialog(onDismissRequest = { confirmDelete = null },
+        title = { Text(if (english()) "Delete project?" else "Projekt löschen?") },
+        text = { Text(if (english()) "The project moves to the app's trash folder." else "Das Projekt wird in den Papierkorb der App verschoben.") },
+        confirmButton = { TextButton(onClick = { vm.delete(id); confirmDelete = null }) { Text(if (english()) "Delete" else "Löschen") } },
+        dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text(stringResource(R.string.cancel)) } }) }
 }

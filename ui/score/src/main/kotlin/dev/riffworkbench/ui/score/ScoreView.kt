@@ -1,99 +1,188 @@
 package dev.riffworkbench.ui.score
 
-import android.graphics.Paint
-import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.*
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import dev.riffworkbench.editor.Selection
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.IntSize
 import dev.riffworkbench.model.*
+import dev.riffworkbench.notation.*
 
-/** Virtualizes measures. Geometry is derived from the same layout for painting and hit testing. */
-@Composable fun ScoreView(project: Project, selection: Selection, onSelect: (Selection) -> Unit, modifier: Modifier = Modifier) {
-    val track = project.tracks.firstOrNull { it.id == selection.trackId } ?: return
-    val instrument = track.instrument
-    val rows = if (instrument.tuning.isNotEmpty()) instrument.tuning.indices.reversed().toList() else listOf(0)
-    val color = MaterialTheme.colorScheme.onSurface
-    val accent = MaterialTheme.colorScheme.primary
-    val muted = MaterialTheme.colorScheme.outline
-    val background = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
-    val density = LocalDensity.current
-    val paint = remember(color, density) { Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color.toArgb(); textSize = with(density) { 14.sp.toPx() }; typeface = Typeface.MONOSPACE; textAlign = Paint.Align.CENTER } }
-    val rowHeight = 34.dp; val header = 48.dp
-    val height = header + rowHeight * rows.size + 24.dp
-    Surface(modifier, color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.medium, tonalElevation = 2.dp) {
-        Row {
-            Column(Modifier.width(38.dp).padding(top = header - 12.dp)) {
-                rows.forEach { string -> Box(Modifier.height(rowHeight).fillMaxWidth(), contentAlignment = androidx.compose.ui.Alignment.Center) {
-                    Text(if (instrument.tuning.isEmpty()) "♪" else pitchName(instrument.tuning[string]), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
-                } }
-            }
-            LazyRow(Modifier.height(height).weight(1f)) {
-                itemsIndexed(project.measures, key = { _, measure -> measure.id.value }) { index, measure ->
-                    val slots = (measure.signature.length().toDouble() * 16).toInt().coerceAtLeast(1)
-                    val width = 24.dp + 42.dp * slots
-                    val beats = track.staves.firstOrNull()?.bars?.firstOrNull { it.measureId == measure.id }?.voices?.firstOrNull { it.index == selection.voice }?.beats.orEmpty()
-                    Canvas(Modifier.width(width).height(height).semantics {
-                        contentDescription = "${index + 1}. ${measure.signature.numerator}/${measure.signature.denominator}, ${beats.sumOf { it.notes.size }} notes"
-                        customActions = listOf(CustomAccessibilityAction("Select bar ${index + 1}") { onSelect(selection.copy(measureId = measure.id, offset = Fraction.ZERO)); true })
-                    }.pointerInput(project.revision, selection, slots) {
-                        detectTapGestures { position ->
-                            val slot = ((position.x - 12.dp.toPx()) / 42.dp.toPx()).toInt().coerceIn(0, slots - 1)
-                            val row = ((position.y - header.toPx() + rowHeight.toPx() / 2) / rowHeight.toPx()).toInt().coerceIn(rows.indices)
-                            onSelect(selection.copy(measureId = measure.id, offset = Fraction.of(slot.toLong(), 16), string = rows[row]))
-                        }
-                    }) {
-                        val top = header.toPx(); val step = 42.dp.toPx(); val inset = 12.dp.toPx()
-                        drawLine(muted, Offset(0f, top - 10.dp.toPx()), Offset(0f, size.height - 16.dp.toPx()))
-                        paint.color = muted.toArgb(); paint.textAlign = Paint.Align.LEFT
-                        drawContext.canvas.nativeCanvas.drawText("${index + 1}   ${measure.signature.numerator}/${measure.signature.denominator}", inset, 24.dp.toPx(), paint)
-                        paint.textAlign = Paint.Align.CENTER
-                        rows.forEachIndexed { row, _ -> drawLine(muted.copy(alpha = 0.45f), Offset(0f, top + row * rowHeight.toPx()), Offset(size.width, top + row * rowHeight.toPx())) }
-                        if (measure.id == selection.measureId) {
-                            val x = inset + selection.offset.toDouble().toFloat() * 16 * step
-                            val row = rows.indexOf(selection.string).coerceAtLeast(0)
-                            drawRoundRect(accent.copy(alpha = 0.12f), Offset(x - 15.dp.toPx(), top + row * rowHeight.toPx() - 15.dp.toPx()), Size(30.dp.toPx(), 30.dp.toPx()), CornerRadius(5.dp.toPx()))
-                            drawRoundRect(accent, Offset(x - 15.dp.toPx(), top + row * rowHeight.toPx() - 15.dp.toPx()), Size(30.dp.toPx(), 30.dp.toPx()), CornerRadius(5.dp.toPx()), style = Stroke(1.5.dp.toPx()))
-                        }
-                        beats.forEach { beat ->
-                            val x = inset + beat.offset.toDouble().toFloat() * 16 * step
-                            paint.color = muted.toArgb()
-                            paint.textSize = 10.dp.toPx()
-                            drawContext.canvas.nativeCanvas.drawText("1/${beat.duration.denominator}${"·".repeat(beat.duration.dots)}", x, size.height - 3.dp.toPx(), paint)
-                            paint.textSize = 14.dp.toPx()
-                            if (beat.explicitRest) { paint.color = muted.toArgb(); drawContext.canvas.nativeCanvas.drawText("r", x, top + 5.dp.toPx(), paint) }
-                            beat.notes.forEach { note ->
-                                val row = if (note.string != null) rows.indexOf(note.string).coerceAtLeast(0) else 0
-                                val y = top + row * rowHeight.toPx()
-                                drawRect(background, Offset(x - 11.dp.toPx(), y - 10.dp.toPx()), Size(22.dp.toPx(), 20.dp.toPx()))
-                                paint.color = color.toArgb()
-                                val dead = Articulation.Mark(NoteMark.DEAD) in note.articulations
-                                drawContext.canvas.nativeCanvas.drawText(if (dead) "x" else note.fret?.toString() ?: note.pitch.midiNumber.toString(), x, y + 5.dp.toPx(), paint)
-                                if (Articulation.Mark(NoteMark.PALM_MUTE) in note.articulations) { paint.color = accent.toArgb(); drawContext.canvas.nativeCanvas.drawText("·", x, y + 18.dp.toPx(), paint) }
-                            }
-                        }
-                    }
+/** A tap on the score: measure, the nearest beat column and the string under the finger (TAB only). */
+data class ScoreTap(val measureId: EntityId, val offset: Fraction, val string: Int?, val noteId: EntityId?)
+
+/** Cursor to highlight: a column (optionally a string) or a bar range. */
+data class ScoreCursor(val measureId: EntityId, val offset: Fraction, val string: Int?, val rangeEnd: EntityId? = null)
+
+@Composable
+fun rememberInkPalette(): InkPalette {
+    val c = MaterialTheme.colorScheme
+    return remember(c) {
+        InkPalette(mapOf(
+            Ink.STAFF to c.outline.copy(alpha = 0.75f).toArgb(), Ink.NOTE to c.onSurface.toArgb(), Ink.TEXT to c.onSurface.toArgb(),
+            Ink.MUTED to c.onSurfaceVariant.copy(alpha = 0.6f).toArgb(), Ink.ACCENT to c.primary.toArgb(), Ink.SELECTION to c.primary.toArgb(),
+            Ink.PLAYHEAD to Color(0xFFFF7043).toArgb(), Ink.SECTION to c.primary.toArgb(), Ink.ON_SECTION to c.onPrimary.toArgb(),
+            Ink.ERROR to c.error.toArgb(), Ink.GRID to c.outlineVariant.toArgb()), c.surface.toArgb())
+    }
+}
+
+/**
+ * Viewport over a [ScoreLayout]: draws only visible glyphs, pans and pinch-zooms around the focus point, maps taps
+ * back to musical positions and keeps the cursor (and, when [follow] is set, the playhead) in view.
+ * Layout runs elsewhere; selection and playhead are overlays, so moving them never re-lays out the score.
+ */
+@Composable
+fun ScoreCanvas(
+    layout: ScoreLayout?,
+    cursor: ScoreCursor?,
+    playhead: Pair<EntityId, Double>?,
+    follow: Boolean,
+    zoom: Float,
+    onZoom: (Float) -> Unit,
+    onTap: (ScoreTap) -> Unit,
+    modifier: Modifier = Modifier,
+    description: String = "",
+) {
+    val density = LocalDensity.current.density
+    val palette = rememberInkPalette()
+    val painter = remember(palette) { GlyphPainter(palette) }
+    val selectionColor = MaterialTheme.colorScheme.primary
+    var viewport by remember { mutableStateOf(IntSize.Zero) }
+    var offsetX by remember { mutableFloatStateOf(0f) }
+    var offsetY by remember { mutableFloatStateOf(0f) }
+    val factor = density * zoom
+    val currentFactor by rememberUpdatedState(factor)
+    val currentLayout by rememberUpdatedState(layout)
+    val currentZoom by rememberUpdatedState(zoom)
+    val currentOnZoom by rememberUpdatedState(onZoom)
+    val currentOnTap by rememberUpdatedState(onTap)
+    val overlay = remember(selectionColor, palette) { OverlayPaints(selectionColor.toArgb(), palette.of(Ink.PLAYHEAD)) }
+    fun clamp() {
+        val l = currentLayout ?: return
+        offsetX = offsetX.coerceIn(0f, maxOf(0f, l.width * currentFactor - viewport.width))
+        offsetY = offsetY.coerceIn(0f, maxOf(0f, l.height * currentFactor - viewport.height))
+    }
+    // Keep the edit cursor visible after taps, arrows and auto-advance.
+    LaunchedEffect(cursor?.measureId, cursor?.offset, layout, zoom, viewport) {
+        val l = layout ?: return@LaunchedEffect
+        val c = cursor ?: return@LaunchedEffect
+        val x = (l.xFor(c.measureId, c.offset) ?: return@LaunchedEffect) * factor
+        val sys = l.measures.firstOrNull { it.measureId == c.measureId }?.let { m -> l.systems.getOrNull(m.system) }
+        if (x < offsetX + viewport.width * 0.08f || x > offsetX + viewport.width * 0.85f) offsetX = x - viewport.width * 0.3f
+        if (sys != null) {
+            val top = sys.top * factor; val bottom = sys.bottom * factor
+            if (top < offsetY || bottom > offsetY + viewport.height) offsetY = top - 8f * density
+        }
+        clamp()
+    }
+    // Follow the playhead while playing.
+    LaunchedEffect(playhead, follow, layout, zoom) {
+        val l = layout ?: return@LaunchedEffect
+        val p = playhead ?: return@LaunchedEffect
+        if (!follow) return@LaunchedEffect
+        val x = (l.xFor(p.first, p.second) ?: return@LaunchedEffect) * factor
+        if (x < offsetX + viewport.width * 0.1f || x > offsetX + viewport.width * 0.75f) offsetX = x - viewport.width * 0.25f
+        val sys = l.measures.firstOrNull { it.measureId == p.first }?.let { m -> l.systems.getOrNull(m.system) }
+        if (sys != null) { val top = sys.top * factor; if (top < offsetY || sys.bottom * factor > offsetY + viewport.height) offsetY = top - 8f * density }
+        clamp()
+    }
+    Box(modifier.clipToBounds().onSizeChanged { viewport = it; clamp() }
+        .semantics { contentDescription = description }
+        .pointerInput(Unit) {
+            detectTransformGestures { centroid, pan, gestureZoom, _ ->
+                val old = currentFactor
+                val nextZoom = (currentZoom * gestureZoom).coerceIn(0.5f, 2.5f)
+                if (gestureZoom != 1f) {
+                    val nf = density * nextZoom
+                    // Keep the content under the fingers fixed while zooming.
+                    offsetX = (offsetX + centroid.x) * nf / old - centroid.x
+                    offsetY = (offsetY + centroid.y) * nf / old - centroid.y
+                    currentOnZoom(nextZoom)
                 }
+                offsetX -= pan.x; offsetY -= pan.y
+                clamp()
+            }
+        }
+        .pointerInput(Unit) {
+            detectTapGestures { pos: Offset ->
+                val l = currentLayout ?: return@detectTapGestures
+                val x = (pos.x + offsetX) / currentFactor
+                val y = (pos.y + offsetY) / currentFactor
+                val note = l.notes.firstOrNull { x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h }
+                val column = l.columnAt(x, y) ?: return@detectTapGestures
+                currentOnTap(ScoreTap(column.measureId, column.offset, note?.string ?: l.stringAt(y), note?.noteId))
+            }
+        }) {
+        Canvas(Modifier.fillMaxSize()) {
+            val l = layout ?: return@Canvas
+            drawIntoCanvas { canvas ->
+                val nc = canvas.nativeCanvas
+                nc.save()
+                nc.translate(-offsetX, -offsetY)
+                nc.scale(factor, factor)
+                val x0 = offsetX / factor; val x1 = (offsetX + size.width) / factor
+                // Selection overlay below the notes.
+                cursor?.let { c -> drawCursor(nc, l, c, overlay) }
+                painter.draw(nc, l.glyphs, x0, x1)
+                playhead?.let { (measure, offset) ->
+                    val px = l.xFor(measure, offset)
+                    val sys = l.measures.firstOrNull { it.measureId == measure }?.let { m -> l.systems.getOrNull(m.system) }
+                    if (px != null && sys != null) nc.drawLine(px, sys.top + 18f, px, sys.bottom - 12f, overlay.playhead)
+                }
+                nc.restore()
             }
         }
     }
 }
+
+private class OverlayPaints(color: Int, playheadColor: Int) {
+    val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { this.color = (color and 0x00FFFFFF) or 0x26000000; strokeWidth = 2f }
+    val stroke = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { this.color = color; style = android.graphics.Paint.Style.STROKE; strokeWidth = 1.6f }
+    val playhead = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { this.color = playheadColor; strokeWidth = 2.2f }
+    val rect = android.graphics.RectF()
+}
+
+private fun drawCursor(nc: android.graphics.Canvas, l: ScoreLayout, c: ScoreCursor, paints: OverlayPaints) {
+    val fill = paints.fill
+    val stroke = paints.stroke
+    c.rangeEnd?.let { end ->
+        val a = l.measures.indexOfFirst { it.measureId == c.measureId }; val b = l.measures.indexOfFirst { it.measureId == end }
+        if (a >= 0 && b >= 0) for (m in l.measures.subList(minOf(a, b), maxOf(a, b) + 1)) {
+            val sys = l.systems.getOrNull(m.system) ?: continue
+            nc.drawRect(m.x + 1f, sys.top + 18f, m.x + m.width - 1f, sys.bottom - 14f, fill)
+        }
+    }
+    val x = l.xFor(c.measureId, c.offset) ?: return
+    val m = l.measures.firstOrNull { it.measureId == c.measureId } ?: return
+    val sys = l.systems.getOrNull(m.system) ?: return
+    val string = c.string
+    if (string != null && string in sys.stringY.indices) {
+        val y = sys.stringY[string]
+        val h = if (sys.stringY.size > 1) kotlin.math.abs(sys.stringY[0] - sys.stringY[1]) else 20f
+        val rect = paints.rect.apply { set(x - h * 0.62f, y - h * 0.48f, x + h * 0.62f, y + h * 0.48f) }
+        nc.drawRoundRect(rect, 4f, 4f, fill); nc.drawRoundRect(rect, 4f, 4f, stroke)
+        // Beat column marker spanning the staff.
+        nc.drawLine(x, sys.tabTop - h * 0.6f, x, sys.tabBottom + h * 0.6f, fill)
+    } else {
+        val top = if (sys.staffBottom > sys.staffTop) sys.staffTop - 10f else sys.tabTop - 10f
+        val bottom = if (sys.tabBottom > sys.tabTop) sys.tabBottom + 10f else sys.staffBottom + 10f
+        nc.drawRect(x - 9f, top, x + 9f, bottom, fill); nc.drawRect(x - 9f, top, x + 9f, bottom, stroke)
+    }
+}
+
 fun pitchName(midi: Int): String = listOf("C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B")[((midi % 12) + 12) % 12]

@@ -19,6 +19,15 @@ interface ScoreExporter {
     suspend fun export(request: ExportRequest, progress: (OperationProgress) -> Unit = {}): Outcome<ExportResult>
 }
 
+/** C-FORMAT catalog: content sniffing plus the importers and exporters that are actually implemented. */
+interface FormatCatalog {
+    val formats: List<FormatInfo>
+    /** Detects by content first; [fileName] only breaks ties between families with identical containers. */
+    fun detect(bytes: ByteArray, fileName: String?): Outcome<FormatInfo>
+    fun importer(formatId: String): ScoreImporter?
+    fun exporter(formatId: String): ScoreExporter?
+}
+
 /** C-REPEAT: finite route with occurrence identity; malformed jumps fail with diagnostics. */
 interface RepeatCompiler { fun compile(project: Project): Outcome<List<PlaybackOccurrence>> }
 /** C-SEQUENCER: exact rhythm -> sample events; each note owns its pitch curve. Off the real-time thread. */

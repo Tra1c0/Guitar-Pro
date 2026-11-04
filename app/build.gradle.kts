@@ -30,6 +30,7 @@ android {
 kotlin { jvmToolchain(17) }
 dependencies {
     implementation(project(":ui:components"))
+    implementation(project(":ui:score"))
     implementation(project(":feature:library"))
     implementation(project(":feature:workspace"))
     implementation(project(":feature:settings"))

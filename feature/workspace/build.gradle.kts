@@ -21,6 +21,7 @@ kotlin { jvmToolchain(17) }
 dependencies {
     implementation(project(":core:editor"))
     implementation(project(":core:playback"))
+    implementation(project(":core:synth"))
     implementation(project(":ui:score"))
     implementation(project(":ui:components"))
     implementation(libs.coroutines.core)
@@ -31,6 +32,7 @@ dependencies {
     implementation(libs.compose.preview)
     implementation(libs.lifecycle.viewmodel)
     implementation(libs.lifecycle.runtime)
+    implementation(libs.activity.compose)
     debugImplementation(libs.compose.tooling)
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.test)

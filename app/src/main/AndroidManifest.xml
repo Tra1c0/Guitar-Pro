@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Only for the tuner; requested at runtime when the tuner is opened. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <application android:name=".RiffApplication" android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules" android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher"

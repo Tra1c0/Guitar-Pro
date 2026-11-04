@@ -38,6 +38,8 @@ class EngineTransport(
     private var poller: Job? = null
     private var lastLoops = 0L
     private var trainerPasses = 0
+    /** Seek requested before a plan existed; applied when playback starts. */
+    @Volatile private var pendingSeek: PlaybackOccurrence? = null
 
     /**
      * Stores [project] for playback. While the output is running the new plan is compiled and swapped in at the
@@ -89,7 +91,8 @@ class EngineTransport(
         if (!wasRunning || plan == null || installedRate != format.sampleRate) installLocked(p, format.sampleRate, forceRack = true).let { if (it is Outcome.Failure) return@withLock it }
         val current = plan ?: return@withLock unavailable("C-SEQUENCER")
         val snap = host.snapshot()
-        var from = state.value.sample?.frame ?: snap.planFrame
+        var from = pendingSeek?.let { frameFor(current, it) } ?: state.value.sample?.frame ?: snap.planFrame
+        pendingSeek = null
         if (snap.ended || from >= current.totalFrames) from = loopFrames?.first ?: 0L
         loopFrames?.let { (start, end) -> if (from !in start until end) from = start }
         val (countIn, clicks) = countIn(current, from)
@@ -108,11 +111,13 @@ class EngineTransport(
         return Outcome.Success(Unit)
     }
 
+    private fun frameFor(p: PlaybackPlan, position: PlaybackOccurrence): Long? = p.frameOf(position.routeIndex, position.position.offset)
+        ?.takeIf { p.spans.getOrNull(position.routeIndex)?.measureId == position.position.measureId }
+        ?: p.spans.firstOrNull { it.measureId == position.position.measureId }?.let { kotlin.math.round(it.frameAt(position.position.offset.toDouble())).toLong() }
+
     override suspend fun seek(position: PlaybackOccurrence): Outcome<Unit> = mutex.withLock {
-        val p = plan ?: return@withLock Outcome.Failure(FailureCode.VALIDATION, "Wiedergabe nicht vorbereitet", contractId = "C-AUDIO")
-        val frame = p.frameOf(position.routeIndex, position.position.offset)
-            ?: p.spans.firstOrNull { it.measureId == position.position.measureId }?.let { kotlin.math.round(it.frameAt(position.position.offset.toDouble())).toLong() }
-            ?: return@withLock Outcome.Failure(FailureCode.VALIDATION, "Position liegt außerhalb der Route", contractId = "C-AUDIO")
+        val p = plan ?: run { pendingSeek = position; mutable.value = mutable.value.copy(position = position, sample = null); return@withLock Outcome.Success(Unit) }
+        val frame = frameFor(p, position) ?: return@withLock Outcome.Failure(FailureCode.VALIDATION, "Position liegt außerhalb der Route", contractId = "C-AUDIO")
         host.post(HostCommand.Seek(frame))
         mutable.value = mutable.value.copy(position = p.positionAt(frame), sample = SamplePosition(frame, p.sampleRate))
         Outcome.Success(Unit)

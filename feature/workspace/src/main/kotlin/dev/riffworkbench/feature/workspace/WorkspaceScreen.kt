@@ -1,6 +1,5 @@
 package dev.riffworkbench.feature.workspace
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -10,14 +9,17 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.key.*
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.riffworkbench.model.ExportResult
+import dev.riffworkbench.editor.Articulations
+import dev.riffworkbench.editor.EditScope
+import dev.riffworkbench.editor.EditorCommand
+import dev.riffworkbench.model.*
 import dev.riffworkbench.ui.components.*
 import dev.riffworkbench.ui.components.R
 
@@ -28,42 +30,19 @@ enum class WorkspacePage(val route: String, val title: Int, val icon: String) {
     EXCHANGE("exchange", R.string.exchange, "↗"), HISTORY("history", R.string.history, "↶"), INTEGRATIONS("integrations", R.string.integrations, "⌁"), STATUS("status", R.string.capabilities, "◎")
 }
 
+/** Export callbacks provided by the composition root (they own the Storage Access Framework launchers). */
+class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget) -> Unit, val pdf: () -> Unit)
+
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable fun WorkspaceScreen(vm: WorkspaceViewModel, onBack: () -> Unit, onExport: (ExportResult) -> Unit, onSettings: () -> Unit, initialPage: WorkspacePage = WorkspacePage.EDITOR) {
+@Composable fun WorkspaceScreen(vm: WorkspaceViewModel, onBack: () -> Unit, onExport: (ExportResult) -> Unit, onSettings: () -> Unit, initialPage: WorkspacePage = WorkspacePage.EDITOR,
+                                exportActions: ExportActions = ExportActions(onExport, {}, {})) {
     val ui by vm.state.collectAsStateWithLifecycle()
     var route by rememberSaveable { mutableStateOf(initialPage.route) }
     val page = WorkspacePage.entries.first { it.route == route }
     val keyboardFocus = remember { FocusRequester() }
-    LaunchedEffect(ui.editor?.project?.id) { if (ui.editor != null) keyboardFocus.requestFocus() }
-    Scaffold(bottomBar = {
-        Surface(tonalElevation = 4.dp) { Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = {}, enabled = false, modifier = Modifier.heightIn(min = 48.dp)) { Text("▶ ${stringResource(R.string.play)}") }
-            Text(stringResource(R.string.transport_unavailable), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } }
-    }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).focusRequester(keyboardFocus).onPreviewKeyEvent { event ->
-            if (event.type != KeyEventType.KeyDown) false
-            else if (event.isCtrlPressed && event.key == Key.Z) { if (event.isShiftPressed) vm.redo() else vm.undo(); true }
-            else if (event.isCtrlPressed && event.key == Key.Y) { vm.redo(); true }
-            else if (event.isCtrlPressed && event.key == Key.S) { vm.retrySave(); true }
-            else if (page == WorkspacePage.EDITOR && !event.isCtrlPressed && !event.isAltPressed) {
-                val code = event.nativeKeyEvent.keyCode
-                when {
-                    code in android.view.KeyEvent.KEYCODE_0..android.view.KeyEvent.KEYCODE_9 -> { vm.digit(code - android.view.KeyEvent.KEYCODE_0); true }
-                    event.key == Key.Enter -> { vm.commitInput(); true }
-                    event.key == Key.Backspace -> { vm.backspace(); true }
-                    event.key == Key.DirectionRight -> { vm.move(1); true }
-                    event.key == Key.DirectionLeft -> { vm.move(-1); true }
-                    event.key == Key.DirectionUp || event.key == Key.DirectionDown -> {
-                        ui.editor?.let { editor ->
-                            val track = editor.project.tracks.first { it.id == editor.selection.trackId }
-                            vm.select(editor.selection.copy(string = (editor.selection.string + if (event.key == Key.DirectionUp) 1 else -1).coerceIn(0, maxOf(0, track.instrument.tuning.lastIndex))))
-                        }; true
-                    }
-                    else -> false
-                }
-            } else false
-        }.focusable()) {
+    LaunchedEffect(ui.editor?.project?.id) { if (ui.editor != null) runCatching { keyboardFocus.requestFocus() } }
+    Scaffold(bottomBar = { TransportBar(vm) }) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).focusRequester(keyboardFocus).onPreviewKeyEvent { event -> handleKey(vm, page, event) }.focusable()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onBack) { Text("‹ ${stringResource(R.string.back)}") }
                 Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
@@ -91,17 +70,18 @@ enum class WorkspacePage(val route: String, val title: Int, val icon: String) {
                             if (!wide) PrimaryScrollableTabRow(selectedTabIndex = page.ordinal, edgePadding = 8.dp) {
                                 WorkspacePage.entries.forEach { tab -> Tab(selected = page == tab, onClick = { route = tab.route }, text = { Text(stringResource(tab.title)) }) }
                             }
+                            val editor = ui.editor!!
                             when (page) {
-                                WorkspacePage.EDITOR -> EditorScreen(vm, ui.editor!!)
-                                WorkspacePage.ARRANGEMENT -> ArrangementScreen(vm, ui.editor!!)
-                                WorkspacePage.DRUMS -> DrumScreen(vm, ui.editor!!)
-                                WorkspacePage.PRACTICE -> PracticeScreen()
-                                WorkspacePage.AUDIO -> AudioScreen(ui.editor!!.project)
-                                WorkspacePage.MIXER -> MixerScreen(vm, ui.editor!!)
-                                WorkspacePage.INSTRUMENTS -> InstrumentsScreen(vm, ui.editor!!)
-                                WorkspacePage.EFFECTS -> EffectsScreen(vm)
-                                WorkspacePage.LAYOUT -> LayoutScreen()
-                                WorkspacePage.EXCHANGE -> ExchangeScreen { vm.exportNative(onExport) }
+                                WorkspacePage.EDITOR -> EditorScreen(vm, editor)
+                                WorkspacePage.ARRANGEMENT -> ArrangementScreen(vm, editor)
+                                WorkspacePage.DRUMS -> DrumScreen(vm, editor)
+                                WorkspacePage.PRACTICE -> PracticeScreen(vm)
+                                WorkspacePage.AUDIO -> AudioScreen(editor.project)
+                                WorkspacePage.MIXER -> MixerScreen(vm, editor)
+                                WorkspacePage.INSTRUMENTS -> InstrumentsScreen(vm, editor)
+                                WorkspacePage.EFFECTS -> EffectsScreen(vm, editor)
+                                WorkspacePage.LAYOUT -> LayoutScreen(vm)
+                                WorkspacePage.EXCHANGE -> ExchangeScreen(vm, exportActions)
                                 WorkspacePage.HISTORY -> HistoryScreen(vm, ui)
                                 WorkspacePage.INTEGRATIONS -> IntegrationsScreen(onSettings)
                                 WorkspacePage.STATUS -> StatusScreen()
@@ -112,4 +92,54 @@ enum class WorkspacePage(val route: String, val title: Int, val icon: String) {
             }
         }
     }
+}
+
+/** External keyboard: the same commands as the touch controls (CONTRACTS.md C-WORKFLOW). */
+private fun handleKey(vm: WorkspaceViewModel, page: WorkspacePage, event: KeyEvent): Boolean {
+    if (event.type != KeyEventType.KeyDown) return false
+    val ctrl = event.isCtrlPressed
+    when {
+        ctrl && event.key == Key.Z -> { if (event.isShiftPressed) vm.redo() else vm.undo(); return true }
+        ctrl && event.key == Key.Y -> { vm.redo(); return true }
+        ctrl && event.key == Key.S -> { vm.retrySave(); return true }
+        ctrl && event.key == Key.C -> { vm.copyBars(); return true }
+        ctrl && event.key == Key.V -> { vm.pasteBars(); return true }
+        ctrl && event.key == Key.D -> { vm.duplicateBars(); return true }
+        ctrl && event.key == Key.DirectionUp -> { vm.command(EditorCommand.Transpose(1, EditScope.NOTE)); return true }
+        ctrl && event.key == Key.DirectionDown -> { vm.command(EditorCommand.Transpose(-1, EditScope.NOTE)); return true }
+        event.key == Key.Spacebar -> { vm.togglePlay(); return true }
+        event.key == Key.F4 -> { vm.repeatLast(); return true }
+    }
+    if (page != WorkspacePage.EDITOR || ctrl || event.isAltPressed) return false
+    val digit = when (event.key) { Key.Zero, Key.NumPad0 -> 0; Key.One, Key.NumPad1 -> 1; Key.Two, Key.NumPad2 -> 2; Key.Three, Key.NumPad3 -> 3; Key.Four, Key.NumPad4 -> 4
+        Key.Five, Key.NumPad5 -> 5; Key.Six, Key.NumPad6 -> 6; Key.Seven, Key.NumPad7 -> 7; Key.Eight, Key.NumPad8 -> 8; Key.Nine, Key.NumPad9 -> 9; else -> -1 }
+    if (digit >= 0) { vm.digit(digit); return true }
+    when (event.key) {
+        Key.Enter, Key.NumPadEnter -> vm.commitInput()
+        Key.Backspace -> vm.backspace()
+        Key.Delete -> vm.command(EditorCommand.Delete)
+        Key.DirectionRight -> vm.move(1)
+        Key.DirectionLeft -> vm.move(-1)
+        Key.DirectionUp -> vm.moveString(1)
+        Key.DirectionDown -> vm.moveString(-1)
+        Key.PageDown -> vm.moveMeasure(1)
+        Key.PageUp -> vm.moveMeasure(-1)
+        Key.R -> vm.rest()
+        Key.P -> vm.togglePalmMute()
+        Key.X -> vm.toggleMark(NoteMark.DEAD)
+        Key.G -> vm.toggleMark(NoteMark.GHOST)
+        Key.H -> vm.toggleMark(NoteMark.HAMMER_ON)
+        Key.I -> vm.toggleMark(NoteMark.LET_RING)
+        Key.T -> vm.toggleMark(NoteMark.TAPPING)
+        Key.L -> vm.command(EditorCommand.ToggleTie)
+        Key.S -> vm.articulation(Articulation.Slide(SlideKind.SHIFT))
+        Key.B -> vm.articulation(Articulations.fullBend())
+        Key.V -> vm.articulation(Articulation.Vibrato())
+        Key.N -> vm.articulation(Articulation.Harmonic(HarmonicKind.NATURAL))
+        Key.D -> vm.setDuration(dots = if (vm.input.value.duration.dots == 0) 1 else 0)
+        Key.NumPadAdd, Key.Plus -> vm.setDuration(denominator = maxOf(1, vm.input.value.duration.denominator / 2))
+        Key.NumPadSubtract, Key.Minus -> vm.setDuration(denominator = minOf(64, vm.input.value.duration.denominator * 2))
+        else -> return false
+    }
+    return true
 }
