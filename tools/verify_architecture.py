@@ -18,9 +18,13 @@ for f in features:
     assert set(f['dimensions']) == {'READ', 'DISPLAY', 'EDIT', 'PLAYBACK', 'EXPORT'}, f['id']
     assert f'## {f["contractId"]}\n' in contracts, f'Missing contract: {f["id"]}'
 
+def visible(path):
+    # Hidden directories (.git, .gradle, .claude worktrees, ...) are never part of the checked source tree.
+    return not any(part.startswith('.') for part in path.relative_to(ROOT).parts)
+
 graph = {}
 for build in ROOT.glob('**/build.gradle.kts'):
-    if 'build' in build.relative_to(ROOT).parts[:-1]:
+    if 'build' in build.relative_to(ROOT).parts[:-1] or not visible(build):
         continue
     module = ':'.join(build.parent.relative_to(ROOT).parts)
     graph[module] = re.findall(r'project\(":([\w:]+)"\)', build.read_text())
@@ -36,7 +40,7 @@ def visit(module, path):
         visit(dependency, path + [module])
 for module in graph:
     visit(module, [])
-for source in ROOT.glob('**/src/main/**/*.kt'):
+for source in filter(visible, ROOT.glob('**/src/main/**/*.kt')):
     for contract in re.findall(r'(?:unavailable\(|contractId\s*=\s*)"(C-[A-Z-]+)"', source.read_text()):
         assert f'## {contract}\n' in contracts, f'Undocumented pending implementation: {source} {contract}'
     assert 'TODO(' not in source.read_text() and 'NotImplementedError' not in source.read_text(), f'Uncontracted stub: {source}'

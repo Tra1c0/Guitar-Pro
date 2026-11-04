@@ -18,7 +18,9 @@ if args.gradle_log:
     assert states and states[-1] == 'SUCCESSFUL', 'Gradle did not complete successfully'
 suites = []
 unique = set()
-for path in sorted(ROOT.glob('**/build/test-results/test*/TEST-*.xml')):
+def visible(path):
+    return not any(part.startswith('.') for part in path.relative_to(ROOT).parts)
+for path in sorted(filter(visible, ROOT.glob('**/build/test-results/test*/TEST-*.xml'))):
     root = ET.parse(path).getroot()
     assert int(root.attrib.get('failures', 0)) == 0 and int(root.attrib.get('errors', 0)) == 0, f'Failing suite: {path}'
     suites.append({'name': root.attrib['name'], 'tests': int(root.attrib['tests']), 'variant': path.parent.name, 'report': str(path.relative_to(ROOT))})
@@ -26,7 +28,7 @@ for path in sorted(ROOT.glob('**/build/test-results/test*/TEST-*.xml')):
         if case.find('skipped') is None:
             unique.add((case.attrib['classname'], case.attrib['name']))
 assert suites and len(unique) >= 50, 'Incomplete verification run'
-sources = sorted(p for p in ROOT.rglob('*.kt') if 'build' not in p.relative_to(ROOT).parts)
+sources = sorted(p for p in ROOT.rglob('*.kt') if 'build' not in p.relative_to(ROOT).parts and visible(p))
 fingerprint = hashlib.sha256(b''.join(str(p.relative_to(ROOT)).encode() + b'\0' + p.read_bytes() for p in sources)).hexdigest()
 result = {'generatedAtUtc': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'sourceSha256': fingerprint, 'uniqueTestsPassed': len(unique), 'testExecutions': sum(s['tests'] for s in suites), 'suites': suites,
     'deviceTests': 'not run', 'gpDesktopRoundTrip': 'not run', 'cubaseHandoff': 'not run', 'audioPerformance': 'not measured'}
