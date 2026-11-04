@@ -1,8 +1,8 @@
 # Verifikation und Abnahme
 
-Die vollständigen Testergebnisse stehen nach dem Prüflauf in `docs/VERIFICATION.json`; sie werden aus tatsächlichen JUnit-XML-Berichten erzeugt. Die CI archiviert die detaillierten Gradle-/Lint-/JUnit-Berichte. Ein erfolgreicher Build ist keine Geräte-, Hör- oder Desktop-Abnahme.
+Die Testergebnisse stehen in `docs/VERIFICATION.json`; sie werden von `tools/collect_validation.py` aus den tatsächlichen JUnit-XML-Berichten eines vollständigen CI-Laufs erzeugt. Die CI archiviert die Gradle-, Lint- und JUnit-Berichte als Artefakt `verification-reports` und die Debug-APK als `riffworkbench-debug-apk`. Ein erfolgreicher Build ist keine Geräte-, Hör- oder Desktop-Abnahme.
 
-Geprüfter Stand vom 4. November 2026: **63 unterschiedliche Tests bestanden, 74 Ausführungen einschließlich Debug-/Release-Varianten; Build erfolgreich; Android Lint 0 Fehler und 18 Hinweise.** Die Hinweise betreffen verfügbare neuere Abhängigkeiten und die Ressourcen-Konfiguration. Bibliothek, Handy-/Tablet-Editor, Drumgrid, Funktionssuche und helles Design wurden anhand der erzeugten Screenshots visuell geprüft.
+Letzter abgeschlossener Stand: **165 unterschiedliche Tests bestanden, 180 Ausführungen einschließlich Debug-/Release-Varianten; Build, Architekturprüfung und Android Lint ohne Fehler** (CI-Lauf 8 für Commit `5548f0b`, 4. November 2026). Dieser Lauf enthält noch nicht die GP7/8-, GPX-, MIDI-, MusicXML- und ASCII-Adapter; deren Lauf wird hier nachgetragen, sobald er abgeschlossen ist. Lokal bestehen alle portablen Tests einschließlich dieser Adapter.
 
 ## Automatisierte Prüfung
 
@@ -12,30 +12,35 @@ Geprüfter Stand vom 4. November 2026: **63 unterschiedliche Tests bestanden, 74
 python3 tools/collect_validation.py --output build/verification.json
 ```
 
-- TimeModelTest: rationale Zeit/Überlauf, verschachtelte Tuplets, Punktierung, Drop-A-Oktaven/Teil-Capo, unabhängige Bends, stabile Wire-Tags und Effektparameter.
-- EditorSessionTest: vier Stimmen, Akkorde, Commit/Undo/Redo, Noten-/Taktgrenzen, freie Entwürfe, Drumakkorde, Spuren, Mixer, Metadaten-/Linkerhalt, leere Löschung, gestenweise Transaktionen und spätere Tempoänderungen.
-- ProjectStorageTest: Neustart, konkurrierende Revision, atomare Sichtbarkeit, Recovery und Hinweis, kein Downgrade neuerer Schemata, beschädigte Projekte, Snapshots, Einstellungen und Asset-Integrität.
-- NativeArchiveTest: Originalbytes/Parameter, eigene native Datei, fehlende Assets, Pfadüberschreitung, Prüfsummen, neuere Versionen, Tiefenlimits und komprimierte Bomben.
-- AutosaveTest: zusammengefasste schnelle Eingaben, fehlgeschlagener Save/Retry/Flush, weitere Änderungen nach Fehler, Snapshot-Rennen und mehrstellige Vorschau.
-- ApplicationFlowTest: tatsächliche MainActivity auf Robolectric API 35, Projekt anlegen, Bund 12, Undo/Redo/Persistenz, alle 13 Bereiche, Statussuche, Drumgrid, gespeicherte Einstellungen und Tablet-Navigation. Debug und Release verwenden denselben echten Activity-Einstieg.
-- Adaptertests: keine vorgetäuschte Audio-/GP-Exportfähigkeit; ZIP-Signatur ist kein Beleg für GP8-Treue.
-- verifyArchitecture: Modulrichtung, Zyklen, portabler Kern, vollständige Registerdimensionen, bekannte Routen/Verträge und aktuelle generierte Parität.
+Die rein portablen Module (`core:*`, `adapter:*`, `data:local`) lassen sich auch ohne Android-SDK mit einem reinen JVM-Build testen; die Android-Module prüft die CI.
 
-Screenshots entstehen am Ende eigener Bedienprüfungen mit Robolectric Native Graphics durch Zeichnen der tatsächlichen Activity in ein Bitmap. Das umgeht die dort nicht zuverlässige PixelCopy-/WindowCapture-Redraw-Synchronisierung. Dateien liegen in `app/build/reports/screenshots/`. Handy 411×891 dp, Tablet 1280×800 dp; keine Behauptung eines echten Gerätedisplays. Bibliothek, Editor, Drumgrid, Status, Tablet und helles Design werden geprüft. Die Simulation deckt keine Audio-/USB-/Bluetooth- oder Providerhardware ab.
+| Bereich | Tests | Was sie belegen |
+|---|---|---|
+| Modell | TimeModelTest | rationale Zeit/Überlauf, verschachtelte Tuplets, Punktierung, Drop-A-Oktaven/Teil-Capo, unabhängige Bends, stabile Wire-Tags |
+| Editor | EditorSessionTest, EditorExtensionsTest | vier Stimmen, Akkorde, Commit/Undo/Redo, Artikulationen, Haltebögen, Ripple, Takte einfügen/löschen/duplizieren/einfügen, Wiederholungen, Spuren duplizieren, Instrumentwechsel mit Tonhöhe/Griff, Transposition, Akkordbibliothek, vom Basisstand gelöste Vorschläge |
+| Wiedergabe | RouteCompilerTest, SequenceCompilerTest | Wiederholungen mit Voltas, D.C./D.S./Coda/Fine, Tempo in Schreibreihenfolge, Swing, Fermaten; Bends unabhängig pro Saite, Legato, Let Ring, Strum-Reihenfolge, Flageoletts (auch mit Capo), Drum-Chokes und Element-Mix, Metronom nach Taktart |
+| Synthesizer | SynthEngineTest, AudioClipTest | Stimmung der Saiten, PM/Dead klingen kürzer, Bend nur auf der gebendeten Saite, Flageolett-Oktave, deterministisches Rendern, High-Gain-Kette begrenzt, Drum-Chokes, Mute/Solo, sample-genauer Loop, Count-in, Vorschau, Offline-Mix und Stems gleicher Länge, Echtzeitfaktor; Clip-Offset, Loop-Wiederholung, Solo-Regel, Streaming-Resampler |
+| Audio-Adapter | AudioAdapterTest, AudioDecodingTest | Transport gegen virtuelle Senke (Play/Pause/Seek/Loop/Count-in/Trainer, Position aus der Sample-Clock), Stimmgerät mit synthetischen Tönen, WAV-Decoder aller Formate, Längenlimit, Fehlerfälle, Wellenform-Peaks |
+| Notensatz | LayoutTest | Fixtures in Eingabe-, Lese- und Standardnotations-Stil (PNG-Ausgabe zur Sichtprüfung), Trefferflächen für Spalten und Saiten, 200 Takte in kurzer Zeit, wohlgeformtes SVG |
+| Speicher | ProjectStorageTest, NativeArchiveTest | Neustart, konkurrierende Revision, atomare Sichtbarkeit, Recovery, Snapshots, Assets, native Archive mit Pfad-, Größen- und Prüfsummenlimits |
+| Formate | CatalogTest, XmlTest, Gp*Test, Gpif*Test, Gpx*Test, Midi*Test, MusicXmlTest, AsciiTabExporterTest | Inhaltserkennung; GP3/4/5 gegen PyGuitarPro-Orakel samt Verlustliste, Trunkierung und Mutationen; GPIF-Rundreise, ZIP-/XML-Angriffe, GPX-Container; MIDI-, MusicXML- und ASCII-Abbildung; Export nach GP7/MIDI/MusicXML/ASCII und Reimport über den Katalog; jedes Präfix eines XML-Dokuments scheitert sauber |
+| ViewModels | AutosaveTest, ReferenceAudioTest, LibraryImportTest | Autosave, Retry und Snapshot-Rennen; Referenz-Audio importieren, ausrichten, entfernen, Undo; Fremdimport mit genau einer Herkunft und ohne verwaiste Assets |
+| App | ApplicationFlowTest | tatsächliche MainActivity auf Robolectric API 35 (Debug und Release): Projekt anlegen, Bund 12, Undo/Redo/Persistenz, alle 13 Bereiche, Funktionssuche, Drumgrid, Einstellungen, Tablet-Navigation |
+| Architektur | verify_architecture.py | Modulrichtung, Zyklen, portabler Kern, vollständige Registerdimensionen, bekannte Routen/Verträge, aktuelle generierte Parität |
 
-Android Lint muss ohne Fehler bestehen. Hinweise auf neuere Bibliotheksversionen sind bei der bewusst gepinnten Toolchain erwartbar; die Aktualisierung für alphaTab ist ein eigener geprüfter Schritt.
+Android Lint muss ohne Fehler bestehen. Hinweise auf neuere Bibliotheksversionen sind bei der bewusst gepinnten Toolchain erwartbar.
 
-## Manuelle Phase-1-Abnahme auf Android
+## Manuelle Abnahme auf Android
 
-1. Debug-APK installieren; Bibliothek ohne Netzwerk öffnen. Projekt mit Gitarre/Bass/Drums anlegen.
-2. Im Hochformat tiefe A-Saite wählen, 150 BPM, 1/16 setzen, PM aktivieren und Bünde 0/12 mit ausdrücklichem Commit eingeben. Dead Note setzen. Auto-Advance und Akkordmodus prüfen.
-3. Vier Stimmen separat bearbeiten; 7/8-Takt ergänzen; Rhythmusfehler zeigen lassen. Fehler mit Undo/Redo korrigieren.
-4. Kick und HH auf denselben Beat setzen, nur Kick entfernen und Undo ausführen. Mixer-Slider verändern; genau ein Undo pro Slidergeste.
-5. Benannten Snapshot erstellen, weiterarbeiten und Snapshot wiederherstellen; Restore rückgängig machen.
-6. Auf „Lokal gespeichert“ warten, App beenden und Projekt erneut öffnen. Bei provoziertem Speicherfehler muss der ungespeicherte Stand sichtbar bleiben und Retry möglich sein.
-7. Native Datei über SAF speichern und als neues Projekt öffnen; mit mindestens zwei Dokumentprovidern testen. Der native Import dupliziert die Projekt-ID, keine internen Notenreferenzen.
-8. Querformat/Tablet, externe Tastatur und Screenreader prüfen. Kleine Partiturelemente haben Alternativen über Saitenwahl/Pfeile; Long Press ist keine Pflichtaktion.
+1. Debug-APK installieren (eine ältere RiffWorkbench-Debug-APK vorher deinstallieren; Projekte vorher als `.riffproj` sichern). Bibliothek ohne Netzwerk öffnen, Projekt anlegen.
+2. Riff auf der tiefen A-Saite eingeben: Bünde 0/12 mit Commit, 1/16, Palm-Mute, Dead Note, Bend, Slide. Jede Note muss beim Eintragen hörbar sein.
+3. Wiedergabe ab Cursor, Loop über zwei Takte, Count-in, 70 %, Speed-Trainer. Playhead und Zählzeit-Punkte müssen dem Klang folgen, ohne Aussetzer.
+4. Kopfhörer abziehen und Anruf simulieren: Wiedergabe muss pausieren. App in den Hintergrund: Wiedergabe pausiert, Stand ist gespeichert.
+5. Eine eigene GP5- und eine GP7/8-Datei importieren; Verlustbericht auf der Austausch-Seite lesen. Als GP7, MIDI, MusicXML exportieren und in Guitar Pro, MuseScore beziehungsweise Cubase öffnen (Desktop-Gegencheck).
+6. Eigene Aufnahme als Referenz-Audio importieren, per Wellenform „Takt 1“ setzen, mit der Partitur abspielen, Mute/Solo prüfen.
+7. WAV-Mix und Stems exportieren und in Cubase übereinanderlegen.
+8. Stimmgerät mit echter tiefer A-Saite. Querformat/Tablet, externe Tastatur und Screenreader prüfen.
 
-## Weitere noch offene Abnahmen
+## Noch offene Abnahmen
 
-GP8-Reopen/Reimport, Cubase-Stem-/MIDI-Übergabe, echte Klangartikulationen, Ein-/Ausgaberouting, 30-min-Stresstest, Touch→Paint/Preview-p50/p95, 60-fps-Scrollen, Bluetooth und Thermik. Voraussetzungen und konkrete Pass/Fail-Folgen stehen in SPIKES.md. Kein Wert wird als gemessene Leistung ausgegeben.
+Gerätelatenz und Underruns, 30-min-Stresstest, Bluetooth/USB-Routing, Thermik, Hörvergleich des Synthesizers, MP3/AAC/Ogg/FLAC-Decoder auf dem Gerät, GP-Desktop-Rundreise, MuseScore, Cubase-Stem-/MIDI-Übergabe, Touch→Paint p50/p95 und 60-fps-Scrollen. Voraussetzungen und Pass/Fail-Folgen stehen in [SPIKES.md](SPIKES.md). Kein Wert wird als gemessene Leistung ausgegeben, solange er nicht auf einem Gerät gemessen wurde.
