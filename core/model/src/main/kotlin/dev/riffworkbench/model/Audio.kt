@@ -141,5 +141,9 @@ data class PlaybackPlan(
 data class TransportState(val status: TransportStatus = TransportStatus.UNAVAILABLE, val position: PlaybackOccurrence? = null, val sample: SamplePosition? = null, val underruns: Long = 0, val reason: String? = "Audio-Engine nicht verbunden", val speed: Double = 1.0, val loop: LoopRange? = null, val countingIn: Boolean = false, val latencyMs: Double? = null)
 enum class TransportStatus { UNAVAILABLE, STOPPED, PREPARING, PLAYING, PAUSED, INTERRUPTED, FAILED }
 data class AudioDevice(val id: String, val name: String, val sampleRates: List<Int>, val input: Boolean, val estimatedLatencyMs: Double?)
-data class WaveformLevel(val samplesPerPeak: Int, val minimum: List<Float>, val maximum: List<Float>)
+/** Min/max peaks of a mono mix; [sampleRate] is the decoded rate, so one peak spans samplesPerPeak / sampleRate seconds. */
+data class WaveformLevel(val samplesPerPeak: Int, val minimum: List<Float>, val maximum: List<Float>, val sampleRate: Int = 0) {
+    val secondsPerPeak: Double get() = if (sampleRate > 0) samplesPerPeak.toDouble() / sampleRate else 0.0
+    val durationSeconds: Double get() = minimum.size * secondsPerPeak
+}
 data class RenderOptions(val sampleRate: Int = 48000, val bitDepth: Int = 24, val includeMasterFx: Boolean = true, val tailSeconds: Double = 2.0, val splitTracks: Boolean = true, val commonStartFrame: Long = 0)

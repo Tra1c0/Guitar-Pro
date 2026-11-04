@@ -55,6 +55,7 @@ data class WorkspaceServices(
     /** Reference audio: original files are stored by hash; the decoder validates them before a clip is added. */
     val assets: AssetStore? = null,
     val audioDecoder: AudioDecoder? = null,
+    val waveforms: WaveformCache? = null,
 )
 
 /** Export targets offered in the exchange screen. */

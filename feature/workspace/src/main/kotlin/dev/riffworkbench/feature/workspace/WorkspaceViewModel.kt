@@ -449,6 +449,8 @@ class WorkspaceViewModel(
         } finally { mutable.value = mutable.value.copy(busy = null, busyProgress = null) }
     } }
     fun updateClip(clip: AudioClip) { command(EditorCommand.UpdateAudioClip(clip)) }
+    /** Peaks at ~100 per second for alignment; null while unavailable. */
+    suspend fun waveform(asset: AssetHash): WaveformLevel? = (services.waveforms?.peaks(asset, 480) as? Outcome.Success)?.value
     fun removeClip(id: EntityId) { command(EditorCommand.RemoveAudioClip(id)) }
 
     // ------------------------------------------------------------------ internals

@@ -112,4 +112,21 @@ class AudioDecodingTest {
         assertEquals(45_999, pcm.frames) // 23000 frames at 22.05 kHz -> 44.1 kHz
         assertEquals(1000, pcm.data[2 * 30_000].toInt())
     }
+
+    @Test fun waveformPeaksLocateImpulsesWithoutKeepingPcm() = runBlocking {
+        // Silence with one full-scale impulse at 1.5 s (48 kHz, stereo) -> with 480 samples per peak it lands in peak 150.
+        val bytes = wav(48_000, 2, 16, 48_000 * 3) { f, _ -> if (f in 72_000 until 72_010) 0.9 else 0.0 }
+        val assets = MemoryAssets(); val hash = (assets.put("w.wav", "audio/wav", bytes) as Outcome.Success).value.hash
+        val waves = StreamingWaveforms(assets, AudioDecoders())
+        val level = (waves.peaks(hash, 480) as Outcome.Success).value
+        assertEquals(300, level.minimum.size)
+        assertEquals(0.01, level.secondsPerPeak, 1e-12)
+        assertEquals(3.0, level.durationSeconds, 1e-9)
+        val loudest = level.maximum.indices.maxBy { level.maximum[it] }
+        assertEquals(150, loudest)
+        assertTrue(level.maximum[150] > 0.85f)
+        assertTrue(level.maximum.filterIndexed { i, _ -> i != 150 }.all { it < 0.01f })
+        assertSame(level, (waves.peaks(hash, 480) as Outcome.Success).value) // cached
+        assertTrue(waves.peaks(hash, 3) is Outcome.Failure)
+    }
 }

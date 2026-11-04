@@ -5,8 +5,12 @@ import dev.riffworkbench.ports.*
 import dev.riffworkbench.synth.PcmBuffer
 import dev.riffworkbench.synth.PcmBuilder
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * WAV decoder in Kotlin: PCM 8/16/24/32 bit, float 32/64 bit, WAVE_FORMAT_EXTENSIBLE, 1–8 channels. The data block is
@@ -127,4 +131,49 @@ class DecodingClipLoader(private val assets: AssetStore, private val decoder: Au
     }
 
     companion object { const val MAX_CLIP_SECONDS = 600 }
+}
+
+/**
+ * C-WAVEFORM: min/max peaks of the mono mix, computed while decoding without keeping any PCM. Results are cached per
+ * asset and resolution (the asset is immutable, so the hash is a sufficient key).
+ */
+class StreamingWaveforms(private val assets: AssetStore, private val decoder: AudioDecoder, private val maxSeconds: Int = DecodingClipLoader.MAX_CLIP_SECONDS) : WaveformCache {
+    private val mutex = Mutex()
+    private val cache = LinkedHashMap<Pair<AssetHash, Int>, WaveformLevel>()
+
+    /** Decodes off the caller's thread (WAV decoding is plain Kotlin and would otherwise run on the UI dispatcher). */
+    override suspend fun peaks(asset: AssetHash, samplesPerPeak: Int): Outcome<WaveformLevel> = withContext(Dispatchers.Default) { compute(asset, samplesPerPeak) }
+
+    private suspend fun compute(asset: AssetHash, samplesPerPeak: Int): Outcome<WaveformLevel> {
+        if (samplesPerPeak !in 16..1_000_000) return Outcome.Failure(FailureCode.VALIDATION, "Ungültige Wellenform-Auflösung", contractId = "C-WAVEFORM")
+        mutex.withLock { cache[asset to samplesPerPeak]?.let { return Outcome.Success(it) } }
+        val bytes = when (val r = assets.get(asset)) { is Outcome.Success -> r.value; is Outcome.Failure -> return r }
+        val minimum = ArrayList<Float>(); val maximum = ArrayList<Float>()
+        var rate = 0; var count = 0; var frames = 0L
+        var lo = 1f; var hi = -1f
+        val decoded = try {
+            decoder.decode(bytes) { sampleRate, channels, data, n ->
+                rate = sampleRate
+                for (f in 0 until n) {
+                    val v = if (channels == 1) data[f] / 32768f else (data[f * channels] + data[f * channels + 1]) / 65536f
+                    if (v < lo) lo = v
+                    if (v > hi) hi = v
+                    if (++count == samplesPerPeak) { minimum += lo; maximum += hi; lo = 1f; hi = -1f; count = 0 }
+                }
+                frames += n
+                frames < maxSeconds.toLong() * sampleRate
+            }
+        } catch (e: IllegalArgumentException) {
+            Outcome.Failure(FailureCode.VALIDATION, e.message ?: "Ungültige Audiodaten", contractId = "C-WAVEFORM")
+        }
+        if (decoded is Outcome.Failure) return decoded
+        if (count > 0) { minimum += lo; maximum += hi }
+        if (minimum.isEmpty() || rate == 0) return Outcome.Failure(FailureCode.VALIDATION, "Die Audiodatei enthält keine Samples", contractId = "C-WAVEFORM")
+        val level = WaveformLevel(samplesPerPeak, minimum, maximum, rate)
+        mutex.withLock {
+            cache[asset to samplesPerPeak] = level
+            while (cache.size > 16) cache.remove(cache.keys.first())
+        }
+        return Outcome.Success(level)
+    }
 }

@@ -143,12 +143,12 @@ Aktuelle native Speicherung garantiert atomare Sichtbarkeit eines vollständig g
 
 ## C-SYNC
 
-**Score-/Audio-Sync · Abbildung implementiert; Audioclips in der Engine offen / C**
+**Score-/Audio-Sync · SCORE_TEMPO-Modus mit Offset implementiert; Anker-Modus offen / C**
 
-- Grenze: AudioSyncMapper → `AnchorSyncMapper`, SyncMap, SyncAnchor.
-- Ein-/Ausgabe: Position samt Durchlauf und Sync-Map → Audiozeit; stückweise linear zwischen Ankern, außerhalb mit der Rate des nächsten Segments.
-- Ausführung und Fehler: SCORE_TEMPO und AUDIO_REFERENCE als explizite Modi. Referenzaudio wird noch nicht decodiert und gemischt.
-- Abnahme: Abbildung getestet (SequenceCompilerTest); Wiedergabe von Stems offen.
+- Grenze: AudioClip.offsetMicros und ClipSet (Engine), AudioSyncMapper → `AnchorSyncMapper`, SyncMap, SyncAnchor.
+- Ein-/Ausgabe: Clipbeginn in Planframes = Partiturbeginn + Offset. Die Anker-Abbildung rechnet Position samt Durchlauf → Audiozeit, stückweise linear zwischen Ankern, außerhalb mit der Rate des nächsten Segments.
+- Ausführung und Fehler: Im Modus SCORE_TEMPO folgt das Audio der Engine-Uhr; Loop, Seek und Count-in bleiben sample-genau, solange das Partitur-Tempo zur Aufnahme passt. AUDIO_REFERENCE (Partitur folgt Ankern einer frei gespielten Aufnahme) ist berechnet, aber noch nicht an die Engine angeschlossen.
+- Abnahme: Offset, Loop-Wiederholung und Solo (AudioClipTest), Anker-Abbildung (SequenceCompilerTest). Hörprobe mit echter Aufnahme auf dem Gerät offen.
 
 ## C-SEQUENCER
 
@@ -188,21 +188,21 @@ Aktuelle native Speicherung garantiert atomare Sichtbarkeit eines vollständig g
 
 ## C-DECODE
 
-**Audio-Decode · Scaffold / C–D**
+**Audio-Decode · Implementiert (WAV in Kotlin, sonst MediaCodec) / C**
 
-- Grenze: AudioDecoder → PendingAudioServices.
-- Ein-/Ausgabe: Asset + Ziel-Samplerate → gecachtes PCM-Asset mit Decoder-Metadaten.
-- Ausführung und Fehler: Worker; blockweiser Decode/Resample, begrenzte Puffer. Encoder-Delay, Seek-Preroll und unterschiedliche Raten explizit berücksichtigen.
-- Abnahme: WAV/MP3/OGG-Kandidaten mit bekannten Impulsen und Seek-Positionen. Abbruch räumt temporäre Daten auf. Aktuell UNAVAILABLE.
+- Grenze: `AudioDecoder` (probe/decode mit `PcmSink`) → `AudioDecoders` aus `WavAudioDecoder` und `MediaCodecAudioDecoder`; `DecodingClipLoader` und `PcmBuilder` für Engine-PCM.
+- Ein-/Ausgabe: Untrusted Bytes → Format (MIME, Rate, Kanäle, Dauer) bzw. 16-Bit-PCM-Blöcke → Stereo-PCM in Geräterate. WAV: PCM 8/16/24/32 Bit, Float 32/64 Bit, Extensible, 1–8 Kanäle; nicht nachgetragene Datengrößen werden auf die vorhandenen Bytes begrenzt.
+- Ausführung und Fehler: Decodieren aus dem Speicher ohne Temporärdatei, blockweises Resampling während des Decodierens (nur das Ergebnis liegt im Speicher, 4 Byte pro Frame), Abbruch über Coroutine-Cancellation. Grenzen: 64 MB Datei, 10 Minuten Wiedergabe. Kein Decoder oder beschädigte Daten → VALIDATION/CORRUPT mit Meldung, nie eine stille Spur.
+- Abnahme: WAV-Formate, Resampling-Impulslage, Längenlimit, Fehlerfälle und Plattform-Weiterleitung (AudioDecodingTest), Streaming = Einmalumwandlung (AudioClipTest). MediaCodec-Decoder nur auf CI kompiliert; MP3/AAC/Ogg/FLAC-Gerätetest und Encoder-Delay offen.
 
 ## C-WAVEFORM
 
-**Wellenform · Scaffold / C**
+**Wellenform · Implementiert (eine Stufe, ~100 Peaks/s) / C**
 
-- Grenze: WaveformCache → PendingAudioServices.
-- Ein-/Ausgabe: Asset + Peak-Auflösung → Minimum/Maximum pro Fenster, mehrstufig gecacht.
-- Ausführung und Fehler: Worker; Asset-Hash, Decoder-Version und Auflösung bilden Cache-Schlüssel. Kein Decode beim Zeichnen.
-- Abnahme: Impulse in allen Zoomstufen korrekt lokalisieren; lange Stems ohne UI-Blockade. Aktuell UNAVAILABLE.
+- Grenze: WaveformCache → `StreamingWaveforms` (adapter:audio).
+- Ein-/Ausgabe: Asset + Peak-Auflösung → Minimum/Maximum des Mono-Mixes pro Fenster samt Decoder-Rate.
+- Ausführung und Fehler: Berechnung beim Decodieren ohne PCM-Puffer, außerhalb des UI-Threads; Ergebnis pro Asset-Hash und Auflösung gecacht (höchstens 16 Einträge). Beim Zeichnen wird nicht decodiert. Mehrstufige Pyramide für sehr lange Stems offen.
+- Abnahme: Impulslage, Dauer, Cache und ungültige Auflösung (AudioDecodingTest). Antippen der Wellenform setzt Takt 1 im Clip.
 
 ## C-STRETCH
 
@@ -242,12 +242,12 @@ Aktuelle native Speicherung garantiert atomare Sichtbarkeit eines vollständig g
 
 ## C-PRACTICE
 
-**Übemodus · Implementiert ohne Referenzaudio**
+**Übemodus · Implementiert; Referenz-Audio nur bei 100 % Tempo**
 
-- Grenze: PracticeSettings, SpeedTrainer und Transport.
-- Ein-/Ausgabe: Geschwindigkeit 25–150 %, Count-in (0–2 Takte), Metronom, Loop über Taktbereich, Speed-Trainer, Cursor folgt der Wiedergabe.
-- Ausführung und Fehler: UI liest die Audio-Uhr; Geschwindigkeitswechsel kompiliert neu und bleibt an derselben musikalischen Position. Trainer erhöht nach N Loop-Durchläufen bis zum Zieltempo. Stems/Audio-Mute folgen mit Referenzaudio.
-- Abnahme: Loop, Count-in, Trainer (AudioAdapterTest). Visuelles Metronom und Playback-Griffbrett offen.
+- Grenze: PracticeSettings, SpeedTrainer, Transport und AudioClip.
+- Ein-/Ausgabe: Geschwindigkeit 25–150 %, Count-in (0–4 Takte), Metronom, Loop über Taktbereich, Speed-Trainer, Cursor folgt der Wiedergabe. Referenzaufnahmen mit Offset, Pegel, Pan, Mute und Solo unter derselben Uhr wie der Synthesizer.
+- Ausführung und Fehler: UI liest die Audio-Uhr; Geschwindigkeitswechsel kompiliert neu und bleibt an derselben musikalischen Position. Trainer erhöht nach N Loop-Durchläufen bis zum Zieltempo. Bei Tempo ≠ 100 % bleiben Clips stumm und die Audio-Seite sagt das, bis C-STRETCH umgesetzt ist.
+- Abnahme: Loop, Count-in, Trainer (AudioAdapterTest), Clip-Synchronität (AudioClipTest), Import/Ausrichten/Entfernen im ViewModel (ReferenceAudioTest). Visuelles Metronom und Playback-Griffbrett offen.
 
 ## C-TUNER
 

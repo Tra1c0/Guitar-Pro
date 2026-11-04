@@ -7,6 +7,7 @@ import dev.riffworkbench.adapter.audio.DecodingClipLoader
 import dev.riffworkbench.adapter.audio.EngineTransport
 import dev.riffworkbench.adapter.audio.InputTuner
 import dev.riffworkbench.adapter.audio.RealtimeHost
+import dev.riffworkbench.adapter.audio.StreamingWaveforms
 import dev.riffworkbench.adapter.formats.*
 import dev.riffworkbench.adapter.integrations.IntegrationCatalog
 import dev.riffworkbench.data.local.*
@@ -49,7 +50,8 @@ class AppContainer(application: Application) {
     val notation = AlphaTabBoundary()
     val formats = FormatRegistry.catalog()
     val integrations = IntegrationCatalog.entries
-    val workspaceServices = WorkspaceServices(preview = transport, renderer = transport, formats = formats, tuner = tuner, assets = assets, audioDecoder = audioDecoder)
+    val workspaceServices = WorkspaceServices(preview = transport, renderer = transport, formats = formats, tuner = tuner, assets = assets, audioDecoder = audioDecoder,
+        waveforms = StreamingWaveforms(assets, audioDecoder))
     private val guard = PlaybackGuard(application) { scope.launch { transport.pause() } }
 
     init {

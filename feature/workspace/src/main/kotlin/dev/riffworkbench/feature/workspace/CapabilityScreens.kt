@@ -1,5 +1,7 @@
 package dev.riffworkbench.feature.workspace
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,6 +12,10 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -24,6 +30,7 @@ import dev.riffworkbench.ui.components.*
 import dev.riffworkbench.ui.components.R
 import dev.riffworkbench.ui.score.pitchName
 import kotlin.math.abs
+import kotlin.math.roundToLong
 
 @Composable fun PracticeScreen(vm: WorkspaceViewModel) {
     val practice by vm.practice.collectAsStateWithLifecycle()
@@ -134,6 +141,7 @@ import kotlin.math.abs
         }
         val locale = if (english()) java.util.Locale.ROOT else java.util.Locale.GERMANY
         Text(tr("Takt 1 im Audio bei ", "Bar 1 in audio at ") + "%.3f s".format(locale, barOneAt), style = MaterialTheme.typography.bodyLarge, fontFamily = FontFamily.Monospace)
+        ClipWaveform(vm, clip)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf(-1.0 to "−1 s", -0.1 to tr("−0,1 s", "−0.1 s"), -0.01 to "−10 ms", 0.01 to "+10 ms", 0.1 to tr("+0,1 s", "+0.1 s"), 1.0 to "+1 s").forEach { (delta, label) ->
                 OutlinedButton(onClick = { shift(delta) }, contentPadding = PaddingValues(horizontal = 10.dp)) { Text(label) }
@@ -150,6 +158,52 @@ import kotlin.math.abs
             FilterChip(clip.solo, { vm.updateClip(clip.copy(solo = !clip.solo)) }, label = { Text("Solo") })
         }
     } }
+}
+
+/** Waveform strip of a clip around the bar-1 marker; tapping places bar 1 at the tapped point of the recording. */
+@Composable private fun ClipWaveform(vm: WorkspaceViewModel, clip: AudioClip) {
+    val level by produceState<WaveformLevel?>(null, clip.asset) { value = vm.waveform(clip.asset) }
+    var span by remember(clip.id) { mutableFloatStateOf(20f) }
+    val wave = level
+    if (wave == null || wave.minimum.isEmpty() || wave.secondsPerPeak <= 0.0) {
+        Text(tr("Wellenform wird berechnet …", "Computing waveform …"), style = MaterialTheme.typography.bodySmall)
+        return
+    }
+    val barOneAt = -clip.offsetMicros / 1_000_000.0
+    val total = wave.durationSeconds
+    val visible = if (span <= 0f) total else minOf(span.toDouble(), total)
+    val start = if (span <= 0f) 0.0 else (barOneAt - visible / 4).coerceIn(0.0, maxOf(0.0, total - visible))
+    val waveColor = MaterialTheme.colorScheme.primary
+    val markerColor = MaterialTheme.colorScheme.error
+    val description = tr("Wellenform, Takt 1 bei %.2f Sekunden".format(java.util.Locale.GERMANY, barOneAt), "Waveform, bar 1 at %.2f seconds".format(java.util.Locale.ROOT, barOneAt))
+    Canvas(Modifier.fillMaxWidth().height(64.dp).semantics { contentDescription = description }
+        .pointerInput(clip, start, visible) {
+            detectTapGestures { pos ->
+                val t = start + pos.x / size.width * visible
+                vm.updateClip(clip.copy(offsetMicros = -(t * 1_000_000).roundToLong()))
+            }
+        }) {
+        val w = size.width; val mid = size.height / 2
+        if (w < 1f || visible <= 0.0) return@Canvas
+        val perPx = visible / w
+        var x = 0
+        while (x < w.toInt()) {
+            val t0 = start + x * perPx
+            val i0 = (t0 / wave.secondsPerPeak).toInt()
+            if (i0 >= wave.minimum.size) break
+            val i1 = maxOf(i0 + 1, ((t0 + perPx) / wave.secondsPerPeak).toInt()).coerceAtMost(wave.minimum.size)
+            var lo = 1f; var hi = -1f
+            for (i in i0 until i1) { lo = minOf(lo, wave.minimum[i]); hi = maxOf(hi, wave.maximum[i]) }
+            if (hi >= lo) drawLine(waveColor, Offset(x.toFloat(), mid - hi * mid), Offset(x.toFloat(), mid - lo * mid + 1f), strokeWidth = 1f)
+            x++
+        }
+        val marker = ((barOneAt - start) / visible * w).toFloat()
+        if (marker in 0f..w) drawLine(markerColor, Offset(marker, 0f), Offset(marker, size.height), strokeWidth = 2.dp.toPx())
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        listOf(4f to "4 s", 20f to "20 s", 0f to tr("Gesamt", "All")).forEach { (s, label) -> FilterChip(span == s, { span = s }, label = { Text(label) }) }
+        Text(tr("Antippen setzt Takt 1", "Tap to place bar 1"), style = MaterialTheme.typography.bodySmall)
+    }
 }
 
 @Composable fun EffectsScreen(vm: WorkspaceViewModel, state: EditorState) {
