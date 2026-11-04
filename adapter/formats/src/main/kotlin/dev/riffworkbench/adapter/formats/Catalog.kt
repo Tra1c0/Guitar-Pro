@@ -3,6 +3,7 @@ package dev.riffworkbench.adapter.formats
 import dev.riffworkbench.model.*
 import dev.riffworkbench.ports.*
 import java.io.ByteArrayInputStream
+import dev.riffworkbench.adapter.formats.gp.GpBinaryDetector
 import java.util.zip.ZipInputStream
 
 /**
@@ -21,9 +22,7 @@ class DefaultFormatCatalog(private val importers: Map<String, ScoreImporter> = e
         return when {
             head.startsWith("PK") -> zipFamily(bytes)
             head.startsWith("BCFZ") || head.startsWith("BCFS") -> f("gpx")
-            head.length > 1 && head.substring(1).startsWith("FICHIER GUITAR PRO v3") -> f("gp3")
-            head.length > 1 && head.substring(1).startsWith("FICHIER GUITAR PRO v4") -> f("gp4")
-            head.length > 1 && head.substring(1).startsWith("FICHIER GUITAR PRO v5") -> f("gp5")
+            GpBinaryDetector.version(bytes) != null -> f(GpBinaryDetector.version(bytes)!!)
             head.length > 1 && head.substring(1).startsWith("FICHIER GUITAR PRO") -> Outcome.Failure(FailureCode.INCOMPATIBLE_VERSION, "Unbekannte Guitar-Pro-Version", contractId = "C-FORMAT")
             head.startsWith("MThd") -> f("midi")
             head.startsWith("%PDF-") -> Outcome.Failure(FailureCode.UNAVAILABLE, "PDF-Dateien enthalten keine bearbeitbaren Noten", contractId = "C-FORMAT")

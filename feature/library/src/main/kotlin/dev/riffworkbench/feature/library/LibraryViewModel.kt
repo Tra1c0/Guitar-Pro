@@ -55,7 +55,14 @@ class LibraryViewModel(
                 val imported = when (val r = importer.import(bytes, ids)) { is Outcome.Failure -> { mutableError.value = r.message; return@launch }; is Outcome.Success -> r.value }
                 var project = imported.project.copy(revision = 0)
                 val original = assets?.put(fileName?.take(120) ?: "original.${info.extension}", "application/octet-stream", bytes, AssetRights("Vom Nutzer importierte Originaldatei", "unverified", false))
-                if (original is Outcome.Success) project = project.copy(assets = project.assets + original.value, provenance = project.provenance + ImportProvenance(info.id, original.value.hash, losses = imported.losses))
+                // One canonical provenance entry per import. Importers may describe the original themselves; the library owns the
+                // stored bytes, so it replaces those descriptors. Without stored bytes no descriptor may point at a missing asset.
+                val referenced = project.provenance.map { it.originalAsset }.toSet()
+                project = if (original is Outcome.Success) {
+                    val hash = original.value.hash
+                    project.copy(assets = project.assets.filterNot { it.hash == hash || it.hash in referenced } + original.value,
+                        provenance = listOf(ImportProvenance(info.id, hash, unknownData = project.provenance.flatMap { it.unknownData }, losses = imported.losses)))
+                } else project.copy(assets = project.assets.filterNot { it.hash in referenced }, provenance = emptyList())
                 val errors = ScoreValidator.validate(project).filter { it.severity == Severity.ERROR }
                 if (errors.isNotEmpty()) { mutableError.value = "Import ergab eine ungültige Partitur: ${errors.first().message}"; return@launch }
                 when (val saved = repository.save(project)) {

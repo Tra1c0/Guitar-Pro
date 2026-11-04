@@ -27,4 +27,21 @@ class CatalogTest {
         assertNull(id(zip("random.txt")))
         assertNull(id(ByteArray(2)))
     }
+
+    @Test fun registryImportsEveryGuitarProBinaryFixtureThroughTheCatalog() = kotlinx.coroutines.runBlocking {
+        val dir = generateSequence(java.io.File("").absoluteFile) { it.parentFile }.map { java.io.File(it, "fixtures/gp") }.first { it.isDirectory }
+        val catalog = FormatRegistry.catalog()
+        var n = 0
+        val ids = IdSource { EntityId("c${n++}") }
+        for (name in listOf("drop-a-band.gp3", "drop-a-band.gp4", "drop-a-band.gp5", "drop-a-band-v500.gp5")) {
+            val bytes = java.io.File(dir, name).readBytes()
+            val format = (catalog.detect(bytes, null) as Outcome.Success).value
+            assertEquals(name.substringAfterLast('.'), format.id)
+            val result = catalog.importer(format.id)!!.import(bytes, ids) {}
+            assertTrue("$name: $result", result is Outcome.Success)
+            assertTrue((result as Outcome.Success).value.project.tracks.isNotEmpty())
+        }
+        // "L4.06" (a GP4 variant) is still GP4, not an unknown version.
+        assertEquals("gp4", id(byteArrayOf(24) + "FICHIER GUITAR PRO L4.06".toByteArray() + ByteArray(40)))
+    }
 }
