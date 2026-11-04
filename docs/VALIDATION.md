@@ -2,7 +2,7 @@
 
 Die Testergebnisse stehen in `docs/VERIFICATION.json`; sie werden von `tools/collect_validation.py` aus den tatsächlichen JUnit-XML-Berichten eines vollständigen CI-Laufs erzeugt. Die CI archiviert die Gradle-, Lint- und JUnit-Berichte als Artefakt `verification-reports` und die Debug-APK als `riffworkbench-debug-apk`. Ein erfolgreicher Build ist keine Geräte-, Hör- oder Desktop-Abnahme.
 
-Letzter abgeschlossener Stand: **165 unterschiedliche Tests bestanden, 180 Ausführungen einschließlich Debug-/Release-Varianten; Build, Architekturprüfung und Android Lint ohne Fehler** (CI-Lauf 8 für Commit `5548f0b`, 4. November 2026). Dieser Lauf enthält noch nicht die GP7/8-, GPX-, MIDI-, MusicXML- und ASCII-Adapter; deren Lauf wird hier nachgetragen, sobald er abgeschlossen ist. Lokal bestehen alle portablen Tests einschließlich dieser Adapter.
+Geprüfter Stand: **227 unterschiedliche Tests bestanden, 242 Ausführungen einschließlich Debug-/Release-Varianten; Build, Architekturprüfung und Android Lint ohne Fehler** (CI-Lauf 10 für Commit `24c72b5`, 4. November 2026). Der Quell-Fingerabdruck in `docs/VERIFICATION.json` entspricht dem Kotlin-Stand dieses Commits; spätere Commits haben nur Dokumentation geändert.
 
 ## Automatisierte Prüfung
 
