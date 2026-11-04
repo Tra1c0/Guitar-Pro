@@ -1,0 +1,575 @@
+{
+    "schemaVersion": 1,
+    "id": "fixture-33966",
+    "revision": 0,
+    "metadata": {
+        "title": "Clock · 120 BPM",
+        "artist": "",
+        "album": "",
+        "composer": "",
+        "copyright": "",
+        "notes": ""
+    },
+    "measures": [
+        {
+            "id": "fixture-33960",
+            "signature": {
+                "numerator": 4,
+                "denominator": 4
+            },
+            "key": {
+                "fifths": 0,
+                "minor": false
+            },
+            "pickupLength": null,
+            "repeat": {
+                "starts": false,
+                "endCount": null,
+                "alternateEndings": []
+            },
+            "navigation": [],
+            "feel": "STRAIGHT",
+            "forcedSystemBreak": false
+        },
+        {
+            "id": "fixture-33961",
+            "signature": {
+                "numerator": 4,
+                "denominator": 4
+            },
+            "key": {
+                "fifths": 0,
+                "minor": false
+            },
+            "pickupLength": null,
+            "repeat": {
+                "starts": false,
+                "endCount": null,
+                "alternateEndings": []
+            },
+            "navigation": [],
+            "feel": "STRAIGHT",
+            "forcedSystemBreak": false
+        },
+        {
+            "id": "fixture-33962",
+            "signature": {
+                "numerator": 4,
+                "denominator": 4
+            },
+            "key": {
+                "fifths": 0,
+                "minor": false
+            },
+            "pickupLength": null,
+            "repeat": {
+                "starts": false,
+                "endCount": null,
+                "alternateEndings": []
+            },
+            "navigation": [],
+            "feel": "STRAIGHT",
+            "forcedSystemBreak": false
+        },
+        {
+            "id": "fixture-33963",
+            "signature": {
+                "numerator": 4,
+                "denominator": 4
+            },
+            "key": {
+                "fifths": 0,
+                "minor": false
+            },
+            "pickupLength": null,
+            "repeat": {
+                "starts": false,
+                "endCount": null,
+                "alternateEndings": []
+            },
+            "navigation": [],
+            "feel": "STRAIGHT",
+            "forcedSystemBreak": false
+        }
+    ],
+    "tracks": [
+        {
+            "id": "fixture-34004",
+            "name": "Gitarre · Drop A",
+            "instrument": {
+                "kind": "GUITAR",
+                "tuning": [
+                    33,
+                    40,
+                    45,
+                    50,
+                    55,
+                    59,
+                    64
+                ],
+                "capoByString": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "maxFret": 24,
+                "midiProgram": 30,
+                "fineTuneCents": 0.0,
+                "transposition": 0,
+                "drumKit": [
+                    {
+                        "midiNote": 36,
+                        "name": "Kick",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": null
+                    },
+                    {
+                        "midiNote": 38,
+                        "name": "Snare",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": null
+                    },
+                    {
+                        "midiNote": 42,
+                        "name": "Closed HH",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": 1
+                    },
+                    {
+                        "midiNote": 46,
+                        "name": "Open HH",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": 1
+                    },
+                    {
+                        "midiNote": 49,
+                        "name": "Crash",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": 2
+                    }
+                ]
+            },
+            "staves": [
+                {
+                    "id": "fixture-34005",
+                    "notation": [
+                        "TAB"
+                    ],
+                    "bars": [
+                        {
+                            "id": "fixture-34006",
+                            "measureId": "fixture-33960",
+                            "voices": [
+                                {
+                                    "id": "fixture-34007",
+                                    "index": 0,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34008",
+                                    "index": 1,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34009",
+                                    "index": 2,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34010",
+                                    "index": 3,
+                                    "beats": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "fixture-34011",
+                            "measureId": "fixture-33961",
+                            "voices": [
+                                {
+                                    "id": "fixture-34012",
+                                    "index": 0,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34013",
+                                    "index": 1,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34014",
+                                    "index": 2,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34015",
+                                    "index": 3,
+                                    "beats": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "fixture-34016",
+                            "measureId": "fixture-33962",
+                            "voices": [
+                                {
+                                    "id": "fixture-34017",
+                                    "index": 0,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34018",
+                                    "index": 1,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34019",
+                                    "index": 2,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34020",
+                                    "index": 3,
+                                    "beats": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "fixture-34021",
+                            "measureId": "fixture-33963",
+                            "voices": [
+                                {
+                                    "id": "fixture-34022",
+                                    "index": 0,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34023",
+                                    "index": 1,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34024",
+                                    "index": 2,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34025",
+                                    "index": 3,
+                                    "beats": []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ],
+            "sound": {
+                "bankId": null,
+                "presetId": null,
+                "originalRseData": null,
+                "mappingDescription": "Unmapped"
+            },
+            "mix": {
+                "volume": 0.8,
+                "pan": 0.0,
+                "mute": false,
+                "solo": false,
+                "effects": []
+            }
+        },
+        {
+            "id": "fixture-34026",
+            "name": "Drums",
+            "instrument": {
+                "kind": "PERCUSSION",
+                "tuning": [],
+                "capoByString": [],
+                "maxFret": 24,
+                "midiProgram": 0,
+                "fineTuneCents": 0.0,
+                "transposition": 0,
+                "drumKit": [
+                    {
+                        "midiNote": 36,
+                        "name": "Kick",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": null
+                    },
+                    {
+                        "midiNote": 38,
+                        "name": "Snare",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": null
+                    },
+                    {
+                        "midiNote": 42,
+                        "name": "Closed HH",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": 1
+                    },
+                    {
+                        "midiNote": 46,
+                        "name": "Open HH",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": 1
+                    },
+                    {
+                        "midiNote": 49,
+                        "name": "Crash",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": 2
+                    }
+                ]
+            },
+            "staves": [
+                {
+                    "id": "fixture-34027",
+                    "notation": [
+                        "PERCUSSION"
+                    ],
+                    "bars": [
+                        {
+                            "id": "fixture-34028",
+                            "measureId": "fixture-33960",
+                            "voices": [
+                                {
+                                    "id": "fixture-34029",
+                                    "index": 0,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34030",
+                                    "index": 1,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34031",
+                                    "index": 2,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34032",
+                                    "index": 3,
+                                    "beats": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "fixture-34033",
+                            "measureId": "fixture-33961",
+                            "voices": [
+                                {
+                                    "id": "fixture-34034",
+                                    "index": 0,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34035",
+                                    "index": 1,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34036",
+                                    "index": 2,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34037",
+                                    "index": 3,
+                                    "beats": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "fixture-34038",
+                            "measureId": "fixture-33962",
+                            "voices": [
+                                {
+                                    "id": "fixture-34039",
+                                    "index": 0,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34040",
+                                    "index": 1,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34041",
+                                    "index": 2,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34042",
+                                    "index": 3,
+                                    "beats": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "fixture-34043",
+                            "measureId": "fixture-33963",
+                            "voices": [
+                                {
+                                    "id": "fixture-34044",
+                                    "index": 0,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34045",
+                                    "index": 1,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34046",
+                                    "index": 2,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-34047",
+                                    "index": 3,
+                                    "beats": []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ],
+            "sound": {
+                "bankId": null,
+                "presetId": null,
+                "originalRseData": null,
+                "mappingDescription": "Unmapped"
+            },
+            "mix": {
+                "volume": 0.8,
+                "pan": 0.0,
+                "mute": false,
+                "solo": false,
+                "effects": []
+            }
+        }
+    ],
+    "sections": [],
+    "tempo": [
+        {
+            "position": {
+                "measureId": "fixture-33960",
+                "offset": {
+                    "numerator": 0,
+                    "denominator": 1
+                }
+            },
+            "quarterNotesPerMinute": 120.0
+        }
+    ],
+    "assets": [
+        {
+            "hash": "87629682c48d5f4e15f75e1d2c871cab59fb6ca85959744d484542fcc70dfee6",
+            "name": "clock-120bpm-48k.wav",
+            "mediaType": "audio/wav",
+            "sizeBytes": 768044,
+            "rights": {
+                "source": "original synthetic fixture",
+                "license": "CC0-1.0",
+                "redistributionAllowed": true
+            }
+        }
+    ],
+    "soundBanks": [],
+    "audio": {
+        "assets": [],
+        "clips": [
+            {
+                "id": "fixture-34051",
+                "asset": "87629682c48d5f4e15f75e1d2c871cab59fb6ca85959744d484542fcc70dfee6",
+                "name": "Synthetic click",
+                "offsetMicros": 0,
+                "syncMapId": "fixture-34048",
+                "gain": 1.0,
+                "pan": 0.0,
+                "mute": false,
+                "solo": false,
+                "pitchCents": 0,
+                "filters": []
+            }
+        ],
+        "syncMaps": [
+            {
+                "id": "fixture-34048",
+                "mode": "SCORE_TEMPO",
+                "anchors": [
+                    {
+                        "id": "fixture-34049",
+                        "occurrence": {
+                            "position": {
+                                "measureId": "fixture-33960",
+                                "offset": {
+                                    "numerator": 0,
+                                    "denominator": 1
+                                }
+                            },
+                            "occurrence": 1,
+                            "routeIndex": 0
+                        },
+                        "audioMicros": 0
+                    },
+                    {
+                        "id": "fixture-34050",
+                        "occurrence": {
+                            "position": {
+                                "measureId": "fixture-33963",
+                                "offset": {
+                                    "numerator": 3,
+                                    "denominator": 4
+                                }
+                            },
+                            "occurrence": 1,
+                            "routeIndex": 3
+                        },
+                        "audioMicros": 7500000
+                    }
+                ]
+            }
+        ]
+    },
+    "mix": {
+        "master": {
+            "volume": 0.8,
+            "pan": 0.0,
+            "mute": false,
+            "solo": false,
+            "effects": []
+        },
+        "buses": [],
+        "automation": []
+    },
+    "layout": {
+        "mode": "CONTINUOUS",
+        "scale": 1.0,
+        "stylesheet": "default",
+        "trackOrder": [],
+        "barsPerSystem": null,
+        "pageWidthMm": 210.0,
+        "pageHeightMm": 297.0
+    },
+    "text": [],
+    "chords": [],
+    "scales": [],
+    "provenance": [],
+    "diagnostics": []
+}

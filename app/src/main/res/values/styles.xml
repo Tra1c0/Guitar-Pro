@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.RiffWorkbench.Base" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:colorAccent">#D7F65B</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+    <style name="Theme.RiffWorkbench" parent="Theme.RiffWorkbench.Base" />
+</resources>

@@ -1,0 +1,3209 @@
+{
+  "schemaVersion": 1,
+  "features": [
+    {
+      "id": "projects.native",
+      "labelDe": "Native Projekte",
+      "labelEn": "Native projects",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "PHASE1",
+      "contractId": "C-PROJECT",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "IMPLEMENTED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "projects.metadata",
+      "labelDe": "Projekttitel und Metadatenmodell",
+      "labelEn": "Project title and metadata model",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "PHASE1",
+      "contractId": "C-EDITOR",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "tracks.create",
+      "labelDe": "Spuren anlegen",
+      "labelEn": "Create tracks",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "PHASE1",
+      "contractId": "C-ARRANGEMENT",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "tracks.duplicate",
+      "labelDe": "Spuren duplizieren",
+      "labelEn": "Duplicate tracks",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "B",
+      "contractId": "C-ARRANGEMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "tracks.reorder",
+      "labelDe": "Spuren umsortieren",
+      "labelEn": "Reorder tracks",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "PHASE1",
+      "contractId": "C-ARRANGEMENT",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "tracks.remove",
+      "labelDe": "Spuren entfernen",
+      "labelEn": "Remove tracks",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "PHASE1",
+      "contractId": "C-ARRANGEMENT",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "tracks.templates",
+      "labelDe": "Instrumentvorlagen",
+      "labelEn": "Instrument templates",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "PHASE1",
+      "contractId": "C-ARRANGEMENT",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "measures.insert",
+      "labelDe": "Takte einfügen",
+      "labelEn": "Insert measures",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "PHASE1",
+      "contractId": "C-ARRANGEMENT",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "measures.delete",
+      "labelDe": "Takte löschen",
+      "labelEn": "Delete measures",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "B",
+      "contractId": "C-ARRANGEMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "clipboard.notes",
+      "labelDe": "Noten kopieren und einfügen",
+      "labelEn": "Note clipboard",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "B",
+      "contractId": "C-ARRANGEMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "clipboard.sections",
+      "labelDe": "Takte und Abschnitte kopieren",
+      "labelEn": "Range clipboard",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "B",
+      "contractId": "C-ARRANGEMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "arrangement.sections",
+      "labelDe": "Abschnittsmarker",
+      "labelEn": "Section markers",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "B",
+      "contractId": "C-ARRANGEMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "arrangement.ripple",
+      "labelDe": "Ripple mit Vorschau",
+      "labelEn": "Ripple with preview",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "B",
+      "contractId": "C-ARRANGEMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "selection.batch",
+      "labelDe": "Auswahlbearbeitung",
+      "labelEn": "Selection editing",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "B",
+      "contractId": "C-ARRANGEMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "history.undo",
+      "labelDe": "Undo und Redo",
+      "labelEn": "Undo and redo",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "PHASE1",
+      "contractId": "C-EDITOR",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "history.snapshots",
+      "labelDe": "Benannte Schnappschüsse",
+      "labelEn": "Named snapshots",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "PHASE1",
+      "contractId": "C-SNAPSHOT",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "history.branching",
+      "labelDe": "Varianten und verzweigte Historie",
+      "labelEn": "Variants and branching history",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "B",
+      "contractId": "C-ARRANGEMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "signature.time",
+      "labelDe": "Taktwechsel",
+      "labelEn": "Time signatures",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "PHASE1",
+      "contractId": "C-ARRANGEMENT",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "signature.key",
+      "labelDe": "Tonartwechsel",
+      "labelEn": "Key signatures",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "B",
+      "contractId": "C-ARRANGEMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "tempo.changes",
+      "labelDe": "Tempoänderungen",
+      "labelEn": "Tempo changes",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "PHASE1",
+      "contractId": "C-ARRANGEMENT",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "repeats.basic",
+      "labelDe": "Wiederholungen",
+      "labelEn": "Repeats",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "B",
+      "contractId": "C-ARRANGEMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "repeats.endings",
+      "labelDe": "Alternative Enden",
+      "labelEn": "Alternate endings",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "B",
+      "contractId": "C-ARRANGEMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "repeats.navigation",
+      "labelDe": "Da Capo, Dal Segno, Coda und Fine",
+      "labelEn": "Da Capo, Dal Segno, Coda and Fine",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "B",
+      "contractId": "C-ARRANGEMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "repeats.unfolded",
+      "labelDe": "Aufgelöste Wiedergabe mit Durchlauf",
+      "labelEn": "Unfolded playback occurrences",
+      "group": "projects",
+      "groupDe": "Projekte und Arrangement",
+      "route": "arrangement",
+      "stage": "B",
+      "contractId": "C-ARRANGEMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "notation.tab",
+      "labelDe": "TAB",
+      "labelEn": "Tablature",
+      "group": "notation",
+      "groupDe": "Rhythmus und Notation",
+      "route": "layout",
+      "stage": "PHASE1",
+      "contractId": "C-NOTATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "notation.standard",
+      "labelDe": "Klassische Notation",
+      "labelEn": "Standard notation",
+      "group": "notation",
+      "groupDe": "Rhythmus und Notation",
+      "route": "layout",
+      "stage": "C",
+      "contractId": "C-NOTATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "notation.slash",
+      "labelDe": "Slash-Notation",
+      "labelEn": "Slash notation",
+      "group": "notation",
+      "groupDe": "Rhythmus und Notation",
+      "route": "layout",
+      "stage": "C",
+      "contractId": "C-NOTATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "notation.percussion",
+      "labelDe": "Schlagzeugnotation",
+      "labelEn": "Percussion notation",
+      "group": "notation",
+      "groupDe": "Rhythmus und Notation",
+      "route": "layout",
+      "stage": "C",
+      "contractId": "C-NOTATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "notation.jianpu",
+      "labelDe": "Jianpu",
+      "labelEn": "Jianpu",
+      "group": "notation",
+      "groupDe": "Rhythmus und Notation",
+      "route": "layout",
+      "stage": "C",
+      "contractId": "C-NOTATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "rhythm.duration",
+      "labelDe": "Notenwerte",
+      "labelEn": "Note durations",
+      "group": "notation",
+      "groupDe": "Rhythmus und Notation",
+      "route": "layout",
+      "stage": "PHASE1",
+      "contractId": "C-NOTATION",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "rhythm.dots",
+      "labelDe": "Punktierungen",
+      "labelEn": "Dotted notes",
+      "group": "notation",
+      "groupDe": "Rhythmus und Notation",
+      "route": "layout",
+      "stage": "PHASE1",
+      "contractId": "C-NOTATION",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "rhythm.rest",
+      "labelDe": "Pausen",
+      "labelEn": "Rests",
+      "group": "notation",
+      "groupDe": "Rhythmus und Notation",
+      "route": "layout",
+      "stage": "PHASE1",
+      "contractId": "C-NOTATION",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "rhythm.tie",
+      "labelDe": "Haltebögen",
+      "labelEn": "Ties",
+      "group": "notation",
+      "groupDe": "Rhythmus und Notation",
+      "route": "layout",
+      "stage": "C",
+      "contractId": "C-NOTATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "rhythm.slur",
+      "labelDe": "Bindebögen",
+      "labelEn": "Slurs",
+      "group": "notation",
+      "groupDe": "Rhythmus und Notation",
+      "route": "layout",
+      "stage": "C",
+      "contractId": "C-NOTATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "rhythm.pickup",
+      "labelDe": "Auftakt",
+      "labelEn": "Pickup measures",
+      "group": "notation",
+      "groupDe": "Rhythmus und Notation",
+      "route": "layout",
+      "stage": "C",
+      "contractId": "C-NOTATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "rhythm.swing",
+      "labelDe": "Swing und Triplet Feel",
+      "labelEn": "Swing and triplet feel",
+      "group": "notation",
+      "groupDe": "Rhythmus und Notation",
+      "route": "layout",
+      "stage": "C",
+      "contractId": "C-NOTATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "rhythm.tuplets",
+      "labelDe": "Verschachtelte Tuplets",
+      "labelEn": "Nested tuplets",
+      "group": "notation",
+      "groupDe": "Rhythmus und Notation",
+      "route": "layout",
+      "stage": "C",
+      "contractId": "C-NOTATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "rhythm.ornaments",
+      "labelDe": "Verzierungen",
+      "labelEn": "Ornaments",
+      "group": "notation",
+      "groupDe": "Rhythmus und Notation",
+      "route": "layout",
+      "stage": "C",
+      "contractId": "C-NOTATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "rhythm.fermata",
+      "labelDe": "Fermaten",
+      "labelEn": "Fermatas",
+      "group": "notation",
+      "groupDe": "Rhythmus und Notation",
+      "route": "layout",
+      "stage": "C",
+      "contractId": "C-NOTATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "rhythm.grace",
+      "labelDe": "Vorschlagsnoten",
+      "labelEn": "Grace notes",
+      "group": "notation",
+      "groupDe": "Rhythmus und Notation",
+      "route": "layout",
+      "stage": "C",
+      "contractId": "C-NOTATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "rhythm.voices",
+      "labelDe": "Vier unabhängige Stimmen",
+      "labelEn": "Four independent voices",
+      "group": "notation",
+      "groupDe": "Rhythmus und Notation",
+      "route": "layout",
+      "stage": "PHASE1",
+      "contractId": "C-NOTATION",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "strings.count",
+      "labelDe": "3–10 Saiten",
+      "labelEn": "3–10 strings",
+      "group": "strings",
+      "groupDe": "Saiteninstrumente und Werkzeuge",
+      "route": "instruments",
+      "stage": "PHASE1",
+      "contractId": "C-INSTRUMENT",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "strings.tuning",
+      "labelDe": "Freie Stimmungen",
+      "labelEn": "Custom tuning",
+      "group": "strings",
+      "groupDe": "Saiteninstrumente und Werkzeuge",
+      "route": "instruments",
+      "stage": "PHASE1",
+      "contractId": "C-INSTRUMENT",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "strings.capo",
+      "labelDe": "Capo und Teil-Capo",
+      "labelEn": "Capo and partial capo",
+      "group": "strings",
+      "groupDe": "Saiteninstrumente und Werkzeuge",
+      "route": "instruments",
+      "stage": "PHASE1",
+      "contractId": "C-INSTRUMENT",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "strings.retune_policy",
+      "labelDe": "Tonhöhe oder Griffposition erhalten",
+      "labelEn": "Retuning policy",
+      "group": "strings",
+      "groupDe": "Saiteninstrumente und Werkzeuge",
+      "route": "instruments",
+      "stage": "B",
+      "contractId": "C-INSTRUMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "notes.fret",
+      "labelDe": "Bund- und Saiteneingabe",
+      "labelEn": "Fret and string entry",
+      "group": "strings",
+      "groupDe": "Saiteninstrumente und Werkzeuge",
+      "route": "instruments",
+      "stage": "PHASE1",
+      "contractId": "C-INSTRUMENT",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "notes.multidigit",
+      "labelDe": "Zweistellige Bünde mit Commit",
+      "labelEn": "Multi-digit fret commit",
+      "group": "strings",
+      "groupDe": "Saiteninstrumente und Werkzeuge",
+      "route": "instruments",
+      "stage": "PHASE1",
+      "contractId": "C-INSTRUMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "notes.fingering",
+      "labelDe": "Fingerings und alternative Griffe",
+      "labelEn": "Fingerings and alternative positions",
+      "group": "strings",
+      "groupDe": "Saiteninstrumente und Werkzeuge",
+      "route": "instruments",
+      "stage": "B",
+      "contractId": "C-INSTRUMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "notes.transpose",
+      "labelDe": "Transposition",
+      "labelEn": "Transposition",
+      "group": "strings",
+      "groupDe": "Saiteninstrumente und Werkzeuge",
+      "route": "instruments",
+      "stage": "B",
+      "contractId": "C-INSTRUMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "tools.chords",
+      "labelDe": "Akkordbibliothek und Griffdiagramme",
+      "labelEn": "Chord library and diagrams",
+      "group": "strings",
+      "groupDe": "Saiteninstrumente und Werkzeuge",
+      "route": "instruments",
+      "stage": "B",
+      "contractId": "C-INSTRUMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "tools.scales",
+      "labelDe": "Skalenbibliothek",
+      "labelEn": "Scale library",
+      "group": "strings",
+      "groupDe": "Saiteninstrumente und Werkzeuge",
+      "route": "instruments",
+      "stage": "B",
+      "contractId": "C-INSTRUMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "tools.fretboard",
+      "labelDe": "Einfache Griffbrett-Eingabe",
+      "labelEn": "Basic fretboard entry",
+      "group": "strings",
+      "groupDe": "Saiteninstrumente und Werkzeuge",
+      "route": "instruments",
+      "stage": "PHASE1",
+      "contractId": "C-INSTRUMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "tools.keyboard",
+      "labelDe": "Virtuelle Tastatur",
+      "labelEn": "Virtual keyboard",
+      "group": "strings",
+      "groupDe": "Saiteninstrumente und Werkzeuge",
+      "route": "instruments",
+      "stage": "B",
+      "contractId": "C-INSTRUMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "tools.drumkit",
+      "labelDe": "Virtuelles Drumkit",
+      "labelEn": "Virtual drum kit",
+      "group": "strings",
+      "groupDe": "Saiteninstrumente und Werkzeuge",
+      "route": "instruments",
+      "stage": "B",
+      "contractId": "C-INSTRUMENT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.palm_mute",
+      "labelDe": "Palm-Mute",
+      "labelEn": "Palm mute",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "PHASE1",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "fx.dead",
+      "labelDe": "Dead Notes",
+      "labelEn": "Dead notes",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "PHASE1",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "fx.ghost",
+      "labelDe": "Ghost Notes",
+      "labelEn": "Ghost notes",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.accent",
+      "labelDe": "Akzente",
+      "labelEn": "Accents",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.dynamics",
+      "labelDe": "Dynamik",
+      "labelEn": "Dynamics",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.let_ring",
+      "labelDe": "Let Ring",
+      "labelEn": "Let ring",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.staccato",
+      "labelDe": "Staccato",
+      "labelEn": "Staccato",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.hammer_pull",
+      "labelDe": "Hammer-on und Pull-off",
+      "labelEn": "Hammer-on and pull-off",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.slide",
+      "labelDe": "Slide-Varianten",
+      "labelEn": "Slide variants",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.vibrato",
+      "labelDe": "Vibrato",
+      "labelEn": "Vibrato",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.bend",
+      "labelDe": "Bend, Prebend und Release",
+      "labelEn": "Bend, prebend and release",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.whammy",
+      "labelDe": "Whammy-Kurven",
+      "labelEn": "Whammy curves",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.quartertone",
+      "labelDe": "Vierteltöne",
+      "labelEn": "Quarter tones",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.harmonic_natural",
+      "labelDe": "Natürliche Harmonics",
+      "labelEn": "Natural harmonics",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.harmonic_artificial",
+      "labelDe": "Künstliche Harmonics",
+      "labelEn": "Artificial harmonics",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.harmonic_pinch",
+      "labelDe": "Pinch-Harmonics",
+      "labelEn": "Pinch harmonics",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.tapping",
+      "labelDe": "Tapping",
+      "labelEn": "Tapping",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.tremolo",
+      "labelDe": "Tremolo-Picking",
+      "labelEn": "Tremolo picking",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.trill",
+      "labelDe": "Triller",
+      "labelEn": "Trills",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.pickstroke",
+      "labelDe": "Pickstroke",
+      "labelEn": "Pickstroke",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.pick_scrape",
+      "labelDe": "Pick Scrape",
+      "labelEn": "Pick scrape",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.slap_pop",
+      "labelDe": "Slap und Pop",
+      "labelEn": "Slap and pop",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.strum",
+      "labelDe": "Strum",
+      "labelEn": "Strum",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.arpeggio",
+      "labelDe": "Arpeggio",
+      "labelEn": "Arpeggio",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "fx.rasgueado",
+      "labelDe": "Rasgueado",
+      "labelEn": "Rasgueado",
+      "group": "articulations",
+      "groupDe": "Gitarrenartikulationen",
+      "route": "effects",
+      "stage": "C",
+      "contractId": "C-ARTICULATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "drums.entry",
+      "labelDe": "Kick, Snare und Hi-Hat setzen",
+      "labelEn": "Kick, snare and hi-hat entry",
+      "group": "band",
+      "groupDe": "Schlagzeug und Band",
+      "route": "drums",
+      "stage": "PHASE1",
+      "contractId": "C-DRUM",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "drums.stepgrid",
+      "labelDe": "Einfaches 1/16-Stepgrid",
+      "labelEn": "Basic 1/16 step grid",
+      "group": "band",
+      "groupDe": "Schlagzeug und Band",
+      "route": "drums",
+      "stage": "PHASE1",
+      "contractId": "C-DRUM",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "drums.articulations",
+      "labelDe": "Percussion-Artikulationen",
+      "labelEn": "Percussion articulations",
+      "group": "band",
+      "groupDe": "Schlagzeug und Band",
+      "route": "drums",
+      "stage": "B",
+      "contractId": "C-DRUM",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "drums.hihat",
+      "labelDe": "Offene und geschlossene Hi-Hat",
+      "labelEn": "Open and closed hi-hat",
+      "group": "band",
+      "groupDe": "Schlagzeug und Band",
+      "route": "drums",
+      "stage": "B",
+      "contractId": "C-DRUM",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "drums.velocity",
+      "labelDe": "Velocity und Ghost Notes",
+      "labelEn": "Velocity and ghost notes",
+      "group": "band",
+      "groupDe": "Schlagzeug und Band",
+      "route": "drums",
+      "stage": "B",
+      "contractId": "C-DRUM",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "drums.choke",
+      "labelDe": "Drum-Chokes",
+      "labelEn": "Drum chokes",
+      "group": "band",
+      "groupDe": "Schlagzeug und Band",
+      "route": "drums",
+      "stage": "B",
+      "contractId": "C-DRUM",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "drums.voices",
+      "labelDe": "Unabhängige Drumstimmen",
+      "labelEn": "Independent drum voices",
+      "group": "band",
+      "groupDe": "Schlagzeug und Band",
+      "route": "drums",
+      "stage": "B",
+      "contractId": "C-DRUM",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "drums.odd_grid",
+      "labelDe": "Ungerade Raster",
+      "labelEn": "Odd grids",
+      "group": "band",
+      "groupDe": "Schlagzeug und Band",
+      "route": "drums",
+      "stage": "B",
+      "contractId": "C-DRUM",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "drums.element_mix",
+      "labelDe": "Lautstärke und Pan pro Drum-Element",
+      "labelEn": "Per-element drum mix",
+      "group": "band",
+      "groupDe": "Schlagzeug und Band",
+      "route": "drums",
+      "stage": "B",
+      "contractId": "C-DRUM",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "band.instruments",
+      "labelDe": "Bass, Piano und weitere Instrumente",
+      "labelEn": "Bass, piano and other instruments",
+      "group": "band",
+      "groupDe": "Schlagzeug und Band",
+      "route": "drums",
+      "stage": "PHASE1",
+      "contractId": "C-DRUM",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "sound.gm",
+      "labelDe": "General MIDI / SoundFont",
+      "labelEn": "General MIDI / SoundFont",
+      "group": "sound",
+      "groupDe": "Sound und Mix",
+      "route": "mixer",
+      "stage": "D",
+      "contractId": "C-AUDIO",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "sound.rse_mapping",
+      "labelDe": "RSE-Originaldaten und eigenes Klangmapping",
+      "labelEn": "RSE data and explicit sound mapping",
+      "group": "sound",
+      "groupDe": "Sound und Mix",
+      "route": "mixer",
+      "stage": "D",
+      "contractId": "C-AUDIO",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "sound.banks",
+      "labelDe": "Eigene SF2-/Preset-Banks",
+      "labelEn": "User SF2 and preset banks",
+      "group": "sound",
+      "groupDe": "Sound und Mix",
+      "route": "mixer",
+      "stage": "D",
+      "contractId": "C-SOUNDBANK",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "sound.sampler",
+      "labelDe": "Artikulationsbewusster Gitarrensampler",
+      "labelEn": "Articulation-aware guitar sampler",
+      "group": "sound",
+      "groupDe": "Sound und Mix",
+      "route": "mixer",
+      "stage": "D",
+      "contractId": "C-AUDIO",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "sound.layers",
+      "labelDe": "Velocity-Layer, Round Robins und Releases",
+      "labelEn": "Velocity layers, round robins and releases",
+      "group": "sound",
+      "groupDe": "Sound und Mix",
+      "route": "mixer",
+      "stage": "D",
+      "contractId": "C-AUDIO",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "sound.transitions",
+      "labelDe": "Slides, Legato und Saiten-Choke",
+      "labelEn": "Slides, legato and string choke",
+      "group": "sound",
+      "groupDe": "Sound und Mix",
+      "route": "mixer",
+      "stage": "D",
+      "contractId": "C-AUDIO",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "sound.independent_bends",
+      "labelDe": "Unabhängige Bends pro Saite",
+      "labelEn": "Independent per-string bends",
+      "group": "sound",
+      "groupDe": "Sound und Mix",
+      "route": "mixer",
+      "stage": "D",
+      "contractId": "C-AUDIO",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "sound.di_amp",
+      "labelDe": "DI, Amp und Cabinet-IR",
+      "labelEn": "DI, amp and cabinet IR",
+      "group": "sound",
+      "groupDe": "Sound und Mix",
+      "route": "mixer",
+      "stage": "D",
+      "contractId": "C-AUDIO",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "sound.fine_tuning",
+      "labelDe": "Fine-Tuning",
+      "labelEn": "Fine tuning",
+      "group": "sound",
+      "groupDe": "Sound und Mix",
+      "route": "mixer",
+      "stage": "D",
+      "contractId": "C-AUDIO",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "mix.channels",
+      "labelDe": "Solo, Mute, Volume und Pan",
+      "labelEn": "Solo, mute, volume and pan",
+      "group": "sound",
+      "groupDe": "Sound und Mix",
+      "route": "mixer",
+      "stage": "PHASE1",
+      "contractId": "C-AUDIO",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "mix.buses",
+      "labelDe": "Track-, Bus- und Masterrouting",
+      "labelEn": "Track, bus and master routing",
+      "group": "sound",
+      "groupDe": "Sound und Mix",
+      "route": "mixer",
+      "stage": "D",
+      "contractId": "C-AUDIO",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "mix.eq_fx",
+      "labelDe": "EQ und virtuelle Effekte",
+      "labelEn": "EQ and virtual effects",
+      "group": "sound",
+      "groupDe": "Sound und Mix",
+      "route": "mixer",
+      "stage": "D",
+      "contractId": "C-AUDIO",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "mix.pedalboard",
+      "labelDe": "Pedalboard und Amp-Kette",
+      "labelEn": "Pedalboard and amp chain",
+      "group": "sound",
+      "groupDe": "Sound und Mix",
+      "route": "mixer",
+      "stage": "D",
+      "contractId": "C-AUDIO",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "mix.automation",
+      "labelDe": "Sound- und Mixautomation",
+      "labelEn": "Sound and mix automation",
+      "group": "sound",
+      "groupDe": "Sound und Mix",
+      "route": "mixer",
+      "stage": "D",
+      "contractId": "C-AUDIO",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "sound.line_in",
+      "labelDe": "Gitarren-Line-in",
+      "labelEn": "Guitar line-in",
+      "group": "sound",
+      "groupDe": "Sound und Mix",
+      "route": "mixer",
+      "stage": "D",
+      "contractId": "C-AUDIO",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "audio.clock",
+      "labelDe": "Native Sample-Clock und Ausgabezeitstempel",
+      "labelEn": "Native sample clock and output timestamps",
+      "group": "sound",
+      "groupDe": "Sound und Mix",
+      "route": "mixer",
+      "stage": "D",
+      "contractId": "C-AUDIO",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "audio.seek",
+      "labelDe": "Seek und Instrumentzustand",
+      "labelEn": "Seek and instrument state",
+      "group": "sound",
+      "groupDe": "Sound und Mix",
+      "route": "mixer",
+      "stage": "D",
+      "contractId": "C-AUDIO",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "audio.lifecycle",
+      "labelDe": "Audio-Fokus, Unterbrechung und Route-Wechsel",
+      "labelEn": "Audio focus, interruptions and route changes",
+      "group": "sound",
+      "groupDe": "Sound und Mix",
+      "route": "mixer",
+      "stage": "D",
+      "contractId": "C-AUDIO",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "audio.latency",
+      "labelDe": "Latenz, Underruns und Thermik",
+      "labelEn": "Latency, underruns and thermal behavior",
+      "group": "sound",
+      "groupDe": "Sound und Mix",
+      "route": "mixer",
+      "stage": "D",
+      "contractId": "C-AUDIO",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "audio.reference",
+      "labelDe": "Referenzaufnahme / GP8-Audio",
+      "labelEn": "Reference recording / GP8 audio",
+      "group": "practice",
+      "groupDe": "Audio, Üben und Transkribieren",
+      "route": "practice",
+      "stage": "C",
+      "contractId": "C-PRACTICE",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "audio.multiple_stems",
+      "labelDe": "Mehrere Audio-Stems",
+      "labelEn": "Multiple audio stems",
+      "group": "practice",
+      "groupDe": "Audio, Üben und Transkribieren",
+      "route": "practice",
+      "stage": "C",
+      "contractId": "C-PRACTICE",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "audio.waveform",
+      "labelDe": "Mehrstufige Wellenform",
+      "labelEn": "Multilevel waveform",
+      "group": "practice",
+      "groupDe": "Audio, Üben und Transkribieren",
+      "route": "practice",
+      "stage": "C",
+      "contractId": "C-WAVEFORM",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "audio.sync",
+      "labelDe": "Sync-Anker und Audio-Offset",
+      "labelEn": "Sync anchors and audio offset",
+      "group": "practice",
+      "groupDe": "Audio, Üben und Transkribieren",
+      "route": "practice",
+      "stage": "C",
+      "contractId": "C-SYNC",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "audio.sync_modes",
+      "labelDe": "Score-Tempo und Audio-Sync",
+      "labelEn": "Score-tempo and audio-sync modes",
+      "group": "practice",
+      "groupDe": "Audio, Üben und Transkribieren",
+      "route": "practice",
+      "stage": "C",
+      "contractId": "C-PRACTICE",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "audio.shared_map",
+      "labelDe": "Gemeinsame und getrennte Stem-Sync-Maps",
+      "labelEn": "Shared and separate stem sync maps",
+      "group": "practice",
+      "groupDe": "Audio, Üben und Transkribieren",
+      "route": "practice",
+      "stage": "C",
+      "contractId": "C-PRACTICE",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "audio.stem_mix",
+      "labelDe": "Synth und Stem-Mix unter einer Clock",
+      "labelEn": "Synth and stems on one clock",
+      "group": "practice",
+      "groupDe": "Audio, Üben und Transkribieren",
+      "route": "practice",
+      "stage": "C",
+      "contractId": "C-PRACTICE",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "audio.pitch_stretch",
+      "labelDe": "Pitch-Shift und Time-Stretch",
+      "labelEn": "Pitch shift and time stretch",
+      "group": "practice",
+      "groupDe": "Audio, Üben und Transkribieren",
+      "route": "practice",
+      "stage": "C",
+      "contractId": "C-STRETCH",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "audio.decode",
+      "labelDe": "Decoder-Seek und Sampleraten",
+      "labelEn": "Decoder seek and sample rates",
+      "group": "practice",
+      "groupDe": "Audio, Üben und Transkribieren",
+      "route": "practice",
+      "stage": "C",
+      "contractId": "C-DECODE",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "practice.speed",
+      "labelDe": "Relative Geschwindigkeit",
+      "labelEn": "Relative speed",
+      "group": "practice",
+      "groupDe": "Audio, Üben und Transkribieren",
+      "route": "practice",
+      "stage": "C",
+      "contractId": "C-PRACTICE",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "practice.loop",
+      "labelDe": "A/B-Loop",
+      "labelEn": "A/B loop",
+      "group": "practice",
+      "groupDe": "Audio, Üben und Transkribieren",
+      "route": "practice",
+      "stage": "C",
+      "contractId": "C-PRACTICE",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "practice.count_in",
+      "labelDe": "Einzähler",
+      "labelEn": "Count-in",
+      "group": "practice",
+      "groupDe": "Audio, Üben und Transkribieren",
+      "route": "practice",
+      "stage": "C",
+      "contractId": "C-PRACTICE",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "practice.metronome",
+      "labelDe": "Akustisches und visuelles Metronom",
+      "labelEn": "Audio and visual metronome",
+      "group": "practice",
+      "groupDe": "Audio, Üben und Transkribieren",
+      "route": "practice",
+      "stage": "C",
+      "contractId": "C-PRACTICE",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "practice.trainer",
+      "labelDe": "Speed Trainer",
+      "labelEn": "Speed trainer",
+      "group": "practice",
+      "groupDe": "Audio, Üben und Transkribieren",
+      "route": "practice",
+      "stage": "C",
+      "contractId": "C-PRACTICE",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "practice.tuner",
+      "labelDe": "Stimmgerät",
+      "labelEn": "Tuner",
+      "group": "practice",
+      "groupDe": "Audio, Üben und Transkribieren",
+      "route": "practice",
+      "stage": "C",
+      "contractId": "C-TUNER",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "practice.cursor",
+      "labelDe": "Fixierter oder mitlaufender Cursor",
+      "labelEn": "Fixed or following cursor",
+      "group": "practice",
+      "groupDe": "Audio, Üben und Transkribieren",
+      "route": "practice",
+      "stage": "C",
+      "contractId": "C-PRACTICE",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "practice.visual_instruments",
+      "labelDe": "Griffbrett / Keyboard beim Abspielen",
+      "labelEn": "Playback fretboard / keyboard",
+      "group": "practice",
+      "groupDe": "Audio, Üben und Transkribieren",
+      "route": "practice",
+      "stage": "C",
+      "contractId": "C-PRACTICE",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "practice.transcription",
+      "labelDe": "Editierbare Audio-zu-MIDI-Vorschläge",
+      "labelEn": "Editable audio-to-MIDI proposals",
+      "group": "practice",
+      "groupDe": "Audio, Üben und Transkribieren",
+      "route": "practice",
+      "stage": "C",
+      "contractId": "C-TRANSCRIBE",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "layout.page",
+      "labelDe": "Seitenansicht",
+      "labelEn": "Page view",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "layout.continuous",
+      "labelDe": "Fortlaufende Ansicht",
+      "labelEn": "Continuous view",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "layout.multitrack",
+      "labelDe": "Mehrspuransicht",
+      "labelEn": "Multitrack view",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "layout.stylesheet",
+      "labelDe": "Layout und Stylesheets",
+      "labelEn": "Layout and stylesheets",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "layout.breaks",
+      "labelDe": "Takt- und Systemumbrüche",
+      "labelEn": "Bar and system breaks",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "layout.text_lyrics",
+      "labelDe": "Texte, Lyrics und Formatierung",
+      "labelEn": "Text, lyrics and formatting",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "layout.chord_symbols",
+      "labelDe": "Akkordsymbole",
+      "labelEn": "Chord symbols",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "import.gp3",
+      "labelDe": "GP3-Import",
+      "labelEn": "GP3 import",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "import.gp4",
+      "labelDe": "GP4-Import",
+      "labelEn": "GP4 import",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "import.gp5",
+      "labelDe": "GP5-Import",
+      "labelEn": "GP5 import",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "import.gpx",
+      "labelDe": "GP6 / GPX / BCFS / BCFZ",
+      "labelEn": "GP6 / GPX / BCFS / BCFZ",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "import.gp7",
+      "labelDe": "GP7-Import",
+      "labelEn": "GP7 import",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "import.gp8",
+      "labelDe": "GP8-Import",
+      "labelEn": "GP8 import",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "import.musicxml",
+      "labelDe": "MusicXML-Import",
+      "labelEn": "MusicXML import",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "import.midi",
+      "labelDe": "MIDI-Import",
+      "labelEn": "MIDI import",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "import.ascii",
+      "labelDe": "ASCII-Import",
+      "labelEn": "ASCII import",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "import.powertab",
+      "labelDe": "PowerTab-Import",
+      "labelEn": "PowerTab import",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "import.tabledit",
+      "labelDe": "TablEdit-Import",
+      "labelEn": "TablEdit import",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "import.originals",
+      "labelDe": "Originalbytes separat aufbewahren",
+      "labelEn": "Preserve original bytes separately",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "import.unknown_fields",
+      "labelDe": "Unbekannte GPIF-Felder und Referenzprüfung",
+      "labelEn": "Unknown GPIF fields and reference validation",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "import.loss_report",
+      "labelDe": "Importverluste sichtbar machen",
+      "labelEn": "Visible import losses",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "import.security",
+      "labelDe": "ZIP-/XML-Ressourcenlimits und sichere Parser",
+      "labelEn": "ZIP/XML budgets and safe parsers",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "export.native",
+      "labelDe": "Vollständiges natives Projekt",
+      "labelEn": "Complete native project",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "PHASE1",
+      "contractId": "C-NATIVE",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "IMPLEMENTED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "export.gp7",
+      "labelDe": "GP7-kompatibler Rückexport",
+      "labelEn": "GP7-compatible export",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "export.gp8",
+      "labelDe": "GP8-spezifische Dateitreue",
+      "labelEn": "GP8-specific fidelity",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "export.midi",
+      "labelDe": "MIDI und Tempo-Map",
+      "labelEn": "MIDI and tempo map",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "export.musicxml",
+      "labelDe": "MusicXML-Export",
+      "labelEn": "MusicXML export",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "export.ascii",
+      "labelDe": "ASCII-Export",
+      "labelEn": "ASCII export",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "export.pdf",
+      "labelDe": "PDF-Export",
+      "labelEn": "PDF export",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "export.png",
+      "labelDe": "PNG-Export",
+      "labelEn": "PNG export",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "export.svg",
+      "labelDe": "SVG-Export",
+      "labelEn": "SVG export",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "export.wav",
+      "labelDe": "Gerenderter Audioexport",
+      "labelEn": "Rendered audio export",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "export.stems",
+      "labelDe": "Synchrone WAV-Stems für Cubase",
+      "labelEn": "Synchronized WAV stems for Cubase",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "export.loss_report",
+      "labelDe": "Exportverluste und Bestätigung",
+      "labelEn": "Export losses and acknowledgement",
+      "group": "exchange",
+      "groupDe": "Layout und Austausch",
+      "route": "exchange",
+      "stage": "C",
+      "contractId": "C-FORMAT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "workflow.palette",
+      "labelDe": "Befehlspalette",
+      "labelEn": "Command palette",
+      "group": "workflow",
+      "groupDe": "Workflow und Integrationen",
+      "route": "settings",
+      "stage": "D",
+      "contractId": "C-WORKFLOW",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "workflow.repeat",
+      "labelDe": "Wiederholbare Aktionen",
+      "labelEn": "Repeat actions",
+      "group": "workflow",
+      "groupDe": "Workflow und Integrationen",
+      "route": "settings",
+      "stage": "D",
+      "contractId": "C-WORKFLOW",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "workflow.shortcuts",
+      "labelDe": "Externe Tastatur und Tastenkürzel",
+      "labelEn": "External keyboard and shortcuts",
+      "group": "workflow",
+      "groupDe": "Workflow und Integrationen",
+      "route": "settings",
+      "stage": "D",
+      "contractId": "C-WORKFLOW",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "workflow.midi_input",
+      "labelDe": "USB-MIDI-Eingabe",
+      "labelEn": "USB MIDI input",
+      "group": "workflow",
+      "groupDe": "Workflow und Integrationen",
+      "route": "settings",
+      "stage": "D",
+      "contractId": "C-MIDI",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "workflow.autosave",
+      "labelDe": "Autosave nach Transaktionen",
+      "labelEn": "Transactional autosave",
+      "group": "workflow",
+      "groupDe": "Workflow und Integrationen",
+      "route": "settings",
+      "stage": "PHASE1",
+      "contractId": "C-PROJECT",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "workflow.recovery",
+      "labelDe": "Wiederherstellung",
+      "labelEn": "Recovery",
+      "group": "workflow",
+      "groupDe": "Workflow und Integrationen",
+      "route": "settings",
+      "stage": "PHASE1",
+      "contractId": "C-PROJECT",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "workflow.settings",
+      "labelDe": "Persistente Einstellungen",
+      "labelEn": "Persistent settings",
+      "group": "workflow",
+      "groupDe": "Workflow und Integrationen",
+      "route": "settings",
+      "stage": "PHASE1",
+      "contractId": "C-SETTINGS",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "workflow.saf",
+      "labelDe": "Android-Dateiauswahl",
+      "labelEn": "Android document picker",
+      "group": "workflow",
+      "groupDe": "Workflow und Integrationen",
+      "route": "settings",
+      "stage": "PHASE1",
+      "contractId": "C-DOCUMENT",
+      "dimensions": {
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "IMPLEMENTED"
+      },
+      "verification": "DEVICE_PENDING"
+    },
+    {
+      "id": "workflow.accessibility",
+      "labelDe": "Beschriftete Aktionen und Fokusnavigation",
+      "labelEn": "Labeled actions and focus navigation",
+      "group": "workflow",
+      "groupDe": "Workflow und Integrationen",
+      "route": "settings",
+      "stage": "PHASE1",
+      "contractId": "C-WORKFLOW",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "workflow.gestures",
+      "labelDe": "Drag-Vorschau, Abbruch und Undo-Grenzen",
+      "labelEn": "Drag preview, cancellation and undo boundaries",
+      "group": "workflow",
+      "groupDe": "Workflow und Integrationen",
+      "route": "settings",
+      "stage": "D",
+      "contractId": "C-GESTURE",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "workflow.zoom",
+      "labelDe": "Fokusbezogener Zoom und Scrollen",
+      "labelEn": "Focus-aware zoom and scroll",
+      "group": "workflow",
+      "groupDe": "Workflow und Integrationen",
+      "route": "settings",
+      "stage": "D",
+      "contractId": "C-WORKFLOW",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "workflow.quickbar",
+      "labelDe": "Quick-Bar, Favoriten und Effektsuche",
+      "labelEn": "Quick bar, favorites and effect search",
+      "group": "workflow",
+      "groupDe": "Workflow und Integrationen",
+      "route": "settings",
+      "stage": "D",
+      "contractId": "C-WORKFLOW",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "workflow.tablet",
+      "labelDe": "Tablet- und Querformatstruktur",
+      "labelEn": "Tablet and landscape structure",
+      "group": "workflow",
+      "groupDe": "Workflow und Integrationen",
+      "route": "settings",
+      "stage": "PHASE1",
+      "contractId": "C-WORKFLOW",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "AUTOMATED"
+    },
+    {
+      "id": "integration.fretlight",
+      "labelDe": "Fretlight",
+      "labelEn": "Fretlight",
+      "group": "workflow",
+      "groupDe": "Workflow und Integrationen",
+      "route": "settings",
+      "stage": "D",
+      "contractId": "C-INTEGRATION",
+      "dimensions": {
+        "READ": "LICENSE_BOUND",
+        "DISPLAY": "LICENSE_BOUND",
+        "EDIT": "LICENSE_BOUND",
+        "PLAYBACK": "LICENSE_BOUND",
+        "EXPORT": "LICENSE_BOUND"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "integration.mysongbook",
+      "labelDe": "mySongBook",
+      "labelEn": "mySongBook",
+      "group": "workflow",
+      "groupDe": "Workflow und Integrationen",
+      "route": "settings",
+      "stage": "D",
+      "contractId": "C-INTEGRATION",
+      "dimensions": {
+        "READ": "LICENSE_BOUND",
+        "DISPLAY": "LICENSE_BOUND",
+        "EDIT": "LICENSE_BOUND",
+        "PLAYBACK": "LICENSE_BOUND",
+        "EXPORT": "LICENSE_BOUND"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "integration.vst",
+      "labelDe": "VST-Hosting evaluieren",
+      "labelEn": "Evaluate VST hosting",
+      "group": "workflow",
+      "groupDe": "Workflow und Integrationen",
+      "route": "settings",
+      "stage": "D",
+      "contractId": "C-INTEGRATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "integration.auv3",
+      "labelDe": "AUv3 auf iOS evaluieren",
+      "labelEn": "Evaluate AUv3 on iOS",
+      "group": "workflow",
+      "groupDe": "Workflow und Integrationen",
+      "route": "settings",
+      "stage": "D",
+      "contractId": "C-INTEGRATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    },
+    {
+      "id": "integration.usb_audio",
+      "labelDe": "USB-Audio und Live-Monitoring",
+      "labelEn": "USB audio and live monitoring",
+      "group": "workflow",
+      "groupDe": "Workflow und Integrationen",
+      "route": "settings",
+      "stage": "D",
+      "contractId": "C-INTEGRATION",
+      "dimensions": {
+        "READ": "SCAFFOLDED",
+        "DISPLAY": "SCAFFOLDED",
+        "EDIT": "SCAFFOLDED",
+        "PLAYBACK": "SCAFFOLDED",
+        "EXPORT": "SCAFFOLDED"
+      },
+      "verification": "CONTRACT_ONLY"
+    }
+  ]
+}

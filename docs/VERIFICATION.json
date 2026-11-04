@@ -1,0 +1,78 @@
+{
+  "generatedAtUtc": "2026-11-04T15:26:24.588405+00:00",
+  "sourceSha256": "4a13239459851cd7ef9dc3ceac79e2442bd27301455a064f25729ef289e59509",
+  "uniqueTestsPassed": 63,
+  "testExecutions": 74,
+  "suites": [
+    {
+      "name": "dev.riffworkbench.adapter.audio.UnavailableAudioTest",
+      "tests": 1,
+      "variant": "test",
+      "report": "adapter/audio/build/test-results/test/TEST-dev.riffworkbench.adapter.audio.UnavailableAudioTest.xml"
+    },
+    {
+      "name": "dev.riffworkbench.adapter.formats.FormatBoundaryTest",
+      "tests": 2,
+      "variant": "test",
+      "report": "adapter/formats/build/test-results/test/TEST-dev.riffworkbench.adapter.formats.FormatBoundaryTest.xml"
+    },
+    {
+      "name": "dev.riffworkbench.app.ApplicationFlowTest",
+      "tests": 6,
+      "variant": "testDebugUnitTest",
+      "report": "app/build/test-results/testDebugUnitTest/TEST-dev.riffworkbench.app.ApplicationFlowTest.xml"
+    },
+    {
+      "name": "dev.riffworkbench.app.ApplicationFlowTest",
+      "tests": 6,
+      "variant": "testReleaseUnitTest",
+      "report": "app/build/test-results/testReleaseUnitTest/TEST-dev.riffworkbench.app.ApplicationFlowTest.xml"
+    },
+    {
+      "name": "dev.riffworkbench.editor.EditorSessionTest",
+      "tests": 19,
+      "variant": "test",
+      "report": "core/editor/build/test-results/test/TEST-dev.riffworkbench.editor.EditorSessionTest.xml"
+    },
+    {
+      "name": "dev.riffworkbench.model.TimeModelTest",
+      "tests": 9,
+      "variant": "test",
+      "report": "core/model/build/test-results/test/TEST-dev.riffworkbench.model.TimeModelTest.xml"
+    },
+    {
+      "name": "dev.riffworkbench.playback.CompilerBoundaryTest",
+      "tests": 2,
+      "variant": "test",
+      "report": "core/playback/build/test-results/test/TEST-dev.riffworkbench.playback.CompilerBoundaryTest.xml"
+    },
+    {
+      "name": "dev.riffworkbench.data.local.NativeArchiveTest",
+      "tests": 8,
+      "variant": "test",
+      "report": "data/local/build/test-results/test/TEST-dev.riffworkbench.data.local.NativeArchiveTest.xml"
+    },
+    {
+      "name": "dev.riffworkbench.data.local.ProjectStorageTest",
+      "tests": 11,
+      "variant": "test",
+      "report": "data/local/build/test-results/test/TEST-dev.riffworkbench.data.local.ProjectStorageTest.xml"
+    },
+    {
+      "name": "dev.riffworkbench.feature.workspace.AutosaveTest",
+      "tests": 5,
+      "variant": "testDebugUnitTest",
+      "report": "feature/workspace/build/test-results/testDebugUnitTest/TEST-dev.riffworkbench.feature.workspace.AutosaveTest.xml"
+    },
+    {
+      "name": "dev.riffworkbench.feature.workspace.AutosaveTest",
+      "tests": 5,
+      "variant": "testReleaseUnitTest",
+      "report": "feature/workspace/build/test-results/testReleaseUnitTest/TEST-dev.riffworkbench.feature.workspace.AutosaveTest.xml"
+    }
+  ],
+  "deviceTests": "not run",
+  "gpDesktopRoundTrip": "not run",
+  "cubaseHandoff": "not run",
+  "audioPerformance": "not measured"
+}

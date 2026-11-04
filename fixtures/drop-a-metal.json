@@ -1,0 +1,1472 @@
+{
+    "schemaVersion": 1,
+    "id": "fixture-2",
+    "revision": 29,
+    "metadata": {
+        "title": "Metal · Drop A · 150 BPM",
+        "artist": "",
+        "album": "",
+        "composer": "",
+        "copyright": "",
+        "notes": ""
+    },
+    "measures": [
+        {
+            "id": "fixture-0",
+            "signature": {
+                "numerator": 4,
+                "denominator": 4
+            },
+            "key": {
+                "fifths": 0,
+                "minor": false
+            },
+            "pickupLength": null,
+            "repeat": {
+                "starts": false,
+                "endCount": null,
+                "alternateEndings": []
+            },
+            "navigation": [],
+            "feel": "STRAIGHT",
+            "forcedSystemBreak": false
+        },
+        {
+            "id": "fixture-1",
+            "signature": {
+                "numerator": 7,
+                "denominator": 8
+            },
+            "key": {
+                "fifths": 0,
+                "minor": false
+            },
+            "pickupLength": null,
+            "repeat": {
+                "starts": false,
+                "endCount": null,
+                "alternateEndings": []
+            },
+            "navigation": [],
+            "feel": "STRAIGHT",
+            "forcedSystemBreak": false
+        }
+    ],
+    "tracks": [
+        {
+            "id": "fixture-3",
+            "name": "Gitarre · Drop A",
+            "instrument": {
+                "kind": "GUITAR",
+                "tuning": [
+                    33,
+                    40,
+                    45,
+                    50,
+                    55,
+                    59,
+                    64
+                ],
+                "capoByString": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "maxFret": 24,
+                "midiProgram": 30,
+                "fineTuneCents": 0.0,
+                "transposition": 0,
+                "drumKit": [
+                    {
+                        "midiNote": 36,
+                        "name": "Kick",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": null
+                    },
+                    {
+                        "midiNote": 38,
+                        "name": "Snare",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": null
+                    },
+                    {
+                        "midiNote": 42,
+                        "name": "Closed HH",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": 1
+                    },
+                    {
+                        "midiNote": 46,
+                        "name": "Open HH",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": 1
+                    },
+                    {
+                        "midiNote": 49,
+                        "name": "Crash",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": 2
+                    }
+                ]
+            },
+            "staves": [
+                {
+                    "id": "fixture-4",
+                    "notation": [
+                        "TAB"
+                    ],
+                    "bars": [
+                        {
+                            "id": "fixture-5",
+                            "measureId": "fixture-0",
+                            "voices": [
+                                {
+                                    "id": "fixture-6",
+                                    "index": 0,
+                                    "beats": [
+                                        {
+                                            "id": "fixture-40",
+                                            "offset": {
+                                                "numerator": 0,
+                                                "denominator": 1
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-41",
+                                                    "pitch": {
+                                                        "midiNumber": 33,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": 0,
+                                                    "fret": 0,
+                                                    "velocity": 96,
+                                                    "articulations": [
+                                                        {
+                                                            "type": "mark",
+                                                            "kind": "PALM_MUTE"
+                                                        }
+                                                    ],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-42",
+                                            "offset": {
+                                                "numerator": 1,
+                                                "denominator": 16
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-43",
+                                                    "pitch": {
+                                                        "midiNumber": 33,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": 0,
+                                                    "fret": 0,
+                                                    "velocity": 96,
+                                                    "articulations": [
+                                                        {
+                                                            "type": "mark",
+                                                            "kind": "PALM_MUTE"
+                                                        }
+                                                    ],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-44",
+                                            "offset": {
+                                                "numerator": 1,
+                                                "denominator": 8
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-45",
+                                                    "pitch": {
+                                                        "midiNumber": 33,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": 0,
+                                                    "fret": 0,
+                                                    "velocity": 96,
+                                                    "articulations": [
+                                                        {
+                                                            "type": "mark",
+                                                            "kind": "DEAD"
+                                                        }
+                                                    ],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-46",
+                                            "offset": {
+                                                "numerator": 3,
+                                                "denominator": 16
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-47",
+                                                    "pitch": {
+                                                        "midiNumber": 36,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": 0,
+                                                    "fret": 3,
+                                                    "velocity": 96,
+                                                    "articulations": [
+                                                        {
+                                                            "type": "mark",
+                                                            "kind": "PALM_MUTE"
+                                                        },
+                                                        {
+                                                            "type": "slide",
+                                                            "kind": "SHIFT",
+                                                            "target": null
+                                                        }
+                                                    ],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-48",
+                                            "offset": {
+                                                "numerator": 1,
+                                                "denominator": 4
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-49",
+                                                    "pitch": {
+                                                        "midiNumber": 38,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": 0,
+                                                    "fret": 5,
+                                                    "velocity": 96,
+                                                    "articulations": [
+                                                        {
+                                                            "type": "mark",
+                                                            "kind": "PALM_MUTE"
+                                                        },
+                                                        {
+                                                            "type": "harmonic",
+                                                            "kind": "PINCH",
+                                                            "node": null,
+                                                            "soundingPitch": null
+                                                        }
+                                                    ],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-50",
+                                            "offset": {
+                                                "numerator": 5,
+                                                "denominator": 16
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-51",
+                                                    "pitch": {
+                                                        "midiNumber": 40,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": 0,
+                                                    "fret": 7,
+                                                    "velocity": 96,
+                                                    "articulations": [
+                                                        {
+                                                            "type": "mark",
+                                                            "kind": "PALM_MUTE"
+                                                        },
+                                                        {
+                                                            "type": "bend",
+                                                            "points": [
+                                                                {
+                                                                    "position": {
+                                                                        "numerator": 0,
+                                                                        "denominator": 1
+                                                                    },
+                                                                    "cents": 0
+                                                                },
+                                                                {
+                                                                    "position": {
+                                                                        "numerator": 1,
+                                                                        "denominator": 2
+                                                                    },
+                                                                    "cents": 200
+                                                                },
+                                                                {
+                                                                    "position": {
+                                                                        "numerator": 1,
+                                                                        "denominator": 1
+                                                                    },
+                                                                    "cents": 0
+                                                                }
+                                                            ],
+                                                            "kind": "RELEASE"
+                                                        }
+                                                    ],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-52",
+                                            "offset": {
+                                                "numerator": 3,
+                                                "denominator": 8
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-53",
+                                                    "pitch": {
+                                                        "midiNumber": 41,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": 0,
+                                                    "fret": 8,
+                                                    "velocity": 96,
+                                                    "articulations": [
+                                                        {
+                                                            "type": "mark",
+                                                            "kind": "PALM_MUTE"
+                                                        }
+                                                    ],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-54",
+                                            "offset": {
+                                                "numerator": 7,
+                                                "denominator": 16
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-55",
+                                                    "pitch": {
+                                                        "midiNumber": 41,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": 0,
+                                                    "fret": 8,
+                                                    "velocity": 96,
+                                                    "articulations": [
+                                                        {
+                                                            "type": "mark",
+                                                            "kind": "PALM_MUTE"
+                                                        }
+                                                    ],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        }
+                                    ]
+                                },
+                                {
+                                    "id": "fixture-7",
+                                    "index": 1,
+                                    "beats": [
+                                        {
+                                            "id": "fixture-56",
+                                            "offset": {
+                                                "numerator": 0,
+                                                "denominator": 1
+                                            },
+                                            "duration": {
+                                                "denominator": 2,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-57",
+                                                    "pitch": {
+                                                        "midiNumber": 40,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": 1,
+                                                    "fret": 0,
+                                                    "velocity": 96,
+                                                    "articulations": [],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        }
+                                    ]
+                                },
+                                {
+                                    "id": "fixture-8",
+                                    "index": 2,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-9",
+                                    "index": 3,
+                                    "beats": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "fixture-10",
+                            "measureId": "fixture-1",
+                            "voices": [
+                                {
+                                    "id": "fixture-11",
+                                    "index": 0,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-12",
+                                    "index": 1,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-13",
+                                    "index": 2,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-14",
+                                    "index": 3,
+                                    "beats": []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ],
+            "sound": {
+                "bankId": null,
+                "presetId": null,
+                "originalRseData": null,
+                "mappingDescription": "Unmapped"
+            },
+            "mix": {
+                "volume": 0.8,
+                "pan": 0.0,
+                "mute": false,
+                "solo": false,
+                "effects": []
+            }
+        },
+        {
+            "id": "fixture-15",
+            "name": "Bass",
+            "instrument": {
+                "kind": "BASS",
+                "tuning": [
+                    28,
+                    33,
+                    38,
+                    43
+                ],
+                "capoByString": [
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "maxFret": 24,
+                "midiProgram": 33,
+                "fineTuneCents": 0.0,
+                "transposition": 0,
+                "drumKit": [
+                    {
+                        "midiNote": 36,
+                        "name": "Kick",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": null
+                    },
+                    {
+                        "midiNote": 38,
+                        "name": "Snare",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": null
+                    },
+                    {
+                        "midiNote": 42,
+                        "name": "Closed HH",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": 1
+                    },
+                    {
+                        "midiNote": 46,
+                        "name": "Open HH",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": 1
+                    },
+                    {
+                        "midiNote": 49,
+                        "name": "Crash",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": 2
+                    }
+                ]
+            },
+            "staves": [
+                {
+                    "id": "fixture-16",
+                    "notation": [
+                        "TAB"
+                    ],
+                    "bars": [
+                        {
+                            "id": "fixture-17",
+                            "measureId": "fixture-0",
+                            "voices": [
+                                {
+                                    "id": "fixture-18",
+                                    "index": 0,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-19",
+                                    "index": 1,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-20",
+                                    "index": 2,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-21",
+                                    "index": 3,
+                                    "beats": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "fixture-22",
+                            "measureId": "fixture-1",
+                            "voices": [
+                                {
+                                    "id": "fixture-23",
+                                    "index": 0,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-24",
+                                    "index": 1,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-25",
+                                    "index": 2,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-26",
+                                    "index": 3,
+                                    "beats": []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ],
+            "sound": {
+                "bankId": null,
+                "presetId": null,
+                "originalRseData": null,
+                "mappingDescription": "Unmapped"
+            },
+            "mix": {
+                "volume": 0.8,
+                "pan": 0.0,
+                "mute": false,
+                "solo": false,
+                "effects": []
+            }
+        },
+        {
+            "id": "fixture-27",
+            "name": "Drums",
+            "instrument": {
+                "kind": "PERCUSSION",
+                "tuning": [],
+                "capoByString": [],
+                "maxFret": 24,
+                "midiProgram": 0,
+                "fineTuneCents": 0.0,
+                "transposition": 0,
+                "drumKit": [
+                    {
+                        "midiNote": 36,
+                        "name": "Kick",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": null
+                    },
+                    {
+                        "midiNote": 38,
+                        "name": "Snare",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": null
+                    },
+                    {
+                        "midiNote": 42,
+                        "name": "Closed HH",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": 1
+                    },
+                    {
+                        "midiNote": 46,
+                        "name": "Open HH",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": 1
+                    },
+                    {
+                        "midiNote": 49,
+                        "name": "Crash",
+                        "volume": 1.0,
+                        "pan": 0.0,
+                        "chokeGroup": 2
+                    }
+                ]
+            },
+            "staves": [
+                {
+                    "id": "fixture-28",
+                    "notation": [
+                        "PERCUSSION"
+                    ],
+                    "bars": [
+                        {
+                            "id": "fixture-29",
+                            "measureId": "fixture-0",
+                            "voices": [
+                                {
+                                    "id": "fixture-30",
+                                    "index": 0,
+                                    "beats": [
+                                        {
+                                            "id": "fixture-58",
+                                            "offset": {
+                                                "numerator": 0,
+                                                "denominator": 1
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-59",
+                                                    "pitch": {
+                                                        "midiNumber": 42,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": null,
+                                                    "fret": null,
+                                                    "velocity": 96,
+                                                    "articulations": [],
+                                                    "links": [],
+                                                    "fingering": null
+                                                },
+                                                {
+                                                    "id": "fixture-60",
+                                                    "pitch": {
+                                                        "midiNumber": 36,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": null,
+                                                    "fret": null,
+                                                    "velocity": 96,
+                                                    "articulations": [],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-61",
+                                            "offset": {
+                                                "numerator": 1,
+                                                "denominator": 16
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-62",
+                                                    "pitch": {
+                                                        "midiNumber": 42,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": null,
+                                                    "fret": null,
+                                                    "velocity": 96,
+                                                    "articulations": [],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-63",
+                                            "offset": {
+                                                "numerator": 1,
+                                                "denominator": 8
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-64",
+                                                    "pitch": {
+                                                        "midiNumber": 42,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": null,
+                                                    "fret": null,
+                                                    "velocity": 96,
+                                                    "articulations": [],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-65",
+                                            "offset": {
+                                                "numerator": 3,
+                                                "denominator": 16
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-66",
+                                                    "pitch": {
+                                                        "midiNumber": 42,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": null,
+                                                    "fret": null,
+                                                    "velocity": 96,
+                                                    "articulations": [],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-67",
+                                            "offset": {
+                                                "numerator": 1,
+                                                "denominator": 4
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-68",
+                                                    "pitch": {
+                                                        "midiNumber": 42,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": null,
+                                                    "fret": null,
+                                                    "velocity": 96,
+                                                    "articulations": [],
+                                                    "links": [],
+                                                    "fingering": null
+                                                },
+                                                {
+                                                    "id": "fixture-69",
+                                                    "pitch": {
+                                                        "midiNumber": 38,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": null,
+                                                    "fret": null,
+                                                    "velocity": 96,
+                                                    "articulations": [],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-70",
+                                            "offset": {
+                                                "numerator": 5,
+                                                "denominator": 16
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-71",
+                                                    "pitch": {
+                                                        "midiNumber": 42,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": null,
+                                                    "fret": null,
+                                                    "velocity": 96,
+                                                    "articulations": [],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-72",
+                                            "offset": {
+                                                "numerator": 3,
+                                                "denominator": 8
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-73",
+                                                    "pitch": {
+                                                        "midiNumber": 42,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": null,
+                                                    "fret": null,
+                                                    "velocity": 96,
+                                                    "articulations": [],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-74",
+                                            "offset": {
+                                                "numerator": 7,
+                                                "denominator": 16
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-75",
+                                                    "pitch": {
+                                                        "midiNumber": 42,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": null,
+                                                    "fret": null,
+                                                    "velocity": 96,
+                                                    "articulations": [],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-76",
+                                            "offset": {
+                                                "numerator": 1,
+                                                "denominator": 2
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-77",
+                                                    "pitch": {
+                                                        "midiNumber": 42,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": null,
+                                                    "fret": null,
+                                                    "velocity": 96,
+                                                    "articulations": [],
+                                                    "links": [],
+                                                    "fingering": null
+                                                },
+                                                {
+                                                    "id": "fixture-78",
+                                                    "pitch": {
+                                                        "midiNumber": 36,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": null,
+                                                    "fret": null,
+                                                    "velocity": 96,
+                                                    "articulations": [],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-79",
+                                            "offset": {
+                                                "numerator": 9,
+                                                "denominator": 16
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-80",
+                                                    "pitch": {
+                                                        "midiNumber": 42,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": null,
+                                                    "fret": null,
+                                                    "velocity": 96,
+                                                    "articulations": [],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-81",
+                                            "offset": {
+                                                "numerator": 5,
+                                                "denominator": 8
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-82",
+                                                    "pitch": {
+                                                        "midiNumber": 42,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": null,
+                                                    "fret": null,
+                                                    "velocity": 96,
+                                                    "articulations": [],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-83",
+                                            "offset": {
+                                                "numerator": 11,
+                                                "denominator": 16
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-84",
+                                                    "pitch": {
+                                                        "midiNumber": 42,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": null,
+                                                    "fret": null,
+                                                    "velocity": 96,
+                                                    "articulations": [],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-85",
+                                            "offset": {
+                                                "numerator": 3,
+                                                "denominator": 4
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-86",
+                                                    "pitch": {
+                                                        "midiNumber": 42,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": null,
+                                                    "fret": null,
+                                                    "velocity": 96,
+                                                    "articulations": [],
+                                                    "links": [],
+                                                    "fingering": null
+                                                },
+                                                {
+                                                    "id": "fixture-87",
+                                                    "pitch": {
+                                                        "midiNumber": 38,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": null,
+                                                    "fret": null,
+                                                    "velocity": 96,
+                                                    "articulations": [],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-88",
+                                            "offset": {
+                                                "numerator": 13,
+                                                "denominator": 16
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-89",
+                                                    "pitch": {
+                                                        "midiNumber": 42,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": null,
+                                                    "fret": null,
+                                                    "velocity": 96,
+                                                    "articulations": [],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-90",
+                                            "offset": {
+                                                "numerator": 7,
+                                                "denominator": 8
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-91",
+                                                    "pitch": {
+                                                        "midiNumber": 42,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": null,
+                                                    "fret": null,
+                                                    "velocity": 96,
+                                                    "articulations": [],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        },
+                                        {
+                                            "id": "fixture-92",
+                                            "offset": {
+                                                "numerator": 15,
+                                                "denominator": 16
+                                            },
+                                            "duration": {
+                                                "denominator": 16,
+                                                "dots": 0,
+                                                "tuplets": []
+                                            },
+                                            "notes": [
+                                                {
+                                                    "id": "fixture-93",
+                                                    "pitch": {
+                                                        "midiNumber": 42,
+                                                        "cents": 0,
+                                                        "spelling": null
+                                                    },
+                                                    "string": null,
+                                                    "fret": null,
+                                                    "velocity": 96,
+                                                    "articulations": [],
+                                                    "links": [],
+                                                    "fingering": null
+                                                }
+                                            ],
+                                            "explicitRest": false,
+                                            "tupletGroupIds": [],
+                                            "fermata": null,
+                                            "strum": null,
+                                            "chordId": null
+                                        }
+                                    ]
+                                },
+                                {
+                                    "id": "fixture-31",
+                                    "index": 1,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-32",
+                                    "index": 2,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-33",
+                                    "index": 3,
+                                    "beats": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "fixture-34",
+                            "measureId": "fixture-1",
+                            "voices": [
+                                {
+                                    "id": "fixture-35",
+                                    "index": 0,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-36",
+                                    "index": 1,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-37",
+                                    "index": 2,
+                                    "beats": []
+                                },
+                                {
+                                    "id": "fixture-38",
+                                    "index": 3,
+                                    "beats": []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ],
+            "sound": {
+                "bankId": null,
+                "presetId": null,
+                "originalRseData": null,
+                "mappingDescription": "Unmapped"
+            },
+            "mix": {
+                "volume": 0.8,
+                "pan": 0.0,
+                "mute": false,
+                "solo": false,
+                "effects": []
+            }
+        }
+    ],
+    "sections": [
+        {
+            "id": "fixture-39",
+            "measureId": "fixture-0",
+            "label": "Riff A",
+            "color": 4292343387
+        }
+    ],
+    "tempo": [
+        {
+            "position": {
+                "measureId": "fixture-0",
+                "offset": {
+                    "numerator": 0,
+                    "denominator": 1
+                }
+            },
+            "quarterNotesPerMinute": 150.0
+        }
+    ],
+    "assets": [],
+    "soundBanks": [],
+    "audio": {
+        "assets": [],
+        "clips": [],
+        "syncMaps": []
+    },
+    "mix": {
+        "master": {
+            "volume": 0.8,
+            "pan": 0.0,
+            "mute": false,
+            "solo": false,
+            "effects": []
+        },
+        "buses": [],
+        "automation": []
+    },
+    "layout": {
+        "mode": "CONTINUOUS",
+        "scale": 1.0,
+        "stylesheet": "default",
+        "trackOrder": [],
+        "barsPerSystem": null,
+        "pageWidthMm": 210.0,
+        "pageHeightMm": 297.0
+    },
+    "text": [],
+    "chords": [],
+    "scales": [],
+    "provenance": [],
+    "diagnostics": []
+}
