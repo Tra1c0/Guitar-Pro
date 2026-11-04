@@ -34,4 +34,12 @@ class XmlTest {
         assertEquals("x & y < z", root.textOf("Text"))
         assertNotNull(root.child("Empty"))
     }
+
+    @Test fun truncatedInputAlwaysFailsAsXmlException() {
+        // Every prefix of a small document must end in XmlException, never in an index error.
+        val doc = "<a b='1' c=\"x\"><d e='2'/>text<![CDATA[z]]></a>"
+        for (n in 0 until doc.length) {
+            try { XmlReader.parse(doc.substring(0, n)); fail("prefix $n parsed") } catch (e: XmlException) { /* expected */ }
+        }
+    }
 }

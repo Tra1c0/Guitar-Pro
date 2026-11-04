@@ -103,6 +103,7 @@ object XmlReader {
                 if (c == '>') { i++; break }
                 val key = name()
                 skipSpace(); expect('='); skipSpace()
+                if (i >= s.length) throw error("Unvollständiger Attributwert")
                 val quote = s[i]
                 if (quote != '"' && quote != '\'') throw error("Attributwert ohne Anführungszeichen")
                 i++

@@ -59,4 +59,23 @@ class CatalogTest {
         fun notes(p: Project) = p.tracks.flatMap { t -> t.staves.flatMap { it.bars }.flatMap { it.voices }.flatMap { it.beats }.flatMap { it.notes } }.size
         assertEquals(notes(source), notes(again))
     }
+
+    @Test fun everyRegisteredExporterProducesAFileTheCatalogRecognisesAgain() = kotlinx.coroutines.runBlocking {
+        var n = 0
+        val ids = IdSource { EntityId("x${n++}") }
+        val catalog = FormatRegistry.catalog()
+        val dir = generateSequence(java.io.File("").absoluteFile) { it.parentFile }.map { java.io.File(it, "fixtures/gp") }.first { it.isDirectory }
+        val source = (catalog.importer("gp5")!!.import(java.io.File(dir, "drop-a-band.gp5").readBytes(), ids) {} as Outcome.Success).value.project
+        for (id in listOf("gp7", "midi", "musicxml", "ascii")) {
+            val file = catalog.exporter(id)!!.export(ExportRequest(source, id)) {}
+            assertTrue("$id: $file", file is Outcome.Success)
+            val bytes = (file as Outcome.Success).value.bytes
+            assertTrue("$id is empty", bytes.isNotEmpty())
+            if (id == "ascii") continue // plain-text tab has no import path
+            assertEquals(id, (catalog.detect(bytes, null) as Outcome.Success).value.id)
+            val again = catalog.importer(id)!!.import(bytes, ids) {}
+            assertTrue("$id re-import: $again", again is Outcome.Success)
+            assertEquals(id, source.tracks.size, (again as Outcome.Success).value.project.tracks.size)
+        }
+    }
 }
