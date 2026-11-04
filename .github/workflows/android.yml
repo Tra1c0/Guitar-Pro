@@ -1,28 +1,42 @@
 name: Android and portable core
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+      # The action's default package list still names the removed 'tools' package; request only what the build needs.
       - uses: android-actions/setup-android@v3
-      - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+        with:
+          packages: 'platforms;android-36 build-tools;36.0.0'
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew check :app:assembleDebug :app:lintDebug --stacktrace
-      - run: python3 tools/collect_validation.py
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: riffworkbench-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+      - name: Tests, architecture checks and lint
+        run: ./gradlew check :app:lintDebug --continue --stacktrace
+      - name: Collect verification summary
+        run: python3 tools/collect_validation.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: verification-and-apk
+          name: verification-reports
           path: |
-            app/build/outputs/apk/debug/*.apk
             **/build/reports/
             **/build/test-results/
             build/verification.json
