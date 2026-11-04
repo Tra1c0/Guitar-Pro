@@ -42,9 +42,13 @@ interface AudioEngine {
     suspend fun install(plan: PlaybackPlan): Outcome<Unit>
     suspend fun close(): Outcome<Unit>
 }
-interface PreviewPlayer { suspend fun preview(note: Note, instrument: InstrumentDefinition): Outcome<Unit> }
+/** C-PREVIEW: immediate audition of one note through the track's sound; never mutates the project. */
+interface PreviewPlayer { suspend fun preview(project: Project, trackId: EntityId, note: Note): Outcome<Unit> }
+/** C-RENDER: same compiler and mix graph as playback. Stems share start frame and length. */
 interface OfflineRenderer {
     suspend fun render(project: Project, options: RenderOptions, progress: (OperationProgress) -> Unit = {}): Outcome<List<ExportResult>>
+    /** Streams a WAV (mix when [soloTrack] is null, otherwise that isolated track) into [sink]. */
+    suspend fun renderTo(project: Project, options: RenderOptions, sink: ByteSink, soloTrack: Int? = null, progress: (OperationProgress) -> Unit = {}): Outcome<RenderSummary>
 }
 interface AudioDecoder { suspend fun decode(asset: AssetHash, targetSampleRate: Int, progress: (OperationProgress) -> Unit = {}): Outcome<AssetHash> }
 interface WaveformCache { suspend fun peaks(asset: AssetHash, samplesPerPeak: Int): Outcome<WaveformLevel> }
@@ -52,6 +56,27 @@ interface TimeStretchProcessor { suspend fun process(asset: AssetHash, speed: Do
 interface SoundBankRepository {
     suspend fun list(): Outcome<List<SoundBank>>
     suspend fun import(asset: AssetDescriptor): Outcome<SoundBank>
+}
+
+/** C-AUDIO device boundary; Android implements it with AudioTrack. [write] blocks and paces the render thread. */
+interface AudioSink {
+    fun open(preferredSampleRate: Int, preferredBlockFrames: Int): Outcome<SinkFormat>
+    /** Writes interleaved stereo float frames; returns frames accepted (fewer only when closing). */
+    fun write(buffer: FloatArray, frames: Int): Int
+    /** Sink frame currently leaving the speaker, extrapolated to now; null when the device gives no timestamp. */
+    fun presentedFrame(): Long?
+    fun underruns(): Long = 0
+    fun close()
+}
+data class SinkFormat(val sampleRate: Int, val blockFrames: Int, val latencyFrames: Int, val deviceName: String)
+
+/** C-TUNER input boundary; Android implements it with AudioRecord. */
+interface AudioInputSource {
+    /** Returns the actual sample rate. */
+    fun open(preferredSampleRate: Int): Outcome<Int>
+    /** Blocking read of mono float samples; returns the count read, or a negative value when closed. */
+    fun read(buffer: FloatArray, frames: Int): Int
+    fun close()
 }
 
 data class MidiCapture(val deviceId: String, val timestampNanos: Long, val data: List<Int>)

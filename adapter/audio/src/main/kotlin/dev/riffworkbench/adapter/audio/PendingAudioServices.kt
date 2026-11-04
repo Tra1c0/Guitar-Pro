@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 
-/** CONTRACTS.md C-AUDIO..C-SOUNDBANK. No timer, fake audio, success export, or bundled unlicensed samples. */
+/** Null object for tests and for devices without a usable audio output: every call reports UNAVAILABLE with its contract. */
 class PendingAudioServices : Transport, AudioEngine, PreviewPlayer, OfflineRenderer, AudioDecoder, WaveformCache, TimeStretchProcessor, SoundBankRepository, LiveInput, MidiInput {
     override val state = MutableStateFlow(TransportState()).asStateFlow()
     override val events = emptyFlow<MidiCapture>()
@@ -20,8 +20,9 @@ class PendingAudioServices : Transport, AudioEngine, PreviewPlayer, OfflineRende
     override suspend fun selectOutput(id: String) = unavailable("C-AUDIO")
     override suspend fun install(plan: PlaybackPlan) = unavailable("C-AUDIO")
     override suspend fun close() = unavailable("C-AUDIO")
-    override suspend fun preview(note: Note, instrument: InstrumentDefinition) = unavailable("C-PREVIEW")
+    override suspend fun preview(project: Project, trackId: EntityId, note: Note) = unavailable("C-PREVIEW")
     override suspend fun render(project: Project, options: RenderOptions, progress: (OperationProgress) -> Unit): Outcome<List<ExportResult>> = unavailable("C-RENDER")
+    override suspend fun renderTo(project: Project, options: RenderOptions, sink: ByteSink, soloTrack: Int?, progress: (OperationProgress) -> Unit): Outcome<RenderSummary> = unavailable("C-RENDER")
     override suspend fun decode(asset: AssetHash, targetSampleRate: Int, progress: (OperationProgress) -> Unit): Outcome<AssetHash> = unavailable("C-DECODE")
     override suspend fun peaks(asset: AssetHash, samplesPerPeak: Int): Outcome<WaveformLevel> = unavailable("C-WAVEFORM")
     override suspend fun process(asset: AssetHash, speed: Double, pitchCents: Int): Outcome<AssetHash> = unavailable("C-STRETCH")
