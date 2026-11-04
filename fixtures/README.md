@@ -6,7 +6,7 @@ Erzeugen: `./gradlew :data:local:generateFixtures`. Der separate Source-Set `fix
 - `four-voices-nested-tuplets.riffproj` / `.json`: vier getrennte Stimmen; verschachteltes 3:2 × 5:4-Tuplet mit exakter Dauer 1/15 einer ganzen Note.
 - `eight-tracks-200-bars.riffproj`: acht Spuren, 200 Takte, 12.800 Noten, stabile IDs und vollständige Stimmenstruktur. Struktur-/Viewport-Fixture, kein Nachweis von 60 fps.
 - `shared-clock.riffproj` / `.json`: vier 4/4-Takte bei 120 BPM, eigene Referenz-WAV und Sync-Map.
-- `clock-120bpm-48k.wav`: 8 s, 48 kHz, mono, PCM 16 Bit. Ein selbst erzeugter 128-Frame-Tonimpuls beginnt bei Frames 0, 24.000, …, 360.000. Anker bei 0 und 7,5 s. Loop-Ende bei Frame 384.000 ist exklusiv. Synth/Stem-Gleichlauf ist erst nach Spike B testbar.
+- `clock-120bpm-48k.wav`: 8 s, 48 kHz, mono, PCM 16 Bit. Ein selbst erzeugter 128-Frame-Tonimpuls beginnt bei Frames 0, 24.000, …, 360.000. Anker bei 0 und 7,5 s. Loop-Ende bei Frame 384.000 ist exklusiv. Der Gleichlauf von Synth und Clip ist mit eigenen Impulsen in `AudioClipTest` geprüft.
 
 Musik und Testsignal wurden für dieses Projekt erstellt. Das synthetische WAV ist CC0-1.0; es enthält weder Instrumentaufnahmen noch fremde Soundbanks. Die übrigen Projektquellen haben noch keine Veröffentlichungslizenz.
 
@@ -14,7 +14,7 @@ Es liegen noch keine in Guitar Pro Desktop verifizierten GP3/4/5/GPX/GP7/GP8-Dat
 
 ## Synthetische GP3/GP4/GP5-Dateien (`gp/`)
 
-Erzeugen: `python3 -I tools/make_gp_fixtures.py` mit installiertem PyGuitarPro 0.11 (LGPL-3.0, nur Generator, weder gebündelt noch zur Laufzeit benötigt). Ausgabe ist deterministisch; das Skript aktualisiert ausschließlich die `gp/`-Zeilen in `SHA256SUMS`. Achtung: `:data:local:generateFixtures` schreibt `SHA256SUMS` derzeit ohne Unterordner neu und entfernt diese Zeilen.
+Erzeugen: `python3 -I tools/make_gp_fixtures.py` mit installiertem PyGuitarPro 0.11 (LGPL-3.0, nur Generator, weder gebündelt noch zur Laufzeit benötigt). Ausgabe ist deterministisch; das Skript aktualisiert ausschließlich die `gp/`-Zeilen in `SHA256SUMS`. `:data:local:generateFixtures` schreibt nur die Zeilen der obersten Ebene neu und lässt die `gp/`-Zeilen stehen.
 
 - `gp/drop-a-band.gp3` (v3.00), `gp/drop-a-band.gp4` (v4.06), `gp/drop-a-band.gp5` (v5.10), `gp/drop-a-band-v500.gp5` (v5.00): dieselbe eigene Musik je Formatversion, soweit das Format sie kennt. Siebensaitige Drop-A-Gitarre (33/40/45/50/55/59/64), viersaitiger Bass, Drums (Kick 36, Snare 38, Closed HH 42, Crash 49), Akustikgitarre mit Kapo 2; 4/4 und 7/8, Wiederholung mit zwei Schlüssen, Marker, Tempowechsel, Triolen, Quintolen, punktierte Noten, zwei Stimmen (GP5), Sprungmarken (GP5), Liedtext (GP4/GP5), Akkorddiagramme. Effekte: Palm Mute, Dead Note, Slides, natürliche/künstliche/Pinch-/Tapped-/Semi-Flageoletts, Bend mit Release, Tremolo-Bar, Hammer-on/Pull-off, Haltebogen über den Taktstrich, Let Ring, Vibrato, Vorschlagsnoten, Tremolo-Picking, Triller, Anschlag/Rasgueado, Akzente, Ghost Notes. Absichtlich enthalten: ein übervoller Takt (GP4) und ein unvollständiger Takt (GP3).
 - `gp/*.json`: Orakel, also das, was PyGuitarPro aus denselben Bytes zurückliest. Die Tests in `adapter/formats` vergleichen den Kotlin-Import damit und rechnen die Einheiten dabei unabhängig um.

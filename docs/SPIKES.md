@@ -1,49 +1,50 @@
-# Machbarkeitstests und Roadmap
+# Machbarkeitstests, offene Abnahmen und Roadmap
 
-Diese Datei ist ein Implementierungsauftrag für die nächste Phase. Beide Spikes sind noch offen. Voraussetzung für Hardware-Abnahmen: Xiaomi 15, ein langsameres Android-Gerät, kabelgebundener/USB-Ausgang und eigener Zugang zu GP8 Desktop beziehungsweise Cubase. Nichts davon wurde für Phase 1 als vorhanden angenommen.
+Die beiden Spikes aus Phase 1 sind im Code entschieden: Spike A durch den eigenen Notensatz und eigene GP-Formate statt alphaTab, Spike B durch die eigene Engine auf der AudioTrack-Sample-Clock statt Oboe/SF2. Was sich nur mit Hardware, Guitar Pro Desktop oder Cubase prüfen lässt, ist unten als offene Abnahme mit Pass/Fail-Kriterien beschrieben. Kein Punkt davon gilt als bestanden, solange er nicht durchgeführt wurde.
 
-## Spike A: Editierintegration und GP7-Rückexport
+Voraussetzungen: Xiaomi 15, ein langsameres Android-Gerät, kabelgebundener und Bluetooth-Ausgang, eigener Zugang zu GP8 Desktop und Cubase.
 
-**Umfang:** alphaTab AndroidView in Compose, GP8-Import, eigene ID-Abbildung, Auswahl über Bounds, Note/Artikulation ändern, Undo, Rerender, GP7-Export und Reimport. Kleiner Web-/alphaTab-Vergleich anhand derselben Aktionen. Keine Übernahme fremder Testtabs.
+## A: Editierintegration und GP7-Rückexport
 
-**Module:** adapter:alphatab, adapter:formats, ui:score, core:editor. Die veröffentlichten APIs sind AlphaTabView.api, renderScore/render, boundsLookup mit includeNoteBounds sowie ScoreLoader/Gp7Exporter. Kotlin-Signaturen und generierte Typen am gewählten veröffentlichten Artefakt kompilierend prüfen. Strukturänderungen benötigen Relink/Finish; Renderer- und MIDI-Caches sind getrennt.
+**Im Code umgesetzt:** Eigener Notensatz mit Trefferflächen auf eigene IDs, Bearbeitung über EditorCommands mit Undo, sofortiges Neulayout. GP3/4/5-, GPX- und GP7/8-Import, GP7-Export und Reimport (Formatagent-Ergebnisse in adapter:formats). Automatisiert getestet sind Import gegen eigene Fixtures, Robustheit gegen beschädigte Dateien und Rundreisen innerhalb der App.
 
-**Toolchain:** alphaTab 1.9.0 ist auf Maven Central vorhanden, fordert laut Release-Quellcode SDK 37 und veröffentlicht Kotlin-stdlib 2.4.21. Vor Aktivierung eine passende AGP/Kotlin/SDK-Kombination pinnen. Die aktuelle Basis bleibt bis zu diesem Abgleich ohne alphaTab-Runtime.
+**Offen – Desktop-Gegencheck:**
 
-**Fixtures und Desktop-Gegencheck:**
-
-1. Selbst in GP8 erstellen: `spike-a-input.gp` mit Drop A, mehreren Stimmen, 7/8, PM/Dead/Slide/Pinch/Bend.
-2. Export: `spike-a-edited-gp7.gp`; nach Undo zusätzlich `spike-a-undo-gp7.gp`.
-3. In GP8 öffnen, als `spike-a-desktop-resaved.gp` sichern und erneut in die App importieren.
+1. In GP8 selbst erstellen: `spike-a-input.gp` mit Drop A, mehreren Stimmen, 7/8, PM/Dead/Slide/Pinch/Bend.
+2. In der App importieren, bearbeiten, als `spike-a-edited-gp7.gp` exportieren; nach Undo zusätzlich `spike-a-undo-gp7.gp`.
+3. Beide in GP8 öffnen, als `spike-a-desktop-resaved.gp` sichern und erneut importieren.
 4. Track/Staff/Stimme/Takt/Beat/Note, Stimmung/Capo, Rhythmus, Links und Artikulationsparameter vergleichen. GP8-Audio, Layout, Presets, Automation und verschachtelte Tuplets gesondert im Verlustbericht prüfen.
 
-**Pass:** Eingabe und Undo reproduzierbar; keine verwaisten Links/IDs; semantischer Reimport stimmt mit der erwarteten Änderung überein; GP8 öffnet den Export ohne relevante ungeklärte Unterschiede. Desktop-Check ohne Desktop bleibt offen.
+**Pass:** GP8 öffnet die Exporte ohne relevante ungeklärte Unterschiede; der Reimport stimmt semantisch mit der erwarteten Änderung überein. **Fail-Folge:** Abweichungen als Verlusteinträge ergänzen oder den Exporter korrigieren; bis dahin bleibt `export.gp7`/`export.gp8` auf DESKTOP_PENDING.
 
-**Messung:** Touch→Paint getrennt von Renderdauer, Scroll-/Zoom-FPS und Allokationen an eigenen 8-Spur-/200-Takt-Fixtures. Ziel <50 ms p95 visuelles Feedback; 60 fps beim normalen Scrollen. Messaufbau/Gerät dokumentieren.
+**Offen – Messung auf dem Gerät:** Touch→Paint getrennt von Layoutdauer, Scroll-/Zoom-FPS und Allokationen an `eight-tracks-200-bars.riffproj`. Ziel unter 50 ms p95 visuelles Feedback und 60 fps beim normalen Scrollen. Auf der JVM braucht das Layout von 200 Takten etwa 35 ms; das ist kein Gerätewert.
 
-**Fail-Folge:** Bei fehlerhafter Bounds-/Editierintegration bleibt die eigene TAB aktiv. Web-Vergleich entscheidet über alternativen Rendereradapter. Keine Abhängigkeit des Kernmodells von alphaTab einführen. Bei Fidelity-Verlust GP7 nur für nachgewiesene Merkmale freigeben; native Datei bleibt vollständig.
+## B: Gemeinsame Audio-Uhr
 
-## Spike B: Gemeinsame Audio-Uhr
+**Im Code umgesetzt:** Eigener Synthesizer, Metronom und Referenz-Clips auf derselben Sample-Clock; Tempoänderung, Seek mit Chase, Loop, Count-in und Stop/Resume. Automatisiert gegen eine virtuelle Senke getestet (SynthEngineTest, AudioAdapterTest, AudioClipTest): Start-/Endframes, Loop ohne Drift, Clip-Offset, zweite gehaltene Note bleibt beim Bend auf der Nachbarsaite unverändert.
 
-**Umfang:** Oboe-Ausgabe, ein frei nutzbarer SF2-Synth-Kandidat, Metronom und genau ein PCM-Stem auf derselben Sample-Clock. Tempoänderung, Seek, Loop und reproduzierbares Stop/Resume. Kein RSE-Klangversprechen.
+**Offen – auf dem Gerät:**
 
-**Module:** core:playback, adapter:audio und platform:android. Kotlin-Control-Thread kompiliert Events; native Engine übernimmt begrenzte Eventqueues/immutable Pläne. Seek rekonstruiert Instrument-/Controllerzustand. Audio-Callback allokiert nicht und betreibt weder I/O noch JNI pro Sample.
+- Latenz Tastendruck→Ton (Ziel unter 70 ms p95 für die Notenvorschau), Underruns im 30-Minuten-Loop, Route-Wechsel (Kopfhörer, Bluetooth, USB), Audio-Fokus bei Anrufen, Thermik.
+- Hörprobe der Referenz-Clips mit MP3/AAC/Ogg/FLAC, Encoder-Delay am Dateianfang (ein MP3 kann einige Millisekunden früh oder spät liegen; der Offset gleicht das aus).
+- Stimmgerät mit echter tiefer A-Saite, Störgeräuschen und Oktavfehlern.
 
-**Fixture:** `shared-clock.riffproj`, `clock-120bpm-48k.wav`; 48 kHz, 8 s, Impulse alle 24.000 Frames, exklusives Loop-Ende 384.000. Varianten mit Tempoänderung und nichtganzzahligen BPM ergänzen. Eine zweite gehaltene Note muss bei einem Bend auf der anderen Saite unverändert bleiben.
+**Pass:** keine wachsende Drift, Underrun-Zähler bleibt bei normaler Last bei 0, Position und Klang bleiben nach Route-Wechsel konsistent. **Fail-Folge:** Puffergröße und Renderblock anpassen; reicht das nicht, einen Oboe-Adapter als weitere `AudioSink` ergänzen, ohne Engine oder Modell umzubauen.
 
-**Pass:** Instrumentierte Start-/End-Samples und Anker stimmen mit der goldenen Route überein; keine kumulative Drift beim Loopen; Seek-Ereignisse und Decoder-Preroll sind definiert. 30-min-Stresstest ohne wachsende Drift, mit Underrun-Zähler, Pause/Resume, Route-Wechsel und Thermikprotokoll. Geräteabhängige Latenz separat berichten. Ziel Touch→Preview <70 ms p95 über Kabel/USB.
+**Klang:** Blindvergleich des eigenen Synthesizers mit Aufnahmen echter Instrumente (PM, Dead Notes, Pinch, Bends, Drums). Ergebnis bestimmt, ob eine eigene Artikulations-Samplebank (C-SOUNDBANK) nötig ist.
 
-**Fail-Folge:** Engine bleibt experimentell. Buffer, Scheduling, Resampling und Decoder getrennt untersuchen; keine UI-Clock als Ersatz. Oboe gegen einen anderen nativen Ausgabeadapter evaluieren, ohne Editor-/Projektmodell umzubauen.
+## C: Cubase-Übergabe
 
-**Klangfolge:** GM-Basis gegen vorverzerrte Artikulationsbank und DI+Amp/Cab blind vergleichen. Eigene gedämpfte PM- und perkussive Dead-Note-Samples; Harmonic-Pitch/Obertöne; per-Voice-Bends, Releases und Saiten-Chokes. Rechte, CPU und Thermik sind eigene Abnahmepunkte.
+**Im Code umgesetzt:** WAV-Mix und Stems (gleicher Startframe, gleiche Länge, 24 Bit) als ZIP samt MIDI mit Tempo-Map.
 
-## Roadmap nach den Spikes
+**Offen:** Stems und MIDI in Cubase importieren, Startpunkt und Tempo-Map mit dem Mix vergleichen. **Pass:** Stems liegen sample-genau übereinander, MIDI-Noten liegen auf den Stems.
+
+## Roadmap
 
 | Etappe | Ergebnis |
 |---|---|
-| B | Vollständigerer Gitarren-/Drum-Editor, Basisrhythmik, zentrale Metal-Techniken, funktionierendes Playback/Mixer/Loop/Klick, GP7/MIDI |
-| C | Komplexe Wiederholungen, vier Stimmen vertiefen, verschachtelte Tuplets, weitere Notation, Audio-Sync, MusicXML/PDF, Automation und GP8-Teiltreue |
-| D | Mehrere Stems, Stretch/Pitch, eigene Soundbanks/Gitarrenbank, synchroner WAV-/MIDI-Export für Cubase, Line-in/MIDI, weitere Ausgaben, Tablet-Verfeinerung und iOS-Entscheidung |
+| Nächster Schritt | Geräte-, Desktop- und Cubase-Abnahmen oben; Time-Stretch für Referenz-Audio (C-STRETCH); Anker-Sync für frei gespielte Aufnahmen (C-SYNC) |
+| Danach | Eigene Artikulations-Samplebank oder SF2-Import (C-SOUNDBANK), Bus-Routing und Automation, USB-MIDI-Eingabe, Line-in, Befehlspalette, Slash- und Jianpu-Notation, Lyrics- und Akkordsymbol-Satz |
 | Lizenzabhängig | Fretlight und mySongBook jeweils separat technisch und vertraglich prüfen; VST/AUv3 sind plattformspezifische Vorhaben |
 
 Die Zuordnung jedes Merkmals und jeder Fähigkeit steht in PARITY.md. GP8-Fidelity ist kein einzelner Schalter und wird nicht aus erfolgreichem Öffnen einer Datei abgeleitet.

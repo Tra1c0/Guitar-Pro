@@ -1,6 +1,8 @@
 # Projektformat und Recovery
 
-Schema 1 wird durch die `@Serializable`-Typen in `core:model` definiert. Eine inkompatible Form benötigt eine neue Schema-Version und getestete Migration. Phase 1 hat keine Altversionen zu migrieren; neuere Versionen werden ausdrücklich abgelehnt.
+Schema 1 wird durch die `@Serializable`-Typen in `core:model` definiert. Eine inkompatible Form benötigt eine neue Schema-Version und getestete Migration. Es gibt keine Altversionen zu migrieren; neuere Versionen werden ausdrücklich abgelehnt.
+
+Die Fertigstellung hat Schema 1 nicht verändert: Editor, Wiedergabe, Notensatz, Formate und Referenz-Audio nutzen ausschließlich die bereits vorhandenen typisierten Felder. Neu hinzugekommen sind nur Laufzeitklassen (Wiedergabeplan, Anzeigeliste, Wellenformen), die nie gespeichert werden. Dateien aus Phase 1 öffnen deshalb unverändert, und neue Dateien bleiben für Phase-1-Builds lesbar, solange sie nur Schema-1-Felder enthalten.
 
 Polymorphe Artikulationen verwenden feste Tags (`mark`, `bend`, `whammy`, `slide`, `harmonic`, `vibrato`, `trill`, `tremolo_picking`, `grace`, `dynamic`, `pickstroke`, `percussion`). Kotlin-Paket- oder Klassennamen sind kein Bestandteil dieses Wire-Vertrags.
 
@@ -29,7 +31,7 @@ Atomare Sichtbarkeit bei Prozessabbruch wird getestet. Stromausfall, Provider-Ve
 
 ZIP-Inhalt: `manifest.json`, `project.json`, `assets/<sha256>`. Manifest benennt `riffworkbench-project`, Schema 1, Projekt-Hash und Asset-Deskriptoren. Alle referenzierten Original-/Audio-/IR-/Klangbankbytes müssen vorhanden und korrekt sein. Import erzeugt eine neue Projekt-ID und Revision 0; interne Musik-IDs bleiben erhalten.
 
-Limits: 64 MiB komprimiert, 64 MiB je Eintrag, 256 MiB entpackt, 1024 Einträge und JSON-Tiefe 128. ZIP-Einträge werden unter laufenden Limits gelesen; Größenangaben werden nicht vertraut. Keine vom Archiv vorgegebenen Pfade werden extrahiert. Doppelte/unbekannte Einträge und falsche Prüfsummen werden abgelehnt. Erst das geprüfte Archiv darf Assets übernehmen; danach wird das neue Projekt gespeichert.
+Limits: 64 MiB komprimiert, 64 MiB je Eintrag, 256 MiB entpackt, 1024 Einträge und JSON-Tiefe 128. Referenz-Audio zählt mit: komprimierte Aufnahmen (MP3, AAC, Ogg, FLAC) passen in der Regel, lange WAV-Dateien können das Limit sprengen; der Export meldet das dann ausdrücklich. ZIP-Einträge werden unter laufenden Limits gelesen; Größenangaben werden nicht vertraut. Keine vom Archiv vorgegebenen Pfade werden extrahiert. Doppelte/unbekannte Einträge und falsche Prüfsummen werden abgelehnt. Erst das geprüfte Archiv darf Assets übernehmen; danach wird das neue Projekt gespeichert.
 
 Native Dateien bewahren typisierte, derzeit noch nicht bearbeitbare Merkmale. Unverstandene GPIF-Daten liegen zusätzlich als Originalassets/ForeignData mit Referenzen und Ausgangsrevision vor. Native Speicherung behauptet nicht deren Gültigkeit für späteren GP-Rückexport. Der GP-Adapter muss Semantik und Referenzen nach Änderungen prüfen und verworfene Daten als LossEntry ausweisen.
 
