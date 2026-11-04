@@ -24,17 +24,24 @@ Android-first Offline-Editor für TAB und Partitur mit eigenem Notensatz, eigene
 - Referenz-Audio: eigene Aufnahmen (WAV, MP3, AAC/M4A, Ogg, FLAC) importieren, per Wellenform „Takt 1“ setzen, Pegel/Pan/Mute/Solo. Clips laufen sample-genau zur Partitur, auch bei Loop und Sprüngen – vorerst nur bei 100 % Tempo.
 
 **Austausch**
-- Import mit Inhaltserkennung: Guitar Pro 3/4/5; weitere Formate siehe [Formatstand](#formatstand). Die Originaldatei bleibt im Projekt erhalten, nicht übernommene Merkmale stehen im Verlustbericht.
-- Export: natives `.riffproj` (vollständig, inklusive Audio), SVG, PDF (A4), WAV-Mix (48 kHz, 24 Bit) und Stems für die DAW als ZIP mit gemeinsamem Startpunkt.
+- Import mit Inhaltserkennung (nicht nach Dateiendung): Guitar Pro 3–8, MusicXML, MIDI und eigene Projekte, siehe [Formatstand](#formatstand). Die Originaldatei bleibt im Projekt erhalten, nicht übernommene Merkmale stehen im Verlustbericht auf der Austausch-Seite.
+- Export: natives `.riffproj`, GP7, MusicXML, MIDI, ASCII-TAB, SVG, PDF, WAV-Mix und Stems für die DAW. Jedes Fremdformat meldet, was es nicht abbilden kann.
 
 ## Formatstand
 
 | Format | Import | Export |
 |---|---|---|
-| RiffWorkbench `.riffproj` | ja | ja |
-| Guitar Pro 3, 4, 5 | ja (gegen eigene Fixtures geprüft) | – |
+| RiffWorkbench `.riffproj` | ja, vollständig | ja, vollständig inklusive Originale und Audio |
+| Guitar Pro 3, 4, 5 (`.gp3/.gp4/.gp5`) | ja | – |
+| Guitar Pro 6 (`.gpx`) | experimentell | – |
+| Guitar Pro 7/8 (`.gp`) | ja (GP8-Extras wie Backing Track landen im Verlustbericht) | GP7-kompatibel |
+| MusicXML (`.musicxml`, `.mxl`) | ja | ja (Noten + TAB-System) |
+| MIDI (`.mid`) | ja (quantisiert, Bünde werden automatisch verteilt) | ja (Wiedergabereihenfolge mit Tempo-Map) |
+| ASCII-TAB (`.txt`) | – | ja |
+| SVG, PDF (A4) | – | ja |
+| WAV-Mix, Stems + MIDI (ZIP) | – | ja (48 kHz, 24 Bit, gemeinsamer Startpunkt) |
 
-Guitar-Pro-Treue ist nur gegen selbst erzeugte Dateien geprüft, nicht gegen Guitar Pro Desktop. Siehe [offene Abnahmen](docs/SPIKES.md).
+Alles ist gegen selbst erzeugte Dateien und Rundreisen innerhalb der App geprüft, **nicht gegen Guitar Pro Desktop, MuseScore oder Cubase**. Siehe [offene Abnahmen](docs/SPIKES.md).
 
 ## Eigene Entscheidungen
 

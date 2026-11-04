@@ -6,7 +6,7 @@ Voraussetzungen: Xiaomi 15, ein langsameres Android-Gerät, kabelgebundener und 
 
 ## A: Editierintegration und GP7-Rückexport
 
-**Im Code umgesetzt:** Eigener Notensatz mit Trefferflächen auf eigene IDs, Bearbeitung über EditorCommands mit Undo, sofortiges Neulayout. GP3/4/5-, GPX- und GP7/8-Import, GP7-Export und Reimport (Formatagent-Ergebnisse in adapter:formats). Automatisiert getestet sind Import gegen eigene Fixtures, Robustheit gegen beschädigte Dateien und Rundreisen innerhalb der App.
+**Im Code umgesetzt:** Eigener Notensatz mit Trefferflächen auf eigene IDs, Bearbeitung über EditorCommands mit Undo, sofortiges Neulayout. GP3/4/5-, GPX- und GP7/8-Import, GP7-Export und Reimport in `adapter:formats`. Automatisiert getestet sind Import gegen eigene Fixtures, Robustheit gegen beschädigte Dateien und Rundreisen innerhalb der App.
 
 **Offen – Desktop-Gegencheck:**
 

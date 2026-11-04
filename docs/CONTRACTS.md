@@ -269,12 +269,12 @@ Aktuelle native Speicherung garantiert atomare Sichtbarkeit eines vollständig g
 
 ## C-FORMAT
 
-**Fremdformate und Dateitreue · Scaffold / Spike A, B–D**
+**Fremdformate und Dateitreue · Implementiert; Desktop-Gegencheck offen / C**
 
-- Grenze: FormatDetector, ScoreImporter, ScoreExporter; PendingFormatAdapter.
-- Ein-/Ausgabe: Inhaltsbasierte Familienerkennung, begrenzte Bytes + IdSource → Projekt/Verlustbericht. Export liefert echte Bytes oder Fehler. GP7-Ziel und GP8-Treue separat.
-- Ausführung und Fehler: GP3–5 binär, GP6 BCFS/BCFZ, GP7/8 ZIP/GPIF. Parser auf Worker, Ressourcenlimits, XML ohne DTD/externen Entitäten. Originalbytes bewahren. Unbekannte Felder nur nach Referenz- und Semantikprüfung wiedereinsetzen.
-- Abnahme: GP-Original/Edit/Export/Reimport auf Track/Beat/Note vergleichen. MusicXML/MIDI/ASCII/PowerTab/TablEdit und PDF/PNG/SVG pro Fähigkeit testen. Alle GP-Adapter aktuell UNAVAILABLE.
+- Grenze: `DefaultFormatCatalog` (Erkennung) über `FormatRegistry`: `GpBinaryImporter` (GP3/4/5), `GpxImporter` (GP6, experimentell), `GpifImporter` (GP7/GP8), `Gp7Exporter`, `MidiImporter`/`MidiExporter`, `MusicXmlImporter`/`MusicXmlExporter` (.musicxml und .mxl), `AsciiTabExporter`. PowerTab, TablEdit, ASCII-Import und PNG bleiben UNAVAILABLE (`PendingFormatAdapter`).
+- Ein-/Ausgabe: Untrusted Bytes + IdSource → Projekt mit null Validator-Fehlern und Verlustbericht. Export liefert echte Bytes plus Verluste oder einen Fehler, nie eine leere Erfolgsdatei. MIDI exportiert die aufgelöste Wiedergabereihenfolge mit Tempo-Map (Tick 0 = Frame 0 der Stems).
+- Ausführung und Fehler: Erkennung nur nach Inhalt (ZIP-Einträge, BCFZ/BCFS, GP-Kopf, MThd, XML-Wurzel; GP8 an GPIF-Version bzw. GP8-only-Abschnitten). Parser laufen auf einem Worker-Dispatcher; Limits für Eingabegröße, ZIP-Einträge, Entpackgröße, Verschachtelung, Zähler und Notenbudget. XML ohne DTD und Entitäten. Beschädigte Daten → CORRUPT, Überschreitungen → RESOURCE_LIMIT, alte GP-Versionen → INCOMPATIBLE_VERSION, jeweils mit deutscher Meldung. Die Bibliothek speichert die Originalbytes als Asset und genau einen ImportProvenance-Eintrag. Unbekannte GPIF-Felder werden gemeldet, aber nicht als ForeignData wiedereingesetzt.
+- Abnahme: GP3/4/5 gegen eigene PyGuitarPro-Orakel samt Verlustliste, Trunkierungs- und Mutationstests; GPIF-Rundreise, Sicherheits- und Container-Tests; MIDI/MusicXML/ASCII-Tests; Katalogtest exportiert nach GP7, MIDI, MusicXML und ASCII und importiert die Austauschformate wieder. Offen: Öffnen der GP7-Exporte in Guitar Pro 7/8 Desktop, Import echter Desktop-Dateien, MusicXML in anderen Notenprogrammen, MIDI in Cubase.
 
 ## C-INTEGRATION
 

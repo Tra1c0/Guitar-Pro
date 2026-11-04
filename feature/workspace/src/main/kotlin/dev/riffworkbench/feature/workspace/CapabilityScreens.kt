@@ -273,6 +273,10 @@ import kotlin.math.roundToLong
             Text(tr("Verlustbericht des letzten Exports", "Loss report of the last export"), style = MaterialTheme.typography.titleMedium)
             ws.lastLosses.groupBy { it.featureId }.forEach { (feature, entries) -> Text("• $feature: ${entries.first().reason}" + if (entries.size > 1) " (×${entries.size})" else "", style = MaterialTheme.typography.bodySmall) }
         }
+        ws.editor?.project?.provenance.orEmpty().filter { it.losses.isNotEmpty() }.forEach { origin ->
+            Text(tr("Beim Import (${origin.format}) nicht oder nur angenähert übernommen", "Not or only approximately imported (${origin.format})"), style = MaterialTheme.typography.titleMedium)
+            origin.losses.groupBy { it.featureId }.forEach { (feature, entries) -> Text("• $feature: ${entries.first().reason}" + if (entries.size > 1) " (×${entries.size})" else "", style = MaterialTheme.typography.bodySmall) }
+        }
         NoticeCard(tr("GP7-kompatibler Export ist nur gegen die eigene Importlogik geprüft. Das Öffnen in Guitar Pro 7/8 Desktop ist noch nicht verifiziert.",
             "The GP7-compatible export is only checked against the app's own importer. Opening in Guitar Pro 7/8 desktop is not verified yet."))
         FeatureRegistry.group("exchange").filter { it.id.startsWith("import.") || it.id.startsWith("export.") }.forEach { FeatureCard(it) }

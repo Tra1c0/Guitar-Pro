@@ -31,7 +31,8 @@ jobs:
       - name: Tests, architecture checks and lint
         run: ./gradlew check :app:lintDebug --continue --stacktrace
       - name: Collect verification summary
-        run: python3 tools/collect_validation.py
+        # The JSON is printed so the committed docs/VERIFICATION.json can be refreshed from a real run.
+        run: python3 tools/collect_validation.py && cat build/verification.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
