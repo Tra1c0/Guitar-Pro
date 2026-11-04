@@ -19,9 +19,13 @@ import kotlinx.coroutines.sync.withLock
  * swapped atomically at block boundaries. The UI state is derived from the sample clock the audio thread
  * published (polled ~30 times per second); nothing here advances the transport.
  */
+/** Loads and decodes reference-audio assets to engine-rate PCM (app wiring: asset store + WAV/platform decoder). */
+fun interface ClipLoader { suspend fun load(asset: AssetHash, targetRate: Int): Outcome<PcmBuffer> }
+
 class EngineTransport(
     private val host: RealtimeHost,
     private val compiler: ScorePlaybackCompiler = ScorePlaybackCompiler(),
+    private val clipLoader: ClipLoader? = null,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     private val pollMillis: Long = 33,
 ) : Transport, PreviewPlayer, OfflineRenderer {
@@ -38,6 +42,7 @@ class EngineTransport(
     private var poller: Job? = null
     private var lastLoops = 0L
     private var trainerPasses = 0
+    private val clipCache = HashMap<Pair<AssetHash, Int>, PcmBuffer>()
     /** Seek requested before a plan existed; applied when playback starts. */
     @Volatile private var pendingSeek: PlaybackOccurrence? = null
 
@@ -62,6 +67,7 @@ class EngineTransport(
             rackSignature = signature; rackRate = rate
         }
         host.post(HostCommand.Mix(MixState.from(project, if (settings.metronome) 1f else 0f)))
+        host.post(HostCommand.Clips(clipsFor(project, rate)))
         val previous = plan
         val program = EngineProgram.prepare(next)
         if (previous == null || installedRate != rate) host.post(HostCommand.Install(program)) else host.post(HostCommand.Reprogram(program, previous))
@@ -82,6 +88,24 @@ class EngineTransport(
                 startPolling(); r.value
             }
         }
+    }
+
+    /** Decoded clips for [project] at [rate]; clips that fail to load are skipped and reported through the state reason. */
+    private suspend fun clipsFor(project: Project, rate: Int): ClipSet {
+        val loader = clipLoader ?: return ClipSet.EMPTY
+        if (project.audio.clips.isEmpty()) return ClipSet.EMPTY
+        val buffers = HashMap<AssetHash, PcmBuffer>()
+        for (hash in project.audio.clips.map { it.asset }.distinct()) {
+            val key = hash to rate
+            val cached = clipCache[key]
+            if (cached != null) { buffers[hash] = cached; continue }
+            when (val r = withContext(Dispatchers.Default) { loader.load(hash, rate) }) {
+                is Outcome.Success -> { clipCache[key] = r.value; buffers[hash] = r.value }
+                is Outcome.Failure -> mutable.value = mutable.value.copy(reason = "Referenz-Audio: ${r.message}")
+            }
+        }
+        if (clipCache.size > 8) clipCache.keys.filter { k -> project.audio.clips.none { it.asset == k.first } }.forEach { clipCache.remove(it) }
+        return ClipSet.build(project, buffers, rate, settings.speed)
     }
 
     override suspend fun play(): Outcome<Unit> = mutex.withLock {
@@ -201,8 +225,10 @@ class EngineTransport(
         Outcome.Success(results)
     }
 
-    override suspend fun renderTo(project: Project, options: RenderOptions, sink: ByteSink, soloTrack: Int?, progress: (OperationProgress) -> Unit): Outcome<RenderSummary> =
-        withContext(Dispatchers.Default) { OfflineMixdown(compiler).render(project, options, sink, soloTrack, { !isActive }, progress) }
+    override suspend fun renderTo(project: Project, options: RenderOptions, sink: ByteSink, soloTrack: Int?, progress: (OperationProgress) -> Unit): Outcome<RenderSummary> {
+        val clips = if (soloTrack == null) mutex.withLock { clipsFor(project, options.sampleRate).let { ClipSet.build(project, it.voices.associate { v -> project.audio.clips.first { c -> c.id == v.clipId }.asset to v.pcm }, options.sampleRate, 1.0) } } else ClipSet.EMPTY
+        return withContext(Dispatchers.Default) { OfflineMixdown(compiler).render(project, options, sink, soloTrack, { !isActive }, progress, clips) }
+    }
 
     fun shutdown() { poller?.cancel(); poller = null; host.stop(); publish(TransportStatus.STOPPED, null) }
 

@@ -92,6 +92,9 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024) {
     private val masterL = FloatArray(maxBlock)
     private val masterR = FloatArray(maxBlock)
     private var program: EngineProgram? = null
+    private var clipSet: ClipSet = ClipSet.EMPTY
+    /** Reference-audio level relative to the synth (0 = synth only). */
+    var clipLevel = 1f
     private var rack: ChannelRack? = null
     private var mix: MixState = MixState.SILENT
     private var nextNote = 0
@@ -120,6 +123,7 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024) {
         nextClick = next?.firstClickAtOrAfter(position) ?: 0
         ended = false
     }
+    fun installClips(next: ClipSet) { clipSet = next }
     fun installRack(next: ChannelRack) { if (rack !== next) { releaseAll(fast = true); rack = next } }
     fun setMix(next: MixState) { mix = next }
     fun currentRack(): ChannelRack? = rack
@@ -199,6 +203,7 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024) {
                 if (!loopActive && position < end) limit = minOf(limit, end)
                 segEnd = (done + (limit - position)).toInt().coerceIn(done + 1, frames)
                 renderVoices(done, segEnd - done)
+                if (clipSet.exactSpeed && clipLevel > 0f) for (c in clipSet.voices) c.mix(masterL, masterR, done, segEnd - done, position, clipLevel)
                 position += (segEnd - done)
                 if (loopActive && position >= loopEnd) {
                     position = loopStart
@@ -253,6 +258,7 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024) {
         }
         val m = mix.master * 0.5f
         for (i in 0 until frames) { masterL[i] *= m; masterR[i] *= m }
+        // Reference clips were mixed into the master bus above, so they share its headroom scaling and limiter with the synth.
         for (fx in r.master) fx.process(masterL, masterR, frames)
     }
 

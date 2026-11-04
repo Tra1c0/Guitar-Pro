@@ -62,57 +62,57 @@ Aktuelle native Speicherung garantiert atomare Sichtbarkeit eines vollständig g
 
 ## C-EDITOR
 
-**Editortransaktionen · Implementiert im kleinen Kern / Phase 1**
+**Editortransaktionen · Implementiert**
 
-- Grenze: `EditorSession`, EditorCommand, ScoreValidator.
-- Ein-/Ausgabe: Command und aktuelle Auswahl → neue immutable Revision oder Validation-Fehler. Undo/Redo verwendet Musik-Snapshots, erhöht jedoch weiterhin die Revisionsnummer.
-- Ausführung und Fehler: Ein Eigentümer auf dem UI-Dispatcher. Keine Repository- oder Renderer-Mutation innerhalb von Commands. Maximal 200 Undo-Stände; neue Änderung verwirft Redo.
-- Abnahme: Noteneingabe, vier Stimmen, Akkorde, Takte, Spuren und Mixer ändern sich rückgängig. Ungültige Änderungen behalten Musik und Historie. Tests: EditorSessionTest.
+- Grenze: `EditorSession`, EditorCommand, ScoreValidator; reine Bearbeitungsfunktionen in NoteEdits, StructureEdits und TrackEdits.
+- Ein-/Ausgabe: Command und aktuelle Auswahl (Cursor, Stimme, Saite, optional Taktbereich) → neue immutable Revision oder Validation-Fehler. Undo/Redo verwendet Musik-Snapshots, erhöht jedoch weiterhin die Revisionsnummer.
+- Ausführung und Fehler: Ein Eigentümer auf dem UI-Dispatcher. Keine Repository- oder Renderer-Mutation innerhalb von Commands. Maximal 200 Undo-Stände; neue Änderung verwirft Redo. Notenwert- und Tuplet-Änderungen rücken spätere Beats der Stimme nach (Ripple im Takt) und scheitern sichtbar, wenn der Takt überläuft. Eingetippte Bünde behalten die Dauer eines vorhandenen Beats.
+- Abnahme: Noteneingabe, vier Stimmen, Akkorde, Artikulationen, Ties, Takte, Spuren und Mixer ändern sich rückgängig. Ungültige Änderungen behalten Musik und Historie. Tests: EditorSessionTest, EditorExtensionsTest.
 
 ## C-ARRANGEMENT
 
-**Erweiterte Strukturaktionen · Scaffold / B–C**
+**Strukturaktionen · Implementiert für Takte, Bereiche und Spuren; Drag-Ripple über Gesten offen / B**
 
-- Grenze: `AdvancedEditorService`, AdvancedEdit und EditProposal; PendingEditorServices.
-- Ein-/Ausgabe: Bereich, Ziel, TRACK_ONLY/ALL_TRACKS/RIPPLE und erwartete Revision → abgetrennte Vorschau. Bestätigung publiziert genau einen Replace-Command.
-- Ausführung und Fehler: Vorschau auf Worker; UI veröffentlicht nur bei passender baseRevision. ID-Neuvergabe und externe Notenlinks beim Kopieren prüfen. Ripple muss Marker, Tempo, Taktwechsel und Sync-Anker mit Vorschau verschieben.
-- Abnahme: Bereich duplizieren, verschieben, löschen und Clipboard roundtrippen; Abbruch ohne Save/Audio; ein Undo stellt alles zurück. Bis dahin UNAVAILABLE.
+- Grenze: EditorCommand (InsertMeasures, DeleteMeasures, DuplicateMeasures, PasteBars, ClearBars, SetRepeat, SetNavigation, SetKey, SetFeel, SetTempoAt, SetSection, DuplicateTrack) und `DefaultAdvancedEditor` für abgetrennte Vorschläge.
+- Ein-/Ausgabe: Taktbereich und Zielspur → neue Revision. Kopieren vergibt neue IDs und hält Notenlinks innerhalb des kopierten Bereichs; externe Links werden entfernt. Einfügen übernimmt Taktarten und verschiebt Saiten oben bündig zwischen 6/7/8-Saitern.
+- Ausführung und Fehler: Löschen verschiebt den gültigen Tempowechsel auf den nächsten verbleibenden Takt, entfernt Abschnitte, Texte, Automationspunkte und Sync-Anker der gelöschten Takte und leert verwaiste Sprungziele. Vorschläge (`propose`) prüfen die Ausgangsrevision und werden per Replace publiziert.
+- Abnahme: Bereich duplizieren, löschen, kopieren/einfügen; ein Undo stellt alles zurück. Touch-Drag mit Ripple-Vorschau ist noch nicht angebunden. Tests: EditorExtensionsTest.
 
 ## C-ARTICULATION
 
-**Artikulationen · Palm-Mute/Dead-Note-Kern implementiert; Rest Scaffold / B–D**
+**Artikulationen · Eingabe, Gravur und hörbare Umsetzung implementiert; Hörabnahme offen / C**
 
-- Grenze: `Articulation`, PitchCurvePoint, NoteLink; AdvancedEditorService für komplexe Bearbeitung.
-- Ein-/Ausgabe: Typisierte Technikparameter → Noten-/Beatänderung. Bend-Punkte verwenden rationale Position und Cents, natürliche/künstliche/Pinch-Harmonics bleiben verschieden.
-- Ausführung und Fehler: Editier- und Gravurunterstützung getrennt von hörbarem Mapping. Parameterprüfung vor Commit; keine automatische Pitchbend-Kanalteilung im Modell.
-- Abnahme: Metal-Referenzphrase darstellen/editieren; unterschiedliche Bends auf zwei Saiten getrennt halten. Hörtest und Sample-Mapping gesondert.
+- Grenze: `Articulation`, PitchCurvePoint, NoteLink; EditorCommand.ApplyArticulation/ClearArticulation/ToggleTie; ScorePlaybackCompiler und StringVoice.
+- Ein-/Ausgabe: Typisierte Technikparameter → Noten-/Beatänderung. Jede Art hat einen Slot (eine Biegung, ein Slide …); Exklusivgruppen (Hammer/Pull, Akzent/stark, Staccato/Let Ring, Ghost/Dead). Bend-Punkte verwenden rationale Position und Cents.
+- Ausführung und Fehler: Palm-Mute und Dead Notes ändern Dämpfung und Anregung des Saitenmodells, Flageoletts klingen auf der Obertonreihe, Bends/Slides/Vibrato sind Tonhöhenkurven der einzelnen Saitenstimme, Hammer-on/Pull-off/Legato-Slide/Triller schlagen nicht neu an, Let Ring klingt bis zum nächsten Anschlag derselben Saite.
+- Abnahme: Automatisiert: Tonhöhe, Abklingen PM/Dead, unabhängige Bends, Flageolett-Tonhöhe (SynthEngineTest, SequenceCompilerTest). Hörtest mit Gitarrist:innen und Vergleich mit GP8 ausstehend.
 
 ## C-INSTRUMENT
 
-**Instrumente und Bibliotheken · Vorlagen und Griffbrett-Eingabe vorhanden; freie Bearbeitung/Bibliotheken Scaffold / B–C**
+**Instrumente und Bibliotheken · Implementiert**
 
-- Grenze: InstrumentDefinition, RetuningPolicy, ChordLibrary, ScaleLibrary und AdvancedEdit.Retune.
-- Ein-/Ausgabe: Stimmung/Capo und explizite KEEP_FINGER_POSITION/KEEP_SOUNDING_PITCH-Regel → validierte neue Positionen oder sichtbare Konflikte. Suchdienste liefern Akkorde, Diagramme und Skalen.
-- Ausführung und Fehler: Kein stilles Verschieben unspielbarer Töne. Vierstimmige Noten behalten ihre IDs. Kleinere Saitenzahl und Kollisionsfälle müssen vor Commit aufgelöst werden.
-- Abnahme: 6/7/8-Saiter, Bass, Teil-Capo, Transposition und unspielbare Akkorde. Unfertige Bibliothekssuche liefert UNAVAILABLE.
+- Grenze: InstrumentDefinition, RetuningPolicy, EditorCommand.SetInstrument/MoveToString/Transpose, TuningPresets, BuiltInChordLibrary, BuiltInScaleLibrary.
+- Ein-/Ausgabe: Stimmung, Saitenzahl, Capo und explizite KEEP_FINGER_POSITION/KEEP_SOUNDING_PITCH-Regel → validierte neue Positionen oder ein Fehler mit den unspielbaren Tönen. Akkordgriffe werden für die tatsächliche Stimmung gesucht (Grundton im Bass, höchstens vier Finger, Lücken begrenzt).
+- Ausführung und Fehler: Kein stilles Verschieben unspielbarer Töne; zusätzliche Saiten werden oben bündig angefügt (6→7 ergänzt die tiefe Saite). Teil-Capo bleibt im Modell pro Saite.
+- Abnahme: 6/7/8-Saiter, Bass, Capo, Transposition und unspielbare Fälle (EditorExtensionsTest). Teil-Capo-Bedienung fehlt in der UI.
 
 ## C-DRUM
 
-**Drums und Band · Einfaches Stepgrid implementiert; Velocity/Chokes/ungerade Raster Scaffold / B–C**
+**Drums und Band · Implementiert**
 
-- Grenze: Beat/Note mit MIDI-Pitch, DrumElement, PercussionTechnique; gemeinsamer EditorCommand.ToggleDrum.
-- Ein-/Ausgabe: Zelle (Spur, Takt, Stimme, exakter Offset, MIDI-Note) → derselbe Score-Beat. Ein Toggle entfernt nur dieses Instrument.
-- Ausführung und Fehler: 48-dp-Zellen; unabhängige Stimmen. Drum-Chokes gehören zusätzlich in die Engine, nicht nur in die Darstellung.
-- Abnahme: Kick und HH am selben Beat setzen; Kick entfernen ohne HH-Verlust; Undo; später Ghost/Velocity/Chokes und ungerade Unterteilungen prüfen.
+- Grenze: Beat/Note mit MIDI-Pitch, DrumElement, PercussionTechnique; EditorCommand.ToggleDrum/SetVelocity; DrumVoice.
+- Ein-/Ausgabe: Zelle (Spur, Takt, Stimme, exakter Offset, MIDI-Note) → derselbe Score-Beat. Raster 1/8, 1/16, 1/32 und Triolen. Velocity, Ghost, Rimshot, Cross-Stick, Choke und offene Hi-Hat pro Schlag.
+- Ausführung und Fehler: Hi-Hat-Chokes (geschlossen/Pedal beendet offen), Felldämpfung beim erneuten Anschlag, Element-Lautstärke/-Pan aus dem Kit. Synthetisierte Klänge ohne Samples.
+- Abnahme: Kick und HH am selben Beat setzen; Kick entfernen ohne HH-Verlust; Undo (ApplicationFlowTest, SynthEngineTest). Hörvergleich offen.
 
 ## C-NOTATION
 
-**Notation und alphaTab · Eigene TAB implementiert; alphaTab/weitere Notation Scaffold / Spike A, C**
+**Notation · Eigener Notensatz implementiert; alphaTab bewusst nicht eingebunden**
 
-- Grenze: `NotationRenderer`, HitTestProvider, AlphaTabBoundary; aktive einfache Compose-ScoreView.
-- Ein-/Ausgabe: Projekt + Breite → revisionsgebundene Darstellung und Element-Bounds. UI-IDs bleiben eigene IDs. Die aktive TAB-Ansicht virtualisiert Takte.
-- Ausführung und Fehler: alphaTab AndroidView erst nach Toolchain-Abgleich. includeNoteBounds aktivieren; Scroll-/Zoom-Offsets zentral umrechnen. Strukturänderungen benötigen Finish/Relink; Rendering und MIDI-Cache getrennt invalidieren. Stale Render-Ergebnisse verwerfen.
-- Abnahme: Select/Edit/Undo/Rerender inklusive zweistelliger Bünde. Kein Versprechen partieller Rerenders vor Messung. alphaTab.net-Attribution erhalten.
+- Grenze: `ScoreLayouter` (core:notation) → ScoreLayout mit Anzeigeliste und Hit-Test-Geometrie; `ScoreCanvas`/`GlyphPainter` (ui:score), SvgExport, PdfExport. AlphaTabBoundary bleibt UNAVAILABLE.
+- Ein-/Ausgabe: Projekt, Spur, Stil, optional Breite und Eingaberaster → Glyphen, Takte, Beat-Spalten, Saitenpositionen, Notenboxen. Auswahl und Playhead sind Overlays ohne Neu-Layout.
+- Ausführung und Fehler: Layout auf einem Worker; 200 Takte × 16 Noten ≈ 35 ms auf der JVM. TAB mit Rhythmus und Techniken, Standardnotation mit Schlüsseln, Vorzeichen, Balken, Hilfslinien und Ties, Schlagzeugsystem. Entscheidung gegen alphaTab 1.9.0: verlangt SDK 37/Kotlin 2.4, eigenes Eingabemodell nötig, MPL-Pflichten; die eigene Engine teilt IDs und Zeitmodell direkt.
+- Abnahme: Strukturtests und visuelle PNG-Prüfung (LayoutTest). Gravurqualität gegenüber GP8, Slash/Jianpu und Lyrics-Satz offen.
 
 ## C-GESTURE
 
@@ -125,57 +125,57 @@ Aktuelle native Speicherung garantiert atomare Sichtbarkeit eines vollständig g
 
 ## C-REPEAT
 
-**Wiederholungsauflösung · Lineare Route vorhanden; echte Wiederholungen Scaffold / C**
+**Wiederholungsauflösung · Implementiert**
 
-- Grenze: RepeatCompiler → LinearRepeatCompiler für rein lineare Projekte.
-- Ein-/Ausgabe: Geschriebene Takte und Navigationsmarken → endliche PlaybackOccurrence-Liste mit Durchlauf und Routenindex.
-- Ausführung und Fehler: Budget für Sprünge und ausgegebene Takte. DC/DS/Coda/Fine und alternative Enden dürfen keinen unbegrenzten Ablauf erzeugen. Unterstützte Route darf nicht geraten werden.
-- Abnahme: Reine Linearroute geprüft; bei vorhandenen Wiederholungen aktuell UNAVAILABLE. Später goldene Routen inklusive verschachtelter Wiederholungen.
+- Grenze: RepeatCompiler → `UnfoldingRepeatCompiler`.
+- Ein-/Ausgabe: Geschriebene Takte und Navigationsmarken → endliche PlaybackOccurrence-Liste mit Durchlauf und Routenindex. `endCount` ist die Gesamtzahl der Durchläufe.
+- Ausführung und Fehler: Volten pro Durchlauf; Abschnitt beginnt beim letzten Start-Takt oder nach dem vorigen abgeschlossenen Abschnitt; D.C./D.S. werden einmal genommen, danach keine Wiederholungen und die letzte Volta; To Coda/Fine gelten nach dem Sprung. Routenlimit 20 000 Takte; D.S. ohne Segno scheitert mit Diagnose.
+- Abnahme: Goldene Routen für Wiederholung, Volten, drei Durchläufe, implizite Abschnitte, D.C. al Fine, D.S. al Coda (RouteCompilerTest).
 
 ## C-TEMPO
 
-**Tempo-Abbildung · Scaffold / Spike B, C**
+**Tempo-Abbildung · Implementiert**
 
-- Grenze: TempoMapper → PendingTempoMapper.
-- Ein-/Ausgabe: PlaybackOccurrence + Tempo-Map → Mikrosekunden; inverse Abbildung bei der Engine-Einbindung ergänzen.
-- Ausführung und Fehler: Worker; exakt rational bis zur definierten Rundung auf Mikrosekunde/Sample. Auftakt, Tempoänderungen und Swing nicht über UI-Timer berechnen.
-- Abnahme: Goldene Beat-/Sample-Positionen über nichtganzzahlige BPM; monotone Abbildung und definiertes Seek. Aktuell UNAVAILABLE.
+- Grenze: TempoMapper → `TimelineTempoMapper`; `Timing` für Takt-Zeitkarten und RouteSpan.
+- Ein-/Ausgabe: PlaybackOccurrence → Mikrosekunden; Plan-Frames ↔ Taktposition in beide Richtungen.
+- Ausführung und Fehler: Tempo folgt der geschriebenen Reihenfolge (ein D.C. nutzt wieder das Tempo von Takt 1). Tempowechsel innerhalb von Takten, Swing/Triolen-Feel als stückweise lineare Verzerrung, Fermaten dehnen alle Spuren. Bruchteil-Frames verhindern Drift.
+- Abnahme: Goldene Frame-Positionen (SequenceCompilerTest).
 
 ## C-SYNC
 
-**Score-/Audio-Sync · Scaffold / C**
+**Score-/Audio-Sync · Abbildung implementiert; Audioclips in der Engine offen / C**
 
-- Grenze: AudioSyncMapper, SyncMap, SyncAnchor.
-- Ein-/Ausgabe: Geschriebene Position samt Durchlauf und ausgewählte Sync-Map → Audiozeit. Gemeinsame Stem-Map und individueller Clip-Offset bleiben getrennt.
-- Ausführung und Fehler: Worker; Score-Tempo und Audio-Referenz als explizite Modi. Anker-Monotonie, Wiederholungsroute und Änderungen der Tempo-Map prüfen. Kein stilles Uminterpretieren.
-- Abnahme: Anker an Transiente/Beat/Takt setzen, Offset ändern, Loop/Seek und Wiederholungen prüfen. Aktuell UNAVAILABLE.
+- Grenze: AudioSyncMapper → `AnchorSyncMapper`, SyncMap, SyncAnchor.
+- Ein-/Ausgabe: Position samt Durchlauf und Sync-Map → Audiozeit; stückweise linear zwischen Ankern, außerhalb mit der Rate des nächsten Segments.
+- Ausführung und Fehler: SCORE_TEMPO und AUDIO_REFERENCE als explizite Modi. Referenzaudio wird noch nicht decodiert und gemischt.
+- Abnahme: Abbildung getestet (SequenceCompilerTest); Wiedergabe von Stems offen.
 
 ## C-SEQUENCER
 
-**Playback-Compiler · Scaffold / Spike B, B–D**
+**Playback-Compiler · Implementiert**
 
-- Grenze: PlaybackCompiler → PendingPlaybackCompiler.
-- Ein-/Ausgabe: Projekt + Samplerate → immutable PlaybackPlan mit Revision, Route und samplegenauen Events.
-- Ausführung und Fehler: Vorberechnung auf Worker. Tuplets, Swing, Ties, Grace, Fermaten und Automation hier abbilden. Seek benötigt Instrument-/Controllerzustand und definierte Ausklänge.
-- Abnahme: PCM-/Event-Fixtures für Rhythmus, gehaltene Noten und unabhängige Bends; UI-FPS darf Transport nicht beeinflussen. Aktuell UNAVAILABLE.
+- Grenze: PlaybackCompiler → `ScorePlaybackCompiler` mit PlaybackOptions (Geschwindigkeit).
+- Ein-/Ausgabe: Projekt + Samplerate → immutable PlaybackPlan mit Route, Spans, Metronom-Klicks und einem ScheduledNote je gespielter Note (eigene Tonhöhenkurve, Anschlagsart, Technik, Saite, Choke-Gruppe).
+- Ausführung und Fehler: Vorberechnung auf Worker. Ties über Taktgrenzen, Hammer/Pull/Legato, Slides mit Zielton, Let Ring mit Saiten-Choke, Grace Notes, Tremolo Picking, Triller, Strums, Dynamik, Akzente, Drum-Artikulationen. Automation wird nicht ausgewertet.
+- Abnahme: SequenceCompilerTest; unabhängige Bends auf zwei Saiten.
 
 ## C-AUDIO
 
-**Native Audio-Engine · Scaffold / Spike B, B–D**
+**Audio-Engine · Implementiert (Kotlin, AudioTrack); Gerätemessungen offen**
 
-- Grenze: Transport und AudioEngine → PendingAudioServices.
-- Ein-/Ausgabe: Prepare → STOPPED; Play → PLAYING; Pause/Seek/Loop/Stop; Gerätefehler → INTERRUPTED/FAILED. Aktuell ausschließlich UNAVAILABLE.
-- Ausführung und Fehler: Native Sample-Clock mit Ausgabetimestamps. Oboe-Kandidat; begrenzte Eventqueues/Snapshots. Callback ohne Allokationen, Locks, I/O oder JNI pro Sample. Geräte-/Fokuswechsel über Control-Thread.
-- Abnahme: Synth, Metronom und Stem unter einer Clock, sampledefinierte Loops, Seek und 30-min-Stresslauf. Kein simuliertes Playback in Phase 1.
+- Grenze: Transport → `EngineTransport` über `RealtimeHost` und `SynthEngine`; AudioSink → `AudioTrackSink`.
+- Ein-/Ausgabe: Prepare/Play/Pause/Seek/Loop/Stop, Geschwindigkeit, Metronom, Count-in. Position aus der Hardware-Sample-Clock (AudioTrack-Timestamps), nie aus einem UI-Timer.
+- Ausführung und Fehler: Eigener Render-Thread mit Audio-Priorität, Float-PCM, Low-Latency-Modus, native Rate/Burst. Befehle über lock-freie Queue, Pläne werden blockgenau getauscht. Render-Pfad ohne Allokation, I/O oder Locks; Flush-to-Zero gegen Subnormal-Einbrüche. Audio-Fokus und Kopfhörer-Abziehen pausieren. Nach 20 s Leerlauf wird das Gerät freigegeben. Entscheidung: Kotlin statt Oboe/NDK, weil die Engine dadurch auf der JVM testbar bleibt; Umstieg bleibt über AudioSink möglich.
+- Abnahme: Automatisiert mit virtueller Senke (AudioAdapterTest, SynthEngineTest). Latenz, Underruns, 30-min-Stresstest und Route-Wechsel auf Xiaomi 15 offen.
 
 ## C-PREVIEW
 
-**Notenvorschau · Scaffold / B**
+**Notenvorschau · Implementiert; Latenz ungemessen**
 
-- Grenze: PreviewPlayer → PendingAudioServices.
-- Ein-/Ausgabe: Note + Instrument → kurzer, artikulationsabhängiger Preview-Voice oder Unavailable. Keine Transportänderung.
-- Ausführung und Fehler: Control-Thread plant den Voice; Messpunkte für Touch→Preview und tatsächlichen Ausgabetimestamp. Fehlende Engine blockiert Noteneingabe nicht.
-- Abnahme: Unter 70 ms p95 auf Xiaomi 15 über Kabel/USB als Ziel; PM/Dead/Harmonic getrennt hören. Aktuell ungemessen.
+- Grenze: PreviewPlayer → EngineTransport.
+- Ein-/Ausgabe: Projekt, Spur und Note → kurze Stimme mit denselben Artikulationsregeln wie die Wiedergabe. Keine Transportänderung, keine Projektänderung.
+- Ausführung und Fehler: Gerät wird erst beim ersten Vorhören geöffnet. Fehlende Ausgabe blockiert die Eingabe nicht.
+- Abnahme: AudioAdapterTest; Ziel unter 70 ms p95 auf dem Gerät noch nicht gemessen.
 
 ## C-SOUNDBANK
 
@@ -215,12 +215,12 @@ Aktuelle native Speicherung garantiert atomare Sichtbarkeit eines vollständig g
 
 ## C-RENDER
 
-**Offline-Export und Cubase · Scaffold / B–D**
+**Offline-Export · Implementiert; Cubase-Abnahme offen**
 
-- Grenze: OfflineRenderer, RenderOptions → PendingAudioServices.
-- Ein-/Ausgabe: Projekt + Samplerate/Bit-Tiefe/FX/Tail/Start → echte WAV-Dateien und synchrone Stems. MIDI und Tempo-Map separat.
-- Ausführung und Fehler: Derselbe Event-Compiler und Mixgraph wie Playback. Alle Stems identischer Ursprung, Samplezahl und dokumentierter FX-/Master-Status. Abbruch statt leerer Erfolgsdatei.
-- Abnahme: In Cubase an identischem Ursprung importieren, Referenzmix vergleichen und Impulse/Tempo prüfen. Aktuell UNAVAILABLE.
+- Grenze: OfflineRenderer → EngineTransport/`OfflineMixdown`; streamt WAV über ByteSink.
+- Ein-/Ausgabe: Projekt + Samplerate/Bit-Tiefe/Tail → WAV-Mix oder isolierte Spur. Stems-ZIP: eine WAV pro Spur ohne Master-Limiter, Mix mit Master-Kette, MIDI mit Tempo-Map, Liesmich.
+- Ausführung und Fehler: Derselbe Compiler, dieselbe Engine und Effektkette wie die Wiedergabe. Alle Stems beginnen bei Frame 0 der aufgelösten Route und sind gleich lang. Abbruch liefert CANCELLED statt einer leeren Datei.
+- Abnahme: Längen/Startpunkte getestet (SynthEngineTest, AudioAdapterTest). Import in Cubase und Vergleich gegen den Mix ausstehend.
 
 ## C-MIDI
 
@@ -242,21 +242,21 @@ Aktuelle native Speicherung garantiert atomare Sichtbarkeit eines vollständig g
 
 ## C-PRACTICE
 
-**Übemodus · Scaffold / B–D**
+**Übemodus · Implementiert ohne Referenzaudio**
 
-- Grenze: PracticeSettings, SpeedTrainer, CursorMode und Transport.
-- Ein-/Ausgabe: Geschwindigkeit, Count-in, Metronom, Loop und Trainer → Transportkonfiguration; Abspielposition enthält Durchlauf.
-- Ausführung und Fehler: UI liest die Audio-Uhr; visuelles Metronom folgt ihr. Synth- und Stem-Mute getrennt. Eingabe bleibt offline verfügbar.
-- Abnahme: 70%-Loop, Trainersteigerungen, Count-in und mitlaufender/fixierter Cursor; Playback-Griffbrett/Keyboard erst mit echten Events. Steuerelemente aktuell deaktiviert.
+- Grenze: PracticeSettings, SpeedTrainer und Transport.
+- Ein-/Ausgabe: Geschwindigkeit 25–150 %, Count-in (0–2 Takte), Metronom, Loop über Taktbereich, Speed-Trainer, Cursor folgt der Wiedergabe.
+- Ausführung und Fehler: UI liest die Audio-Uhr; Geschwindigkeitswechsel kompiliert neu und bleibt an derselben musikalischen Position. Trainer erhöht nach N Loop-Durchläufen bis zum Zieltempo. Stems/Audio-Mute folgen mit Referenzaudio.
+- Abnahme: Loop, Count-in, Trainer (AudioAdapterTest). Visuelles Metronom und Playback-Griffbrett offen.
 
 ## C-TUNER
 
-**Stimmgerät · Scaffold / C–D**
+**Stimmgerät · Implementiert; reale Saitenabnahme offen**
 
-- Grenze: Tuner → PendingTuner.
-- Ein-/Ausgabe: Explizit gewählter Eingang → TuningReading mit Tonhöhe, Abweichung, Konfidenz und Timestamp.
-- Ausführung und Fehler: Pitchanalyse auf Worker; Start behandelt Berechtigung, Gerätewechsel und Stille. Keine sichere Tonhöhe ohne ausreichendes Signal behaupten.
-- Abnahme: Synthetische bekannte Töne plus reale tiefe Drop-A-Saite; Oktavfehler und Störgeräusche. Aktuell UNAVAILABLE.
+- Grenze: Tuner → `InputTuner` (YIN) über AudioInputSource → `AudioRecordSource`.
+- Ein-/Ausgabe: Mikrofon nach Laufzeit-Berechtigung → TuningReading mit nächstem Ton, Cent-Abweichung, Konfidenz und Zeitstempel.
+- Ausführung und Fehler: Analyse auf eigenem Thread, Dezimierung auf 12 kHz, Fenster 1024 (bis ca. 25 Hz hinab, also Drop-A- und 5-Saiter-Bass-Saiten). Mikrofon nur während der Messung. Unsichere Messungen (Konfidenz < 0,75) werden verworfen.
+- Abnahme: Synthetische Töne 55–659 Hz (AudioAdapterTest). Reale tiefe Drop-A-Saite, Störgeräusche und Oktavfehler auf dem Gerät offen.
 
 ## C-TRANSCRIBE
 
@@ -287,9 +287,9 @@ Aktuelle native Speicherung garantiert atomare Sichtbarkeit eines vollständig g
 
 ## C-WORKFLOW
 
-**Befehle, Accessibility und Gerätestruktur · Grundstruktur/Tastatur teilweise implementiert; Rest B–D**
+**Befehle, Tastatur, Accessibility und Gerätestruktur · Implementiert bis auf eigene Kürzel**
 
-- Grenze: DefaultCommandCatalog, UI-Routen, AppSettings, FeatureRegistry.
-- Ein-/Ausgabe: Suchbare CommandDescriptor-Einträge; Befehlspalette und Custom-Shortcuts folgen. Tastaturereignisse benutzen denselben Dispatcher wie Touch.
-- Ausführung und Fehler: 48-dp-Aktionen, beschriftete Controls, Fokus-/Pfeilalternativen; Querformat und Tablet mit eigener Anordnung. Long Press bleibt optionaler Shortcut. Performance getrennt nach Touch→Paint/Preview erfassen.
-- Abnahme: Tastatur und Screenreader, 411-dp-Handy und 1280-dp-Tablet prüfen. 60 fps und <50 ms p95 Touch→Paint sind ungemessene Ziele.
+- Grenze: DefaultCommandCatalog, Tastaturbehandlung im Arbeitsbereich, UI-Routen, AppSettings, FeatureRegistry.
+- Ein-/Ausgabe: Tastatur (Ziffern, Enter, Pfeile, Bild auf/ab, Leertaste, P/X/G/H/I/T/L/S/B/V/N/D, Strg+Z/Y/S/C/V/D, Strg+↑/↓, F4) und Touch nutzen dieselben Befehle. Eigene Tastenbelegung und Befehlspalette folgen.
+- Ausführung und Fehler: 48-dp-Aktionen, beschriftete Controls, Pfeil-/Saitenalternativen zum Antippen der Partitur; Querformat und Tablet mit seitlichem Eingabefeld und NavigationRail.
+- Abnahme: Tastatur und Screenreader auf dem Gerät, 60 fps und <50 ms p95 Touch→Paint sind ungemessen.

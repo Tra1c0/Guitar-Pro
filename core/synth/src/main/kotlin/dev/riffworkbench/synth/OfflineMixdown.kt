@@ -15,7 +15,7 @@ class OfflineMixdown(private val compiler: ScorePlaybackCompiler = ScorePlayback
     }
 
     /** Renders the full mix ([soloTrack] = null) or one isolated track as WAV into [sink]. */
-    fun render(project: Project, options: RenderOptions, sink: ByteSink, soloTrack: Int? = null, isCancelled: () -> Boolean = { false }, progress: (OperationProgress) -> Unit = {}): Outcome<RenderSummary> {
+    fun render(project: Project, options: RenderOptions, sink: ByteSink, soloTrack: Int? = null, isCancelled: () -> Boolean = { false }, progress: (OperationProgress) -> Unit = {}, clips: ClipSet = ClipSet.EMPTY): Outcome<RenderSummary> {
         if (options.bitDepth !in setOf(16, 24, 32)) return Outcome.Failure(FailureCode.VALIDATION, "Bittiefe ${options.bitDepth} nicht unterstützt", contractId = "C-RENDER")
         val plan = when (val r = compiler.compileNow(project, options.sampleRate)) { is Outcome.Failure -> return r; is Outcome.Success -> r.value }
         val total = plan.totalFrames + (options.tailSeconds.coerceIn(0.0, 30.0) * options.sampleRate).roundToLong()
@@ -25,6 +25,7 @@ class OfflineMixdown(private val compiler: ScorePlaybackCompiler = ScorePlayback
         engine.installRack(ChannelRack.build(project, options.sampleRate, block, includeMasterFx = options.includeMasterFx && soloTrack == null))
         engine.setMix(MixState.from(project, 0f, soloTrack))
         engine.install(EngineProgram.prepare(plan))
+        if (soloTrack == null) engine.installClips(clips)
         engine.play(options.commonStartFrame.coerceAtLeast(0))
         val header = Wav.header(total, options.sampleRate, 2, options.bitDepth)
         sink.write(header, 0, header.size)

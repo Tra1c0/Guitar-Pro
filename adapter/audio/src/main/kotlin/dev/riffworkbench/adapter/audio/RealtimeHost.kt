@@ -15,6 +15,7 @@ sealed interface HostCommand {
     class Seek(val frame: Long) : HostCommand
     class Loop(val start: Long, val end: Long) : HostCommand
     class Preview(val note: ScheduledNote) : HostCommand
+    class Clips(val clips: ClipSet) : HostCommand
     /** Replaces the program at a new speed and maps the playhead via the old plan's route position. */
     class Reprogram(val program: EngineProgram, val mapFrom: PlaybackPlan?) : HostCommand
 }
@@ -103,6 +104,7 @@ class RealtimeHost(
                 is HostCommand.Seek -> e.seek(c.frame)
                 is HostCommand.Loop -> e.setLoop(c.start, c.end)
                 is HostCommand.Preview -> e.preview(c.note)
+                is HostCommand.Clips -> e.installClips(c.clips)
                 is HostCommand.Reprogram -> {
                     val target = c.mapFrom?.positionAt(e.position)?.let { pos -> c.program.plan.frameOf(pos.routeIndex, pos.position.offset) }
                     val wasPlaying = e.playing

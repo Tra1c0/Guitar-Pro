@@ -70,6 +70,10 @@ sealed interface EditorCommand {
     data class SetSound(val id: EntityId, val sound: SoundAssignment) : EditorCommand
     data class SetMetadata(val metadata: ProjectMetadata) : EditorCommand
     data class SetMasterMix(val mix: ChannelMix) : EditorCommand
+    // Reference audio
+    data class AddAudioClip(val clip: AudioClip, val asset: AssetDescriptor) : EditorCommand
+    data class UpdateAudioClip(val clip: AudioClip) : EditorCommand
+    data class RemoveAudioClip(val id: EntityId) : EditorCommand
 }
 
 /** Single-owner dispatcher: call selection + commands on the same UI dispatcher. No adapter mutates this state. */
@@ -183,6 +187,20 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
         is EditorCommand.SetMetadata -> { require(c.metadata.title.isNotBlank() && c.metadata.title.length <= 200) { "Titel ungültig" }; p.copy(metadata = c.metadata) }
         is EditorCommand.SetMasterMix -> { require(c.mix.volume.isFinite() && c.mix.volume in 0.0..1.0) { "Master-Lautstärke ungültig" }; p.copy(mix = p.mix.copy(master = c.mix)) }
         is EditorCommand.SetDuration -> NoteEdits.setDurationRipple(p, s) { c.duration }
+        is EditorCommand.AddAudioClip -> {
+            require(c.clip.asset == c.asset.hash) { "Clip und Asset passen nicht zusammen" }
+            require(p.audio.clips.size < 16) { "Höchstens 16 Audioclips" }
+            p.copy(audio = p.audio.copy(assets = (p.audio.assets + c.asset).distinctBy { it.hash }, clips = p.audio.clips + c.clip))
+        }
+        is EditorCommand.UpdateAudioClip -> {
+            require(p.audio.clips.any { it.id == c.clip.id }) { "Clip fehlt" }
+            require(c.clip.gain.isFinite() && c.clip.gain in 0.0..2.0 && c.clip.pan in -1.0..1.0 && kotlin.math.abs(c.clip.offsetMicros) <= 600_000_000L) { "Clip-Werte ungültig" }
+            p.copy(audio = p.audio.copy(clips = p.audio.clips.map { if (it.id == c.clip.id) c.clip else it }))
+        }
+        is EditorCommand.RemoveAudioClip -> {
+            val clips = p.audio.clips.filterNot { it.id == c.id }
+            p.copy(audio = p.audio.copy(clips = clips, assets = p.audio.assets.filter { a -> clips.any { it.asset == a.hash } }))
+        }
         else -> updateBeat(p, s, createIfMissing = c != EditorCommand.Delete) { beat, track, existed ->
             when (c) {
                 is EditorCommand.PutNote -> {
