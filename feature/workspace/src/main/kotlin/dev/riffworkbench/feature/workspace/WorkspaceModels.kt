@@ -52,6 +52,9 @@ data class WorkspaceServices(
     val formats: FormatCatalog? = null,
     val tuner: Tuner? = null,
     val chords: ChordLibrary = BuiltInChordLibrary(),
+    /** Reference audio: original files are stored by hash; the decoder validates them before a clip is added. */
+    val assets: AssetStore? = null,
+    val audioDecoder: AudioDecoder? = null,
 )
 
 /** Export targets offered in the exchange screen. */

@@ -2,6 +2,8 @@ package dev.riffworkbench.app
 
 import android.app.Application
 import dev.riffworkbench.adapter.alphatab.AlphaTabBoundary
+import dev.riffworkbench.adapter.audio.AudioDecoders
+import dev.riffworkbench.adapter.audio.DecodingClipLoader
 import dev.riffworkbench.adapter.audio.EngineTransport
 import dev.riffworkbench.adapter.audio.InputTuner
 import dev.riffworkbench.adapter.audio.RealtimeHost
@@ -13,6 +15,7 @@ import dev.riffworkbench.model.*
 import dev.riffworkbench.platform.AudioRecordSource
 import dev.riffworkbench.platform.AudioTrackSink
 import dev.riffworkbench.platform.Documents
+import dev.riffworkbench.platform.MediaCodecAudioDecoder
 import dev.riffworkbench.platform.PlaybackGuard
 import dev.riffworkbench.platform.audioThreadStarter
 import java.io.File
@@ -39,12 +42,14 @@ class AppContainer(application: Application) {
     val documents = Documents(application)
     /** Own synthesizer on the device's native rate; the AudioTrack sample clock drives the transport. */
     val audioHost = RealtimeHost({ AudioTrackSink(application) }, audioThreadStarter)
-    val transport = EngineTransport(audioHost)
+    /** Reference audio: WAV in Kotlin, everything else through the device's MediaCodec decoders. */
+    val audioDecoder = AudioDecoders(MediaCodecAudioDecoder())
+    val transport = EngineTransport(audioHost, clipLoader = DecodingClipLoader(assets, audioDecoder))
     val tuner = InputTuner({ AudioRecordSource(application) }, audioThreadStarter)
     val notation = AlphaTabBoundary()
     val formats = FormatRegistry.catalog()
     val integrations = IntegrationCatalog.entries
-    val workspaceServices = WorkspaceServices(preview = transport, renderer = transport, formats = formats, tuner = tuner)
+    val workspaceServices = WorkspaceServices(preview = transport, renderer = transport, formats = formats, tuner = tuner, assets = assets, audioDecoder = audioDecoder)
     private val guard = PlaybackGuard(application) { scope.launch { transport.pause() } }
 
     init {

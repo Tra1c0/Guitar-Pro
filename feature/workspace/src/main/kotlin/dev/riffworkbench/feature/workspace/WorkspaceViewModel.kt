@@ -425,6 +425,32 @@ class WorkspaceViewModel(
     private fun fileBase(p: Project?) = safe(p?.metadata?.title ?: "riff").take(60)
     fun currentProject(): Project? = session?.state?.value?.project
 
+    // ------------------------------------------------------------------ reference audio
+    /**
+     * Adds a user audio file as reference clip. The bytes are probed first (format, decoder available), then stored by
+     * hash and referenced by a new clip at offset 0. Playback loads and decodes the clip on demand.
+     */
+    fun importAudio(bytes: ByteArray, fileName: String?) { viewModelScope.launch {
+        val decoder = services.audioDecoder; val assets = services.assets
+        if (decoder == null || assets == null) { showNotice("Referenz-Audio ist in dieser Umgebung nicht verfügbar"); return@launch }
+        if (bytes.size > MAX_AUDIO_BYTES) { showNotice("Die Audiodatei ist größer als 64 MB"); return@launch }
+        mutable.value = mutable.value.copy(busy = "Audio prüfen", busyProgress = null)
+        try {
+            val info = when (val r = decoder.probe(bytes)) { is Outcome.Failure -> { showNotice(r.message); return@launch }; is Outcome.Success -> r.value }
+            val name = (fileName?.takeIf { it.isNotBlank() } ?: "Referenz").take(120)
+            val rights = AssetRights("Vom Nutzer importiertes Referenz-Audio", "unverified", false)
+            val stored = when (val r = assets.put(name, info.mediaType.ifBlank { "application/octet-stream" }, bytes, rights)) {
+                is Outcome.Failure -> { showNotice(r.message); return@launch }
+                is Outcome.Success -> r.value
+            }
+            val clip = AudioClip(ids.next(), stored.hash, name.substringBeforeLast('.').ifBlank { name })
+            if (command(EditorCommand.AddAudioClip(clip, stored)) is Outcome.Success && info.durationMicros > MAX_CLIP_MICROS)
+                showNotice("„${clip.name}“ ist länger als 10 Minuten; abgespielt werden die ersten 10 Minuten.")
+        } finally { mutable.value = mutable.value.copy(busy = null, busyProgress = null) }
+    } }
+    fun updateClip(clip: AudioClip) { command(EditorCommand.UpdateAudioClip(clip)) }
+    fun removeClip(id: EntityId) { command(EditorCommand.RemoveAudioClip(id)) }
+
     // ------------------------------------------------------------------ internals
     private fun publish() {
         mutable.value = mutable.value.copy(editor = session?.state?.value)
@@ -443,4 +469,9 @@ class WorkspaceViewModel(
         result
     }
     override fun onCleared() { tunerJob?.cancel(); viewModelScope.launch { services.tuner?.stop() } }
+
+    private companion object {
+        const val MAX_AUDIO_BYTES = 64 * 1024 * 1024
+        const val MAX_CLIP_MICROS = 600_000_000L
+    }
 }

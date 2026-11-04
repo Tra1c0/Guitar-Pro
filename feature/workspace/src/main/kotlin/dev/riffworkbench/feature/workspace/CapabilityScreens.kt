@@ -94,17 +94,62 @@ import kotlin.math.abs
     } }
 }
 
-@Composable fun AudioScreen(project: Project) {
+@Composable fun AudioScreen(vm: WorkspaceViewModel, state: EditorState, onImport: () -> Unit) {
+    val practice by vm.practice.collectAsStateWithLifecycle()
+    val transport by vm.transport.state.collectAsStateWithLifecycle()
+    val ui by vm.state.collectAsStateWithLifecycle()
+    val clips = state.project.audio.clips
     ScrollPage(stringResource(R.string.audio), stringResource(R.string.audio_hint)) {
-        if (project.audio.clips.isEmpty()) Text(stringResource(R.string.audio_empty), style = MaterialTheme.typography.titleMedium)
-        project.audio.clips.forEach { clip -> OutlinedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
-            Text(clip.name, style = MaterialTheme.typography.titleMedium)
-            Text("Offset ${clip.offsetMicros} μs · ${clip.gain}", style = MaterialTheme.typography.bodySmall)
-        } } }
-        NoticeCard(tr("Referenz-Audio und Stems sind im Projektmodell und in der Sync-Zuordnung vorbereitet. Decodieren, Wellenform und Time-Stretch folgen; bis dahin gibt es hier keine Attrappe.",
-            "Reference audio and stems are prepared in the model and the sync mapping. Decoding, waveform and time-stretch follow; until then there is no stand-in."))
+        Button(onClick = onImport, enabled = ui.busy == null && clips.size < 16) { Text(tr("Audiodatei importieren …", "Import audio file …")) }
+        Text(tr("WAV immer; MP3, AAC/M4A, Ogg und FLAC über die Decoder des Geräts. Bis 64 MB, wiedergegeben werden höchstens 10 Minuten. Die Datei bleibt privat im Projekt.",
+            "WAV always; MP3, AAC/M4A, Ogg and FLAC through the device decoders. Up to 64 MB, at most 10 minutes are played. The file stays private in the project."), style = MaterialTheme.typography.bodySmall)
+        if (clips.isNotEmpty() && abs(practice.speed - 1.0) > 1e-9) Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium) {
+            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(tr("Referenz-Audio ist nur bei 100 % Tempo hörbar – Time-Stretch fehlt noch.", "Reference audio only sounds at 100 % speed – time-stretch is not implemented yet."), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                TextButton(onClick = { vm.setSpeed(1.0) }) { Text("100 %") }
+            }
+        }
+        transport.reason?.takeIf { it.startsWith("Referenz-Audio") }?.let { NoticeCard(it, true) }
+        if (clips.isEmpty()) Text(stringResource(R.string.audio_empty), style = MaterialTheme.typography.titleMedium)
+        clips.forEach { clip -> ClipCard(vm, clip) }
+        if (clips.isNotEmpty()) Text(tr("Ausrichten: „Takt 1 im Audio bei“ ist die Stelle der Aufnahme, an der Takt 1 der Partitur beginnt. Solo gilt gemeinsam für Spuren und Clips. Loops, Sprünge und Count-in bleiben sample-genau synchron, solange das Partitur-Tempo zur Aufnahme passt.",
+            "Alignment: “Bar 1 in audio at” is the point in the recording where bar 1 of the score starts. Solo applies to tracks and clips together. Loops, seeks and count-in stay sample-locked as long as the score tempo matches the recording."), style = MaterialTheme.typography.bodySmall)
         FeatureRegistry.all.filter { it.id in listOf("audio.sync_modes", "audio.shared_map", "audio.pitch_stretch") }.forEach { FeatureCard(it) }
     }
+}
+
+@Composable private fun ClipCard(vm: WorkspaceViewModel, clip: AudioClip) {
+    var gain by remember(clip.gain) { mutableFloatStateOf(clip.gain.toFloat()) }
+    var pan by remember(clip.pan) { mutableFloatStateOf(clip.pan.toFloat()) }
+    var confirmRemove by remember(clip.id) { mutableStateOf(false) }
+    val barOneAt = -clip.offsetMicros / 1_000_000.0
+    fun shift(seconds: Double) = vm.updateClip(clip.copy(offsetMicros = (clip.offsetMicros - (seconds * 1_000_000).toLong()).coerceIn(-600_000_000L, 600_000_000L)))
+    OutlinedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(clip.name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+            if (confirmRemove) {
+                TextButton(onClick = { vm.removeClip(clip.id) }) { Text(tr("Wirklich entfernen", "Really remove"), color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = { confirmRemove = false }) { Text(tr("Abbrechen", "Cancel")) }
+            } else TextButton(onClick = { confirmRemove = true }) { Text(tr("Entfernen", "Remove")) }
+        }
+        val locale = if (english()) java.util.Locale.ROOT else java.util.Locale.GERMANY
+        Text(tr("Takt 1 im Audio bei ", "Bar 1 in audio at ") + "%.3f s".format(locale, barOneAt), style = MaterialTheme.typography.bodyLarge, fontFamily = FontFamily.Monospace)
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(-1.0 to "−1 s", -0.1 to tr("−0,1 s", "−0.1 s"), -0.01 to "−10 ms", 0.01 to "+10 ms", 0.1 to tr("+0,1 s", "+0.1 s"), 1.0 to "+1 s").forEach { (delta, label) ->
+                OutlinedButton(onClick = { shift(delta) }, contentPadding = PaddingValues(horizontal = 10.dp)) { Text(label) }
+            }
+            TextButton(onClick = { vm.updateClip(clip.copy(offsetMicros = 0)) }) { Text("0") }
+        }
+        val db = if (gain <= 0.0001f) "−∞" else "%+.1f".format(locale, 20 * kotlin.math.log10(gain.toDouble()))
+        Text(tr("Pegel", "Level") + " $db dB", style = MaterialTheme.typography.labelLarge)
+        Slider(gain, { gain = it }, valueRange = 0f..2f, onValueChangeFinished = { vm.updateClip(clip.copy(gain = gain.toDouble())) })
+        Text("Pan " + when { pan < -0.02f -> "L ${(-pan * 100).toInt()}"; pan > 0.02f -> "R ${(pan * 100).toInt()}"; else -> "C" }, style = MaterialTheme.typography.labelLarge)
+        Slider(pan, { pan = it }, valueRange = -1f..1f, onValueChangeFinished = { vm.updateClip(clip.copy(pan = pan.toDouble())) })
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(clip.mute, { vm.updateClip(clip.copy(mute = !clip.mute)) }, label = { Text("Mute") })
+            FilterChip(clip.solo, { vm.updateClip(clip.copy(solo = !clip.solo)) }, label = { Text("Solo") })
+        }
+    } }
 }
 
 @Composable fun EffectsScreen(vm: WorkspaceViewModel, state: EditorState) {

@@ -30,8 +30,8 @@ enum class WorkspacePage(val route: String, val title: Int, val icon: String) {
     EXCHANGE("exchange", R.string.exchange, "↗"), HISTORY("history", R.string.history, "↶"), INTEGRATIONS("integrations", R.string.integrations, "⌁"), STATUS("status", R.string.capabilities, "◎")
 }
 
-/** Export callbacks provided by the composition root (they own the Storage Access Framework launchers). */
-class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget) -> Unit, val pdf: () -> Unit)
+/** Document callbacks provided by the composition root (it owns the Storage Access Framework launchers). */
+class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget) -> Unit, val pdf: () -> Unit, val importAudio: () -> Unit = {})
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun WorkspaceScreen(vm: WorkspaceViewModel, onBack: () -> Unit, onExport: (ExportResult) -> Unit, onSettings: () -> Unit, initialPage: WorkspacePage = WorkspacePage.EDITOR,
@@ -76,7 +76,7 @@ class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget
                                 WorkspacePage.ARRANGEMENT -> ArrangementScreen(vm, editor)
                                 WorkspacePage.DRUMS -> DrumScreen(vm, editor)
                                 WorkspacePage.PRACTICE -> PracticeScreen(vm)
-                                WorkspacePage.AUDIO -> AudioScreen(editor.project)
+                                WorkspacePage.AUDIO -> AudioScreen(vm, editor, exportActions.importAudio)
                                 WorkspacePage.MIXER -> MixerScreen(vm, editor)
                                 WorkspacePage.INSTRUMENTS -> InstrumentsScreen(vm, editor)
                                 WorkspacePage.EFFECTS -> EffectsScreen(vm, editor)

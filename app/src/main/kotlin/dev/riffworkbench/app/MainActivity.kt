@@ -115,10 +115,14 @@ object AppRoutes {
                     lifecycle.addObserver(observer)
                     onDispose { lifecycle.removeObserver(observer) }
                 }
+                val audioLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) scope.launch {
+                    when (val read = container.documents.read(uri)) { is Outcome.Failure -> vm.showNotice(read.message); is Outcome.Success -> vm.importAudio(read.value, container.documents.displayName(uri)) }
+                } }
                 val actions = remember(vm) { ExportActions(
                     bytes = { result -> if (pendingExport == null) { pendingExport = result; exportLauncher.launch(result.fileName) } },
                     stream = { target -> if (pendingStream == null) { pendingStream = target to vm; streamLauncher.launch(vm.suggestedName(target)) } },
                     pdf = { if (pendingPdf == null) { pendingPdf = vm; pdfLauncher.launch(vm.suggestedName(ExportTarget.PDF)) } },
+                    importAudio = { audioLauncher.launch(arrayOf("audio/*", "application/ogg")) },
                 ) }
                 WorkspaceScreen(vm, onBack = leave, onExport = actions.bytes, onSettings = { nav.navigate(AppRoutes.SETTINGS) }, exportActions = actions)
             }
