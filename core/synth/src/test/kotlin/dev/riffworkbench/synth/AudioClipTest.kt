@@ -57,4 +57,27 @@ class AudioClipTest {
         val muted = p.copy(audio = p.audio.copy(clips = p.audio.clips.map { it.copy(mute = true) }))
         assertEquals(0, ClipSet.build(muted, mapOf(p.audio.clips[0].asset to pcm), sr, 1.0).voices.size)
     }
+
+    @Test fun streamingResamplerMatchesTheOneShotConversion() {
+        val src = ShortArray(2 * 10_000) { (it * 37 % 2000 - 1000).toShort() }
+        val whole = PcmBuffer.fromShorts(44_100, 2, src, 48_000)
+        val builder = PcmBuilder(48_000, Int.MAX_VALUE / 2)
+        val chunk = ShortArray(2 * 333); var f = 0
+        while (f < 10_000) { val n = minOf(333, 10_000 - f); System.arraycopy(src, 2 * f, chunk, 0, 2 * n); builder.append(44_100, 2, chunk, n); f += n }
+        val streamed = builder.build()
+        assertEquals(whole.frames, streamed.frames)
+        for (i in 0 until 2 * whole.frames) assertEquals(whole.data[i], streamed.data[i])
+        assertFalse(builder.truncated)
+    }
+
+    @Test fun oneSoloRuleCoversTracksAndClips() {
+        val (p, pcm) = project(offsetMicros = 0)
+        val buffers = mapOf(p.audio.clips[0].asset to pcm)
+        val trackSolo = p.copy(tracks = p.tracks.map { it.copy(mix = it.mix.copy(solo = true)) })
+        assertEquals(0, ClipSet.build(trackSolo, buffers, sr, 1.0).voices.size)
+        val clipSolo = p.copy(audio = p.audio.copy(clips = p.audio.clips.map { it.copy(solo = true) }))
+        assertEquals(1, ClipSet.build(clipSolo, buffers, sr, 1.0).voices.size)
+        assertEquals(0f, MixState.from(clipSolo).gains[0])
+        assertTrue(MixState.from(p).gains[0] > 0f)
+    }
 }

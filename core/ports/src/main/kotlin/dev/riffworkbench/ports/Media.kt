@@ -59,7 +59,6 @@ interface OfflineRenderer {
     /** Streams a WAV (mix when [soloTrack] is null, otherwise that isolated track) into [sink]. */
     suspend fun renderTo(project: Project, options: RenderOptions, sink: ByteSink, soloTrack: Int? = null, progress: (OperationProgress) -> Unit = {}): Outcome<RenderSummary>
 }
-interface AudioDecoder { suspend fun decode(asset: AssetHash, targetSampleRate: Int, progress: (OperationProgress) -> Unit = {}): Outcome<AssetHash> }
 interface WaveformCache { suspend fun peaks(asset: AssetHash, samplesPerPeak: Int): Outcome<WaveformLevel> }
 interface TimeStretchProcessor { suspend fun process(asset: AssetHash, speed: Double, pitchCents: Int): Outcome<AssetHash> }
 interface SoundBankRepository {
@@ -86,6 +85,22 @@ interface AudioInputSource {
     /** Blocking read of mono float samples; returns the count read, or a negative value when closed. */
     fun read(buffer: FloatArray, frames: Int): Int
     fun close()
+}
+
+/** Format facts of an audio file, read without decoding the whole stream. */
+data class AudioInfo(val mediaType: String, val sampleRate: Int, val channels: Int, val durationMicros: Long)
+
+/** Receives decoded audio as interleaved 16-bit PCM; returning false stops decoding (limit reached or cancelled). */
+fun interface PcmSink { fun accept(sampleRate: Int, channels: Int, data: ShortArray, frames: Int): Boolean }
+
+/**
+ * C-DECODE reference-audio decoding. [probe] validates untrusted bytes and reports the format; [decode] streams PCM
+ * chunks to [PcmSink] so no full-length intermediate copy is needed. Android implements compressed formats with
+ * MediaCodec; WAV is decoded in Kotlin.
+ */
+interface AudioDecoder {
+    suspend fun probe(bytes: ByteArray): Outcome<AudioInfo>
+    suspend fun decode(bytes: ByteArray, sink: PcmSink): Outcome<AudioInfo>
 }
 
 data class MidiCapture(val deviceId: String, val timestampNanos: Long, val data: List<Int>)

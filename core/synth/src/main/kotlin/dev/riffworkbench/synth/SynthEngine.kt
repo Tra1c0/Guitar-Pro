@@ -67,7 +67,7 @@ class MixState internal constructor(internal val gains: FloatArray, internal val
         val SILENT = MixState(FloatArray(0), FloatArray(0), 1f, 0f)
         fun volumeToGain(volume: Double): Float = (volume.coerceIn(0.0, 1.0).let { it * it } / 0.64).toFloat()
         fun from(project: Project, metronome: Float = 0f, soloOverride: Int? = null): MixState {
-            val anySolo = soloOverride != null || project.tracks.any { it.mix.solo }
+            val anySolo = soloOverride != null || project.tracks.any { it.mix.solo } || project.audio.clips.any { it.solo }
             val gains = FloatArray(project.tracks.size) { i ->
                 val mix = project.tracks[i].mix
                 val audible = if (soloOverride != null) i == soloOverride else !mix.mute && (!anySolo || mix.solo)

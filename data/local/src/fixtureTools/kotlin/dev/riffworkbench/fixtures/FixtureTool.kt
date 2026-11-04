@@ -87,8 +87,11 @@ fun main(args: Array<String>) = runBlocking {
         ))
         save("shared-clock", clock)
         val files = root.listFiles()!!.filter { it.extension in listOf("json", "riffproj", "wav") && it.name != "manifest.json" }.sortedBy { it.name }
-        val checksums = files.joinToString("\n") { file -> MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) } + "  " + file.name }
-        File(root, "SHA256SUMS").writeText(checksums + "\n")
+        val checksums = files.map { file -> MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) } + "  " + file.name }
+        // Lines for fixtures in subdirectories (e.g. gp/ from tools/make_gp_fixtures.py) belong to other generators and are kept.
+        val sums = File(root, "SHA256SUMS")
+        val foreign = if (sums.isFile) sums.readLines().filter { line -> line.substringAfter("  ", "").contains('/') } else emptyList()
+        sums.writeText((checksums + foreign).joinToString("\n") + "\n")
         println("Generated ${files.size} own fixtures in $root")
     } finally { cache.deleteRecursively() }
 }
