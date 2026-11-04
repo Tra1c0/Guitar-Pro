@@ -145,6 +145,16 @@ class SequenceCompilerTest {
         assertEquals(1, notes.single { it.soundingPitch == 46.0 }.chokeGroup)
     }
 
+    @Test fun kitElementLevelAndPanReachTheScheduledHits() {
+        val m = listOf(kit.measure())
+        val base = kit.drums(m, mapOf(0 to listOf(Beat(kit.id(), Fraction.ZERO, WrittenDuration(8), listOf(Note(kit.id(), Pitch(36)), Note(kit.id(), Pitch(38)))))))
+        val d = base.copy(instrument = base.instrument.copy(drumKit = base.instrument.drumKit.map { if (it.midiNote == 36) it.copy(volume = 1.5, pan = -0.4) else it }))
+        val notes = plan(kit.project(m, listOf(d))).notes
+        val kick = notes.single { it.soundingPitch == 36.0 }; val snare = notes.single { it.soundingPitch == 38.0 }
+        assertEquals(1.5, kick.elementGain, 1e-9); assertEquals(-0.4, kick.elementPan, 1e-9)
+        assertEquals(1.0, snare.elementGain, 1e-9); assertEquals(0.0, snare.elementPan, 1e-9)
+    }
+
     @Test fun metronomeFollowsMeterGrouping() {
         val m = listOf(kit.measure(), kit.measure(TimeSignature(7, 8)), kit.measure(TimeSignature(6, 8)))
         val plan = plan(kit.project(m, listOf(kit.guitar(m))))

@@ -172,6 +172,7 @@ import dev.riffworkbench.ui.score.pitchName
                     }
                 } }
             }
+            DrumKitMix(vm, track)
             val note = vm.selectedBeat(state)?.notes?.firstOrNull()
             if (note != null) {
                 Text(tr("Ausgewählter Schlag", "Selected hit"), style = MaterialTheme.typography.titleSmall)
@@ -186,6 +187,27 @@ import dev.riffworkbench.ui.score.pitchName
             }
         }
     }
+}
+
+/** Level and pan per kit element (kick louder, toms panned); one transaction per slider gesture. */
+@Composable private fun DrumKitMix(vm: WorkspaceViewModel, track: Track) {
+    var selected by remember(track.id) { mutableStateOf<Int?>(null) }
+    Text(tr("Kit-Mix pro Element", "Kit mix per element"), style = MaterialTheme.typography.titleSmall)
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        track.instrument.drumKit.forEach { drum ->
+            FilterChip(selected == drum.midiNote, { selected = if (selected == drum.midiNote) null else drum.midiNote }, label = { Text(drum.name) })
+        }
+    }
+    val drum = track.instrument.drumKit.firstOrNull { it.midiNote == selected } ?: return
+    var volume by remember(drum) { mutableFloatStateOf(drum.volume.toFloat().coerceIn(0f, 2f)) }
+    var pan by remember(drum) { mutableFloatStateOf(drum.pan.toFloat().coerceIn(-1f, 1f)) }
+    fun commit(updated: DrumElement) = vm.command(EditorCommand.SetInstrument(track.id,
+        track.instrument.copy(drumKit = track.instrument.drumKit.map { if (it.midiNote == drum.midiNote) updated else it }), vm.retunePolicy()))
+    val db = if (volume <= 0.0001f) "−∞" else "%+.1f".format(java.util.Locale.ROOT, 20 * kotlin.math.log10(volume.toDouble()))
+    Text("${drum.name} · " + tr("Pegel", "Level") + " $db dB", style = MaterialTheme.typography.labelLarge)
+    Slider(volume, { volume = it }, valueRange = 0f..2f, onValueChangeFinished = { commit(drum.copy(volume = volume.toDouble())) })
+    Text("Pan " + when { pan < -0.02f -> "L ${(-pan * 100).toInt()}"; pan > 0.02f -> "R ${(pan * 100).toInt()}"; else -> "C" }, style = MaterialTheme.typography.labelLarge)
+    Slider(pan, { pan = it }, valueRange = -1f..1f, onValueChangeFinished = { commit(drum.copy(pan = pan.toDouble())) })
 }
 
 @Composable fun MixerScreen(vm: WorkspaceViewModel, state: EditorState) {

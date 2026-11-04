@@ -101,7 +101,7 @@ GP3/4/5, GPX und GP7/8 werden gelesen, GP7 wird geschrieben. Geprüft ist das ge
 | drums.choke | Drum-Chokes | IMPLEMENTED | NOT_APPLICABLE | NOT_APPLICABLE | IMPLEMENTED | NOT_APPLICABLE | B | [C-DRUM](CONTRACTS.md#c-drum) | AUTOMATED |
 | drums.voices | Unabhängige Drumstimmen | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | B | [C-DRUM](CONTRACTS.md#c-drum) | AUTOMATED |
 | drums.odd_grid | Ungerade Raster | NOT_APPLICABLE | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | NOT_APPLICABLE | B | [C-DRUM](CONTRACTS.md#c-drum) | AUTOMATED |
-| drums.element_mix | Lautstärke und Pan pro Drum-Element | SCAFFOLDED | SCAFFOLDED | SCAFFOLDED | EXPERIMENTAL | SCAFFOLDED | B | [C-DRUM](CONTRACTS.md#c-drum) | CONTRACT_ONLY |
+| drums.element_mix | Lautstärke und Pan pro Drum-Element | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | B | [C-DRUM](CONTRACTS.md#c-drum) | AUTOMATED |
 | band.instruments | Bass, Piano und weitere Instrumente | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | PHASE1 | [C-DRUM](CONTRACTS.md#c-drum) | AUTOMATED |
 | sound.gm | General MIDI / SoundFont | IMPLEMENTED | NOT_APPLICABLE | IMPLEMENTED | EXPERIMENTAL | IMPLEMENTED | D | [C-AUDIO](CONTRACTS.md#c-audio) | AUTOMATED |
 | sound.rse_mapping | RSE-Originaldaten und eigenes Klangmapping | EXPERIMENTAL | NOT_APPLICABLE | SCAFFOLDED | EXPERIMENTAL | NOT_APPLICABLE | D | [C-AUDIO](CONTRACTS.md#c-audio) | CONTRACT_ONLY |

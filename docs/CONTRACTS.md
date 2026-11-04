@@ -102,8 +102,8 @@ Aktuelle native Speicherung garantiert atomare Sichtbarkeit eines vollständig g
 
 - Grenze: Beat/Note mit MIDI-Pitch, DrumElement, PercussionTechnique; EditorCommand.ToggleDrum/SetVelocity; DrumVoice.
 - Ein-/Ausgabe: Zelle (Spur, Takt, Stimme, exakter Offset, MIDI-Note) → derselbe Score-Beat. Raster 1/8, 1/16, 1/32 und Triolen. Velocity, Ghost, Rimshot, Cross-Stick, Choke und offene Hi-Hat pro Schlag.
-- Ausführung und Fehler: Hi-Hat-Chokes (geschlossen/Pedal beendet offen), Felldämpfung beim erneuten Anschlag, Element-Lautstärke/-Pan aus dem Kit. Synthetisierte Klänge ohne Samples.
-- Abnahme: Kick und HH am selben Beat setzen; Kick entfernen ohne HH-Verlust; Undo (ApplicationFlowTest, SynthEngineTest). Hörvergleich offen.
+- Ausführung und Fehler: Hi-Hat-Chokes (geschlossen/Pedal beendet offen), Felldämpfung beim erneuten Anschlag, Element-Lautstärke/-Pan aus dem Kit (im Drumgrid pro Element einstellbar, eine Transaktion pro Geste). Synthetisierte Klänge ohne Samples.
+- Abnahme: Kick und HH am selben Beat setzen; Kick entfernen ohne HH-Verlust; Undo (ApplicationFlowTest, SynthEngineTest); Element-Pegel/-Pan im Plan (SequenceCompilerTest). Hörvergleich offen.
 
 ## C-NOTATION
 

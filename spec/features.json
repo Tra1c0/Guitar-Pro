@@ -1577,13 +1577,13 @@
       "stage": "B",
       "contractId": "C-DRUM",
       "dimensions": {
-        "READ": "SCAFFOLDED",
-        "DISPLAY": "SCAFFOLDED",
-        "EDIT": "SCAFFOLDED",
-        "PLAYBACK": "EXPERIMENTAL",
-        "EXPORT": "SCAFFOLDED"
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "IMPLEMENTED",
+        "EDIT": "IMPLEMENTED",
+        "PLAYBACK": "IMPLEMENTED",
+        "EXPORT": "IMPLEMENTED"
       },
-      "verification": "CONTRACT_ONLY"
+      "verification": "AUTOMATED"
     },
     {
       "id": "band.instruments",
