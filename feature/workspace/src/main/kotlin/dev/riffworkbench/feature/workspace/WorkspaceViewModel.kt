@@ -181,6 +181,17 @@ class WorkspaceViewModel(
         return if (track.instrument.tuning.isNotEmpty()) beat.notes.firstOrNull { it.string == e.selection.string } else beat.notes.firstOrNull()
     }
 
+    /** Plays the selected note (or a test note) through the track's sound; used to measure note-on latency. */
+    fun auditionSelection() {
+        val preview = services.preview ?: return
+        val e = state.value.editor ?: return
+        val track = e.project.tracks.firstOrNull { it.id == e.selection.trackId } ?: return
+        val inst = track.instrument
+        val note = selectedNote(e) ?: if (inst.tuning.isNotEmpty()) Note(EntityId("audition"), Pitch(inst.pitch(0, 5)), 0, 5) else Note(EntityId("audition"), Pitch(if (inst.kind == InstrumentKind.PERCUSSION) 38 else 60))
+        viewModelScope.launch { preview.preview(e.project, track.id, note) }
+    }
+    val audioLab: AudioLab? get() = services.audioLab
+
     private fun previewSelected(drumMidi: Int? = null) {
         val preview = services.preview ?: return
         val e = state.value.editor ?: return

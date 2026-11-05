@@ -36,7 +36,8 @@ enum class WorkspacePage(val route: String, val title: Int, val icon: String) {
     EDITOR("editor", R.string.editor, "T"), ARRANGEMENT("arrangement", R.string.arrangement, "≡"), DRUMS("drums", R.string.drums, "▦"),
     PRACTICE("practice", R.string.practice, "▶"), AUDIO("audio", R.string.audio, "≈"), MIXER("mixer", R.string.mixer, "☷"),
     INSTRUMENTS("instruments", R.string.instruments, "♮"), EFFECTS("effects", R.string.effects, "ƒ"), LAYOUT("layout", R.string.layout, "▤"),
-    EXCHANGE("exchange", R.string.exchange, "↗"), HISTORY("history", R.string.history, "↶"), INTEGRATIONS("integrations", R.string.integrations, "⌁"), STATUS("status", R.string.capabilities, "◎")
+    EXCHANGE("exchange", R.string.exchange, "↗"), HISTORY("history", R.string.history, "↶"), INTEGRATIONS("integrations", R.string.integrations, "⌁"), STATUS("status", R.string.capabilities, "◎"),
+    DIAGNOSTICS("diagnostics", R.string.audio_diagnostics, "⏱")
 }
 
 /** Accent per page for the tiles in the "more" sheet (the design's colour-coded cards). */
@@ -89,6 +90,7 @@ class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget
                                 WorkspacePage.HISTORY -> HistoryScreen(vm, ui)
                                 WorkspacePage.INTEGRATIONS -> IntegrationsScreen(onSettings)
                                 WorkspacePage.STATUS -> StatusScreen()
+                                WorkspacePage.DIAGNOSTICS -> DiagnosticsScreen(vm)
                             }
                         }
                     }

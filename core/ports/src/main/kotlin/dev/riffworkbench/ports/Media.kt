@@ -103,6 +103,42 @@ interface AudioDecoder {
     suspend fun decode(bytes: ByteArray, sink: PcmSink): Outcome<AudioInfo>
 }
 
+/** Live audio measurements (see HostStats in adapter:audio); render times are DSP work per callback block. */
+data class AudioStats(
+    val sampleRate: Int, val blockFrames: Int, val blocks: Long, val budgetMicros: Double,
+    val renderMedianMicros: Double, val renderP99Micros: Double, val renderMaxMicros: Double, val overruns: Long,
+    val underruns: Long, val outputLatencyMs: Double?, val noteOnLatencyMs: Double?, val voices: Int, val hasSamples: Boolean, val deviceName: String,
+)
+/** One second of a stress run. */
+data class StressSample(val second: Int, val stats: AudioStats?, val memoryMb: Double?, val thermal: String?, val cpuMhz: List<Int>)
+data class StressReport(val seconds: Int, val samples: List<StressSample>, val text: String)
+
+/**
+ * C-AUDIO diagnostics: measurements for the device acceptance plan (latency, DSP load, underruns, memory, thermals)
+ * and loudness-matched renders for blind listening comparisons. Implemented in the composition root.
+ */
+interface AudioLab {
+    fun stats(): AudioStats?
+    /** Plays an own 8-track stress arrangement in a loop for [seconds] and samples stats, memory and thermals each second. */
+    suspend fun stressTest(seconds: Int, onSample: (StressSample) -> Unit): Outcome<StressReport>
+    /** Renders the own comparison riff with [toneId] (clean/crunch/highgain) as stereo float PCM at 48 kHz, RMS-normalised. */
+    suspend fun renderComparison(toneId: String, sampled: Boolean): Outcome<FloatArray>
+    fun playPcm(stereo: FloatArray, sampleRate: Int)
+    fun stopPcm()
+}
+
+/** Device probes for diagnostics (Android: ActivityManager/Debug, PowerManager thermal status, cpufreq sysfs). */
+interface SystemProbes {
+    fun memoryMb(): Double?
+    fun thermal(): String?
+    fun cpuMhz(): List<Int>
+}
+/** Plays a short in-memory stereo buffer outside the engine (blind comparisons). */
+interface PcmOutput {
+    fun play(stereo: FloatArray, sampleRate: Int)
+    fun stop()
+}
+
 data class MidiCapture(val deviceId: String, val timestampNanos: Long, val data: List<Int>)
 interface MidiInput {
     val events: Flow<MidiCapture>

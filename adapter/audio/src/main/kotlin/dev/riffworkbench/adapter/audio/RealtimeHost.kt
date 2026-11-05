@@ -14,7 +14,7 @@ sealed interface HostCommand {
     data object Pause : HostCommand
     class Seek(val frame: Long) : HostCommand
     class Loop(val start: Long, val end: Long) : HostCommand
-    class Preview(val note: ScheduledNote) : HostCommand
+    class Preview(val note: ScheduledNote, val postedNanos: Long = System.nanoTime()) : HostCommand
     class Clips(val clips: ClipSet) : HostCommand
     /** Replaces the program at a new speed and maps the playhead via the old plan's route position. */
     class Reprogram(val program: EngineProgram, val mapFrom: PlaybackPlan?) : HostCommand
@@ -22,6 +22,17 @@ sealed interface HostCommand {
 
 /** What the UI may read; produced by the control thread from data the audio thread published. */
 data class HostSnapshot(val playing: Boolean, val countingIn: Boolean, val ended: Boolean, val planFrame: Long, val loopsCompleted: Long, val underruns: Long, val running: Boolean)
+
+/**
+ * Measured audio performance (diagnostics page). Render times are the DSP work per callback block, against the block
+ * budget (frames / rate). Latency comes from the device timestamps, the note-on figure from command posting to the
+ * first sample leaving the speaker. All values come from the running device, nothing is estimated from buffer sizes.
+ */
+data class HostStats(
+    val sampleRate: Int, val blockFrames: Int, val blocks: Long, val budgetMicros: Double,
+    val renderMedianMicros: Double, val renderP99Micros: Double, val renderMaxMicros: Double, val overruns: Long,
+    val underruns: Long, val outputLatencyMs: Double?, val noteOnLatencyMs: Double?, val voices: Int, val hasSamples: Boolean, val deviceName: String,
+)
 
 /**
  * Owns the engine and the render thread. Control threads only post immutable commands; the audio thread
@@ -34,7 +45,15 @@ class RealtimeHost(
     private val preferredRate: Int = 48_000,
     private val preferredBlock: Int = 192,
     private val idleStopSeconds: Double = 20.0,
+    /** Sample bank for the electric guitars; read when the engine is created (null = modelled strings only). */
+    private val bankProvider: () -> SampleBank? = { null },
 ) {
+    // Render-time ring (ns per block) and counters for [stats]; written only by the audio thread.
+    private val timingSize = 8192
+    private val timing = LongArray(timingSize)
+    @Volatile private var overruns = 0L
+    @Volatile private var noteOnNanos = -1L
+    @Volatile private var lastVoices = 0
     private val commands = ConcurrentLinkedQueue<HostCommand>()
     @Volatile private var sink: AudioSink? = null
     @Volatile var format: SinkFormat? = null; private set
@@ -66,7 +85,8 @@ class RealtimeHost(
         val f = (opened as Outcome.Success).value
         sink = s; format = f
         val previous = engine
-        engine = if (previous != null && previous.sampleRate == f.sampleRate) previous else SynthEngine(f.sampleRate, maxOf(1024, f.blockFrames))
+        val bank = bankProvider()
+        engine = if (previous != null && previous.sampleRate == f.sampleRate && previous.hasBank == (bank != null)) previous else SynthEngine(f.sampleRate, maxOf(1024, f.blockFrames), bank)
         buffer = FloatArray(f.blockFrames * 2)
         written = 0; blocks = 0; idleBlocks = 0
         running = true
@@ -103,7 +123,12 @@ class RealtimeHost(
                 HostCommand.Pause -> e.pause()
                 is HostCommand.Seek -> e.seek(c.frame)
                 is HostCommand.Loop -> e.setLoop(c.start, c.end)
-                is HostCommand.Preview -> e.preview(c.note)
+                is HostCommand.Preview -> {
+                    e.preview(c.note)
+                    // Note-on response: command queue delay plus the audio already queued in front of this block.
+                    val queued = (written - (s.presentedFrame() ?: (written - f.latencyFrames))).coerceAtLeast(0)
+                    noteOnNanos = (System.nanoTime() - c.postedNanos) + queued * 1_000_000_000L / f.sampleRate
+                }
                 is HostCommand.Clips -> e.installClips(c.clips)
                 is HostCommand.Reprogram -> {
                     val target = c.mapFrom?.positionAt(e.position)?.let { pos -> c.program.plan.frameOf(pos.routeIndex, pos.position.offset) }
@@ -117,7 +142,12 @@ class RealtimeHost(
         val flags = (if (e.playing) 1 else 0) or (if (e.countingIn) 2 else 0) or (if (e.ended) 4 else 0)
         val slot = (blocks % ringSize).toInt()
         ringSink[slot] = written; ringPlan[slot] = e.position; ringFlags[slot] = flags
+        val t0 = System.nanoTime()
         e.render(buffer, frames)
+        val dt = System.nanoTime() - t0
+        timing[(blocks % timingSize).toInt()] = dt
+        if (dt * f.sampleRate > frames * 1_000_000_000L) overruns++
+        lastVoices = e.voicesInUse
         blocks++
         lastFlags = (if (e.playing) 1 else 0) or (if (e.countingIn) 2 else 0) or (if (e.ended) 4 else 0)
         lastPlan = e.position
@@ -127,6 +157,19 @@ class RealtimeHost(
         idleBlocks = if (e.playing || e.countingIn || e.voicesInUse > 0) 0 else idleBlocks + 1
         if (idleBlocks * frames > idleStopSeconds * f.sampleRate) { running = false; return false }
         return accepted == frames
+    }
+
+    /** Statistics over the last ~[timingSize] blocks; computed on the caller's thread (allocates, never the audio thread). */
+    fun stats(): HostStats? {
+        val f = format ?: return null
+        val count = blocks
+        val n = minOf(count, timingSize.toLong()).toInt()
+        val sorted = LongArray(n) { timing[((count - 1 - it) % timingSize).toInt()] }.also { it.sort() }
+        fun pct(p: Double) = if (n == 0) 0.0 else sorted[((n - 1) * p).toInt()] / 1000.0
+        val presented = sink?.presentedFrame()
+        return HostStats(f.sampleRate, f.blockFrames, count, f.blockFrames * 1e6 / f.sampleRate, pct(0.5), pct(0.99), if (n == 0) 0.0 else sorted[n - 1] / 1000.0,
+            overruns, sink?.underruns() ?: 0, presented?.let { (written - it).coerceAtLeast(0) * 1000.0 / f.sampleRate }, noteOnNanos.takeIf { it >= 0 }?.let { it / 1e6 },
+            lastVoices, engine?.hasBank == true, f.deviceName)
     }
 
     /** Playhead from the newest block that has already reached the speaker. */

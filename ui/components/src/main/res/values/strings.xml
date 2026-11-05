@@ -136,4 +136,5 @@
     <string name="retain_fret">Griffposition erhalten</string>
     <string name="routing">Routing</string>
     <string name="soundbank">Soundbanks</string>
+    <string name="audio_diagnostics">Audio-Diagnose</string>
 </resources>

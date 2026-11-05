@@ -56,6 +56,8 @@ data class WorkspaceServices(
     val assets: AssetStore? = null,
     val audioDecoder: AudioDecoder? = null,
     val waveforms: WaveformCache? = null,
+    /** Audio measurements and blind comparisons (diagnostics page). */
+    val audioLab: AudioLab? = null,
 )
 
 /** Export targets offered in the exchange screen. */
