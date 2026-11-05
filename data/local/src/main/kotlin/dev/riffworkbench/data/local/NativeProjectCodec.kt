@@ -63,15 +63,30 @@ internal object NativeProjectCodec {
                     entry.name == "manifest.json" -> 4L * 1024 * 1024
                     m == null -> throw IllegalArgumentException("Manifest fehlt")
                     entry.name == "project.json" -> NativeArchiveLimits.MAX_ENTRY
+                    // encode writes project.json before the assets; requiring that order lets the declared
+                    // assets be checked against the score before any asset is inflated.
+                    "project.json" !in entries -> throw IllegalArgumentException("Partitur fehlt")
                     else -> m.assets.firstOrNull { "assets/${it.hash.value}" == entry.name }?.sizeBytes ?: throw IllegalArgumentException("Unerwartete oder fehlende Assets")
                 }
                 val payload = readLimitedStream(zip, minOf(limit, NativeArchiveLimits.MAX_ENTRY, NativeArchiveLimits.MAX_TOTAL - total))
                 total += payload.size
+                if (entry.name.startsWith("assets/")) {
+                    // Verify while streaming, so forged descriptors cannot make a small archive retain hundreds of MiB.
+                    require(sha256(payload) == entry.name.removePrefix("assets/")) { "Asset-Prüfsumme stimmt nicht" }
+                }
                 entries[entry.name] = payload
                 if (entry.name == "manifest.json") {
                     val text = payload.toString(Charsets.UTF_8)
                     checkJsonDepth(text)
-                    declared = projectJson.decodeFromString<BundleManifest>(text)
+                    declared = projectJson.decodeFromString<BundleManifest>(text).also { m ->
+                        require(m.assets.all { it.sizeBytes in 0..NativeArchiveLimits.MAX_ENTRY } && m.assets.sumOf { it.sizeBytes } <= NativeArchiveLimits.MAX_TOTAL) { "RESOURCE_LIMIT: Projektarchiv zu groß" }
+                    }
+                } else if (entry.name == "project.json") {
+                    val m = declared!!
+                    require(sha256(payload) == m.projectHash) { "Projekt-Prüfsumme stimmt nicht" }
+                    val project = decodeProject(payload)
+                    val expected = (project.assets + project.audio.assets).distinctBy { it.hash }
+                    require(expected == m.assets) { "Asset-Manifest widerspricht dem Projekt" }
                 }
                 zip.closeEntry()
             }

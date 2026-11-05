@@ -78,6 +78,8 @@ internal inline fun <T> storageOutcome(block: () -> T): Outcome<T> = try {
     Outcome.Failure(FailureCode.CORRUPT, e.message ?: "Beschädigtes Archiv")
 } catch (e: IOException) {
     Outcome.Failure(FailureCode.IO, e.message ?: "Dateizugriff fehlgeschlagen")
+} catch (e: OutOfMemoryError) {
+    Outcome.Failure(FailureCode.RESOURCE_LIMIT, "Nicht genügend Speicher für diese Daten")
 } catch (e: SecurityException) {
     Outcome.Failure(FailureCode.PERMISSION, e.message ?: "Zugriff verweigert")
 } catch (e: IllegalArgumentException) {

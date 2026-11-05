@@ -43,6 +43,8 @@ internal inline fun <T> guarded(what: String, failureCode: FailureCode = Failure
     formatFailure(FailureCode.CORRUPT, e.message ?: "$what enthält fehlerhaftes XML")
 } catch (e: StackOverflowError) {
     formatFailure(FailureCode.RESOURCE_LIMIT, "$what ist zu tief verschachtelt")
+} catch (e: OutOfMemoryError) {
+    formatFailure(FailureCode.RESOURCE_LIMIT, "Nicht genügend Speicher für $what")
 } catch (e: Exception) {
     formatFailure(failureCode, "$what konnte nicht verarbeitet werden: ${e.message ?: e.javaClass.simpleName}")
 }

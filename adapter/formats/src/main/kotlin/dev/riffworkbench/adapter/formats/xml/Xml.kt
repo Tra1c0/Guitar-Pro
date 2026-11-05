@@ -31,7 +31,8 @@ class XmlElement(val name: String, val attributes: Map<String, String>, val chil
 
 object XmlReader {
     const val MAX_DEPTH = 256
-    const val MAX_NODES = 4_000_000
+    /** Elements plus attributes; real scores stay far below (largest corpus GPIF ≈ 90 000). Bounds retained heap to ≈ 150 MiB. */
+    const val MAX_NODES = 1_000_000
     const val MAX_CHARS = 64 * 1024 * 1024
 
     fun parse(bytes: ByteArray): XmlElement {
@@ -116,6 +117,7 @@ object XmlReader {
                 i++
                 val end = s.indexOf(quote, i)
                 if (end < 0) throw error("Unvollständiger Attributwert")
+                if (++nodes > MAX_NODES) throw error("XML enthält zu viele Knoten")
                 if (attributes.put(key, decode(s.substring(i, end))) != null) throw error("Doppeltes Attribut $key")
                 i = end + 1
             }
