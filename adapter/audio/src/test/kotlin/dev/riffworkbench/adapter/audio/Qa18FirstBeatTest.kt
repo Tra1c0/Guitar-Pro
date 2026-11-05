@@ -152,11 +152,19 @@ class Qa18FirstBeatTest {
     private fun tol(preset: String, b: SampleBank?, firstTrigger: Boolean = true) = when {
         b != null && firstTrigger && preset == HIGHGAIN -> 0.5
         b != null && firstTrigger -> 3.0          // Clean: free-running chorus LFO, reverb tail of earlier notes in the reference
-        b != null -> 6.0                           // another round robin: the 5 ms sub-windows of the pick transient differ by up to ~5 dB
+        b != null -> 8.0                           // another round robin (per-string seeded, regions RMS-normalised): 5 ms sub-windows of the pick transient differ by up to ~7 dB; the 0-50 ms total guards the onset
         else -> 3.0                                // modelled strings: pick noise seeded from the note frame
     }
-    /** Onset-frame tolerance (1 % energy point): 8 frames where deterministic, else 64 frames = 1.3 ms; a late block would be >= 256. */
-    private fun frameTol(preset: String, b: SampleBank?, firstTrigger: Boolean = true) = if (b != null && firstTrigger && preset == HIGHGAIN) 8 else 64
+    /**
+     * Onset-frame tolerance (1 % energy point): 8 frames where deterministic, 128 frames = 2.7 ms for another round robin
+     * (per-string seeded round robins have a different pick transient, so the 1 % point moves), else 64 = 1.3 ms;
+     * a late block would be >= 256.
+     */
+    private fun frameTol(preset: String, b: SampleBank?, firstTrigger: Boolean = true) = when {
+        b != null && firstTrigger && preset == HIGHGAIN -> 8
+        b != null && !firstTrigger -> 128
+        else -> 64
+    }
 
     // ------------------------------------------------------------------ live path
 
