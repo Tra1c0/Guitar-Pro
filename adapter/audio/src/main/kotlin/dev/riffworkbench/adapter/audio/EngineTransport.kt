@@ -30,7 +30,15 @@ class EngineTransport(
     private val bankProvider: () -> SampleBank? = { null },
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     private val pollMillis: Long = 33,
+    /** Scratch blocks rendered off the audio thread after a rack build so the JIT has seen the DSP paths (0 = off). */
+    private val warmUpBlocks: Int = WARM_UP_BLOCKS,
 ) : Transport, PreviewPlayer, OfflineRenderer {
+    companion object {
+        /** Warm-up: 8 blocks of 256 frames (43 ms of audio) per host start and rack signature, capped by [WARM_UP_MAX_NANOS]. */
+        const val WARM_UP_BLOCKS = 8
+        const val WARM_UP_FRAMES = 256
+        const val WARM_UP_MAX_NANOS = 150_000_000L
+    }
     private val mutable = MutableStateFlow(TransportState(TransportStatus.STOPPED, reason = null))
     override val state: StateFlow<TransportState> = mutable.asStateFlow()
     private val mutex = Mutex()
@@ -67,6 +75,19 @@ class EngineTransport(
     @Volatile private var postedPlays = 0L
     /** Speed last requested by the caller (practice settings), as opposed to the speed the trainer has reached. */
     @Volatile private var requestedSpeed = 1.0
+    /**
+     * Playback ran to the plan's end (poller published STOPPED on the engine's `ended`) and nothing repositioned since:
+     * the next play() starts from the top (loop start) instead of the stale end position. Cleared by seek()/stop()/play()
+     * and a project switch. The render thread's own `ended` flag is not consulted by play(): it lags a posted Seek by a block.
+     */
+    @Volatile private var atEnd = false
+    /** play() is reopening a host that stopped itself in the block its Play went into; the poller keeps PLAYING meanwhile. */
+    @Volatile private var restarting = false
+    /** Host sessions opened by this transport; the DSP warm-up runs once per session and rack signature. */
+    private var hostStarts = 0
+    private var warmedFor: String? = null
+    /** Warm-ups performed so far (tests, diagnostics). */
+    @Volatile internal var warmUps = 0; private set
 
     /**
      * Stores [project] for playback. While the output is running the new plan is compiled and swapped in at the
@@ -87,6 +108,7 @@ class EngineTransport(
         if (this.project?.id != null && this.project?.id != project.id) {
             // Another project: positions (and a parked seek) of the old one mean nothing here.
             pendingSeek = null
+            atEnd = false
             mutable.value = mutable.value.copy(position = null, sample = null)
         }
         this.project = project
@@ -102,7 +124,7 @@ class EngineTransport(
         val next = when (compiled) { is Outcome.Failure -> { publish(TransportStatus.FAILED, compiled.message); return compiled }; is Outcome.Success -> compiled.value }
         val signature = ChannelRack.signature(project)
         if (forceRack || signature != rackSignature || rackRate != rate) {
-            host.post(HostCommand.Rack(withContext(Dispatchers.Default) { ChannelRack.build(project, rate, maxOf(1024, host.format?.blockFrames ?: 1024)) }))
+            host.post(HostCommand.Rack(buildRack(project, rate, host.format?.blockFrames ?: 1024)))
             rackSignature = signature; rackRate = rate
         }
         host.post(HostCommand.Mix(MixState.from(project, if (settings.metronome) 1f else 0f)))
@@ -146,12 +168,63 @@ class EngineTransport(
         return Outcome.Success(Unit)
     }
 
-    private fun ensureHost(): SinkFormat? {
-        if (host.isRunning) return host.format
+    /**
+     * Builds the live rack and, once per host session and rack signature, warms the DSP code path: a scratch engine with a
+     * scratch rack of the same project plays one note per channel for [warmUpBlocks] blocks into a scratch buffer, so the
+     * JIT has compiled Gate/AmpSim/Convolution/SampleVoice before the real-time thread meets them (a cold first block costs
+     * 10-20x the warm one). Off the audio thread, never touches the live engine, bounded by blocks and [WARM_UP_MAX_NANOS].
+     */
+    private suspend fun buildRack(project: Project, rate: Int, blockFrames: Int): ChannelRack = withContext(Dispatchers.Default) {
+        val maxBlock = maxOf(1024, blockFrames)
+        val rack = ChannelRack.build(project, rate, maxBlock)
+        val key = "$hostStarts/$rate/${rack.signature}"
+        if (warmUpBlocks > 0 && warmedFor != key) {
+            warmedFor = key
+            warmUp(project, rate, maxBlock)
+            warmUps++
+        }
+        rack
+    }
+
+    private fun warmUp(project: Project, rate: Int, maxBlock: Int) {
+        val t0 = System.nanoTime()
+        val scratch = SynthEngine(rate, maxBlock, bankProvider())
+        scratch.installRack(ChannelRack.build(project, rate, maxBlock))
+        // Every channel audible (mute/solo would skip its voice) at the project's pans.
+        scratch.setMix(MixState.from(project.copy(tracks = project.tracks.map { it.copy(mix = it.mix.copy(mute = false, solo = false)) })))
+        val frames = minOf(WARM_UP_FRAMES, maxBlock)
+        val length = (warmUpBlocks * frames).toLong()
+        project.tracks.forEachIndexed { i, track ->
+            val pitch = when {
+                track.instrument.kind == InstrumentKind.PERCUSSION -> 38
+                track.instrument.tuning.isNotEmpty() -> track.instrument.pitch(0, 0)
+                else -> 60
+            }
+            scratch.preview(ScheduledNote(EntityId("warm-up"), track.id, 0, length, Pitch(pitch), 96, if (track.instrument.tuning.isNotEmpty()) 0 else null, emptyList(), trackIndex = i))
+        }
+        val out = FloatArray(frames * 2)
+        for (b in 0 until warmUpBlocks) {
+            if (System.nanoTime() - t0 > WARM_UP_MAX_NANOS) break
+            scratch.render(out, frames)
+        }
+    }
+
+    /**
+     * Opens the output if needed. Sink open and SynthEngine construction (binder calls, ~0.3 MB of voices) run on
+     * Dispatchers.Default, not on the caller's (main) thread. On a running host the sample bank is re-checked: one that
+     * finished loading after the session began replaces the engine before this playback (never while something plays).
+     */
+    private suspend fun ensureHost(): SinkFormat? {
+        if (host.isRunning) {
+            val playing = mutable.value.status == TransportStatus.PLAYING || starting
+            if (!playing && withContext(Dispatchers.Default) { host.refreshEngine() }) { rackSignature = null; plan = null }
+            return host.format
+        }
         val previousRate = host.format?.sampleRate
-        return when (val r = host.start()) {
+        return when (val r = withContext(Dispatchers.Default) { host.start() }) {
             is Outcome.Failure -> { publish(TransportStatus.UNAVAILABLE, r.message); null }
             is Outcome.Success -> {
+                hostStarts++
                 if (previousRate != null && previousRate != r.value.sampleRate) { rackSignature = null; plan = null }
                 startPolling(); r.value
             }
@@ -193,20 +266,44 @@ class EngineTransport(
         val snap = host.snapshot()
         val parked = pendingSeek
         var from = parked?.let { frameFor(current, it) } ?: (if (restartFromTop) null else state.value.sample?.frame) ?: (if (restartFromTop) 0L else snap.planFrame)
-        if (snap.ended || from >= current.totalFrames) from = loopFrames?.first ?: 0L
+        // After a natural end without a seek since, or at/after the plan's end: from the top (loop start). The render
+        // thread's `ended` flag is deliberately not used: it still reports the last block when a Seek was just posted.
+        if (atEnd || from >= current.totalFrames) from = loopFrames?.first ?: 0L
         loopFrames?.let { (start, end) -> if (from !in start until end) from = start }
         val (countIn, clicks) = countIn(current, from)
-        synchronized(haltLock) {
+        val posted = synchronized(haltLock) {
             // Stop/pause (button, background, audio focus) arrived while this play was compiling or decoding: they win.
             if (haltEpoch != epoch) return@withLock Outcome.Success(Unit)
             if (pendingSeek === parked) pendingSeek = null
             restartFromTop = false
+            atEnd = false
             halted = null
             starting = true; startingSince = System.nanoTime()
-            host.post(HostCommand.Play(from, countIn, clicks)); postedPlays++
+            val live = host.post(HostCommand.Play(from, countIn, clicks)); postedPlays++
             mutable.value = mutable.value.copy(sample = SamplePosition(from, current.sampleRate), position = current.positionAt(from))
             trainerPasses = 0; lastLoops = snap.loopsCompleted
             publish(TransportStatus.PLAYING, null)
+            live
+        }
+        if (!posted) {
+            // The host stopped itself (idle boundary) in the very block this Play was posted into: the Play sits in a dead
+            // session's queue, which start() discards. Reopen, re-establish the engine state and post it again - once.
+            restarting = true
+            try {
+                if (synchronized(haltLock) { haltEpoch != epoch }) return@withLock Outcome.Success(Unit)
+                val f = ensureHost() ?: run { starting = false; return@withLock unavailable("C-AUDIO", "Audioausgabe konnte nicht geöffnet werden") }
+                installLocked(p, f.sampleRate, forceRack = true).let { if (it is Outcome.Failure) { starting = false; return@withLock it } }
+                val again = plan ?: run { starting = false; return@withLock unavailable("C-SEQUENCER") }
+                val target = if (again.sampleRate == current.sampleRate) from else current.positionAt(from)?.let { again.frameFor(it, orNearest = true) } ?: 0L
+                val (countIn2, clicks2) = countIn(again, target)
+                synchronized(haltLock) {
+                    if (haltEpoch != epoch) return@withLock Outcome.Success(Unit)
+                    starting = true; startingSince = System.nanoTime()
+                    host.post(HostCommand.Play(target, countIn2, clicks2)); postedPlays++
+                    mutable.value = mutable.value.copy(sample = SamplePosition(target, again.sampleRate), position = again.positionAt(target))
+                    publish(TransportStatus.PLAYING, null)
+                }
+            } finally { restarting = false }
         }
         Outcome.Success(Unit)
     } }
@@ -228,6 +325,7 @@ class EngineTransport(
         haltEpoch++
         starting = false
         pendingSeek = null
+        atEnd = false
         restartFromTop = true
         halted = TransportStatus.STOPPED
         host.post(HostCommand.Pause)
@@ -239,12 +337,13 @@ class EngineTransport(
     private fun frameFor(p: PlaybackPlan, position: PlaybackOccurrence): Long? = p.frameFor(position)
 
     override suspend fun seek(position: PlaybackOccurrence): Outcome<Unit> = mutex.withLock {
-        val p = plan ?: run { pendingSeek = position; mutable.value = mutable.value.copy(position = position, sample = null); return@withLock Outcome.Success(Unit) }
+        val p = plan ?: run { pendingSeek = position; atEnd = false; mutable.value = mutable.value.copy(position = position, sample = null); return@withLock Outcome.Success(Unit) }
         val wanted = frameFor(p, position) ?: return@withLock Outcome.Failure(FailureCode.VALIDATION, "Position liegt außerhalb der Route", contractId = "C-AUDIO")
         // As in play(): while a loop is set, playback stays inside it (a position outside means its start).
         val frame = loopFrames?.let { (a, b) -> if (wanted in a until b) wanted else a } ?: wanted
         host.post(HostCommand.Seek(frame))
         restartFromTop = false
+        atEnd = false
         mutable.value = mutable.value.copy(position = p.positionAt(frame), sample = SamplePosition(frame, p.sampleRate))
         Outcome.Success(Unit)
     }
@@ -301,17 +400,24 @@ class EngineTransport(
         if (index < 0) return@withLock Outcome.Failure(FailureCode.VALIDATION, "Spur fehlt", contractId = "C-PREVIEW")
         val wasRunning = host.isRunning
         val format = ensureHost() ?: return@withLock unavailable("C-PREVIEW", "Audioausgabe konnte nicht geöffnet werden")
-        if (!wasRunning || this.project == null || rackSignature != ChannelRack.signature(project) || rackRate != format.sampleRate) {
-            host.post(HostCommand.Rack(withContext(Dispatchers.Default) { ChannelRack.build(project, format.sampleRate, maxOf(1024, format.blockFrames)) }))
-            rackSignature = ChannelRack.signature(project); rackRate = format.sampleRate
-        }
-        host.post(HostCommand.Mix(MixState.from(project, if (settings.metronome) 1f else 0f)))
         val track = project.tracks[index]
         val single = previewProject(project, track, note)
         val compiled = compiler.compileNow(single, format.sampleRate)
         val scheduled = (compiled as? Outcome.Success)?.value?.notes ?: return@withLock unavailable("C-PREVIEW", "Note lässt sich nicht vorhören")
         val length = (0.45 * format.sampleRate).roundToLong()
-        scheduled.forEach { host.post(HostCommand.Preview(it.copy(trackIndex = index, frame = 0, endFrame = if (track.instrument.kind == InstrumentKind.PERCUSSION) it.endFrame else length))) }
+        // Rack/mix/notes go into one session's queue; if the host stopped itself in that block (post() == false), start()
+        // drops the audition - open again and post once more.
+        for (attempt in 0..1) {
+            val f = if (attempt == 0) format else ensureHost() ?: return@withLock unavailable("C-PREVIEW", "Audioausgabe konnte nicht geöffnet werden")
+            if (attempt == 1 || !wasRunning || this.project == null || rackSignature != ChannelRack.signature(project) || rackRate != f.sampleRate) {
+                host.post(HostCommand.Rack(buildRack(project, f.sampleRate, f.blockFrames)))
+                rackSignature = ChannelRack.signature(project); rackRate = f.sampleRate
+            }
+            host.post(HostCommand.Mix(MixState.from(project, if (settings.metronome) 1f else 0f)))
+            var live = true
+            scheduled.forEach { live = host.post(HostCommand.Preview(it.copy(trackIndex = index, frame = 0, endFrame = if (track.instrument.kind == InstrumentKind.PERCUSSION) it.endFrame else length))) && live }
+            if (live) break
+        }
         Outcome.Success(Unit)
     }
 
@@ -382,8 +488,9 @@ class EngineTransport(
                 val snap = host.snapshot()
                 val p = plan
                 val held = halted
-                // (An `ended` flag left over from the previous run is not an answer; give up after 1 s if the thread never starts.)
-                if (starting && (snap.plays >= postedPlays || !snap.running || System.nanoTime() - startingSince > 1_000_000_000L)) starting = false
+                // (An `ended` flag left over from the previous run is not an answer; give up after 1 s if the thread never starts.
+                // While play() reopens a host that stopped itself in the block its Play went into, the dead snapshot is not an answer either.)
+                if (starting && (snap.plays >= postedPlays || (!snap.running && !restarting) || System.nanoTime() - startingSince > 1_000_000_000L)) starting = false
                 val status = when {
                     held != null -> held
                     // Until the first block of the new playback the snapshot is stale: keep PLAYING and the seek position.
@@ -395,6 +502,8 @@ class EngineTransport(
                     mutable.value.status == TransportStatus.PLAYING -> TransportStatus.PAUSED
                     else -> mutable.value.status
                 }
+                // The plan ran out: remember it until the next seek/stop/play so play() restarts from the top, not from the last published frame.
+                if (status == TransportStatus.STOPPED && mutable.value.status == TransportStatus.PLAYING && snap.ended && snap.running) atEnd = true
                 // A snapshot taken before the engine applied the newest program belongs to the old plan: skip it.
                 if (held == null && !starting && (snap.programs >= postedPrograms || !snap.running) && (status == TransportStatus.PLAYING || snap.countingIn)) {
                     // The snapshot is taken at the block start plus its length; a wrap or end inside the block is folded back.

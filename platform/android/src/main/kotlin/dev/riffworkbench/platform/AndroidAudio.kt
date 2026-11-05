@@ -30,8 +30,20 @@ val audioThreadStarter: (String, () -> Unit) -> Thread = { name, body ->
 /**
  * C-AUDIO output: float stereo AudioTrack in low-latency mode at the device's native rate and burst size.
  * The presented position comes from AudioTrack timestamps (the hardware clock), extrapolated to now.
+ *
+ * Buffer: [OUTPUT_BUFFER_BLOCKS] bursts (at least the track's minimum). A streaming track started empty underruns at
+ * once and the output path leaves standby only when data arrives, so [open] primes the whole buffer with silence before
+ * `play()` (the documented way to prime a MODE_STREAM track) - the first rendered block then queues behind a full buffer
+ * instead of being presented into a waking output. Trade-off: the buffer is the output latency (write() blocks until
+ * there is room), so 8 blocks at 192 frames / 48 kHz are 32 ms from render to speaker and the same for note previews,
+ * against 16 ms with 4 blocks; in return a single slow (cold, interpreted) block of up to 7 bursts no longer drops out.
+ * The transport reports this latency through [SinkFormat.latencyFrames] and compensates the playhead with the timestamps.
  */
 class AudioTrackSink(private val context: Context) : AudioSink {
+    companion object {
+        /** Output buffer in bursts; see the class note on the latency trade-off. */
+        const val OUTPUT_BUFFER_BLOCKS = 8
+    }
     @Volatile private var track: AudioTrack? = null
     // presentedFrame() runs on the render, poller and stats threads; one shared AudioTimestamp would mix their reads.
     private val timestamp = ThreadLocal.withInitial { AudioTimestamp() }
@@ -43,7 +55,7 @@ class AudioTrackSink(private val context: Context) : AudioSink {
         val burst = manager.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)?.toIntOrNull()?.takeIf { it in 32..4096 } ?: preferredBlockFrames
         val block = burst.coerceIn(64, 1024)
         val minBytes = AudioTrack.getMinBufferSize(rate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_FLOAT)
-        val bufferBytes = maxOf(minBytes, block * 2 * 4 * 4)
+        val bufferBytes = maxOf(minBytes, block * 2 * 4 * OUTPUT_BUFFER_BLOCKS)
         val t = AudioTrack.Builder()
             .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
             .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_FLOAT).setSampleRate(rate).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build())
@@ -53,7 +65,18 @@ class AudioTrackSink(private val context: Context) : AudioSink {
             .build()
         if (t.state != AudioTrack.STATE_INITIALIZED) { t.release(); Outcome.Failure(FailureCode.UNAVAILABLE, "Audioausgabe konnte nicht initialisiert werden", contractId = "C-AUDIO") }
         else {
-            try { t.play() } catch (e: Exception) { t.release(); throw e }
+            try {
+                // Prime before play(): up to bufferSizeInBytes may be written to a stopped streaming track; a short
+                // transfer count here only means less silence ahead of the first block, never a failure.
+                val silence = FloatArray(t.bufferSizeInFrames * 2)
+                var primed = 0
+                while (primed < silence.size) {
+                    val w = t.write(silence, primed, silence.size - primed, AudioTrack.WRITE_BLOCKING)
+                    if (w <= 0) break
+                    primed += w
+                }
+                t.play()
+            } catch (e: Exception) { t.release(); throw e }
             track = t
             val device = t.routedDevice?.productName?.toString() ?: "Lautsprecher"
             Outcome.Success(SinkFormat(rate, block, t.bufferSizeInFrames, device))
