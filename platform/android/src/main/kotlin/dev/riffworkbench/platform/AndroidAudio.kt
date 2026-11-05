@@ -105,7 +105,7 @@ class AudioRecordSource(private val context: Context) : AudioInputSource {
                 .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_FLOAT).setSampleRate(rate).setChannelMask(AudioFormat.CHANNEL_IN_MONO).build())
                 .setBufferSizeInBytes(maxOf(min, 8192 * 4)).build()
             if (r.state != AudioRecord.STATE_INITIALIZED) { r.release(); return Outcome.Failure(FailureCode.UNAVAILABLE, "Mikrofon konnte nicht geöffnet werden", contractId = "C-TUNER") }
-            r.startRecording()
+            try { r.startRecording() } catch (e: Exception) { r.release(); throw e }
             record = r
             Outcome.Success(rate)
         } catch (e: Exception) { Outcome.Failure(FailureCode.UNAVAILABLE, e.message ?: "Mikrofon nicht verfügbar", contractId = "C-TUNER") }
