@@ -15,9 +15,14 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true }
-    testOptions { unitTests.isIncludeAndroidResources = true }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        // Compose UI tests need ui-test-manifest's ComponentActivity, which is only added to the debug variant.
+        unitTests.all { if (it.name.contains("Release")) it.exclude("**/*GestureTest*") }
+    }
 }
 kotlin { jvmToolchain(17) }
+tasks.withType<Test>().configureEach { testLogging { exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL } }
 dependencies {
     implementation(project(":core:editor"))
     api(project(":core:notation"))

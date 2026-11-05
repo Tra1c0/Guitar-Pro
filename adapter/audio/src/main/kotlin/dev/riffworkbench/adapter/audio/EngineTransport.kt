@@ -61,6 +61,10 @@ class EngineTransport(
     /** Number of pause()/stop() calls so far; lets callers (stress test) notice an external halt between its passes. */
     val halts: Long get() = synchronized(haltLock) { haltEpoch }
     private val haltLock = Any()
+    /** stop() was the last positioning: the next play() starts at the loop start of the plan current *then* (or 0). */
+    @Volatile private var restartFromTop = false
+    /** Project whose plan is installed; a different project never inherits the old position. */
+    private var planProject: EntityId? = null
     /** Speed last requested by the caller (practice settings), as opposed to the speed the trainer has reached. */
     @Volatile private var requestedSpeed = 1.0
 
@@ -82,6 +86,11 @@ class EngineTransport(
         val effective = if (keepTrainer) settings.copy(speed = this.settings.speed) else settings
         // Nothing changed (e.g. a cursor move while playing): do not recompile the whole score.
         val same = plan != null && this.project?.id == project.id && this.project?.revision == project.revision && this.settings == effective && host.isRunning
+        if (this.project?.id != null && this.project?.id != project.id) {
+            // Another project: positions (and a parked seek) of the old one mean nothing here.
+            pendingSeek = null
+            mutable.value = mutable.value.copy(position = null, sample = null)
+        }
         this.project = project
         this.settings = effective
         if (same) return@withLock Outcome.Success(Unit)
@@ -106,11 +115,13 @@ class EngineTransport(
         if (previous == null || installedRate != rate) host.post(HostCommand.Install(program))
         else host.post(HostCommand.Reprogram(program, previous, loop?.first ?: -1L, loop?.second ?: -1L))
         // While not playing, the published frame belongs to the old plan (speed or tempo changes move bars): carry it over.
-        if (previous != null && installedRate == rate && mutable.value.status != TransportStatus.PLAYING) mutable.value.sample?.let { s ->
-            previous.positionAt(s.frame)?.let { pos -> next.frameOf(pos.routeIndex, pos.position.offset) }?.let { f ->
+        if (previous != null && installedRate == rate && planProject == project.id && mutable.value.status != TransportStatus.PLAYING) mutable.value.sample?.let { s ->
+            // By bar, not by route index: inserting or deleting an earlier bar must not shift the position by a bar.
+            previous.positionAt(s.frame)?.let { pos -> next.frameFor(pos, orNearest = true) }?.let { f ->
                 mutable.value = mutable.value.copy(sample = SamplePosition(f, rate), position = next.positionAt(f))
             }
         }
+        planProject = project.id
         installedRate = rate
         plan = next
         if (applyLoopLocked(settings.loop) is Outcome.Failure) {
@@ -162,14 +173,16 @@ class EngineTransport(
         if (!wasRunning || plan == null || installedRate != format.sampleRate) installLocked(p, format.sampleRate, forceRack = true).let { if (it is Outcome.Failure) return@withLock it }
         val current = plan ?: return@withLock unavailable("C-SEQUENCER")
         val snap = host.snapshot()
-        var from = pendingSeek?.let { frameFor(current, it) } ?: state.value.sample?.frame ?: snap.planFrame
-        pendingSeek = null
+        val parked = pendingSeek
+        var from = parked?.let { frameFor(current, it) } ?: (if (restartFromTop) null else state.value.sample?.frame) ?: (if (restartFromTop) 0L else snap.planFrame)
         if (snap.ended || from >= current.totalFrames) from = loopFrames?.first ?: 0L
         loopFrames?.let { (start, end) -> if (from !in start until end) from = start }
         val (countIn, clicks) = countIn(current, from)
         synchronized(haltLock) {
             // Stop/pause (button, background, audio focus) arrived while this play was compiling or decoding: they win.
             if (haltEpoch != epoch) return@withLock Outcome.Success(Unit)
+            if (pendingSeek === parked) pendingSeek = null
+            restartFromTop = false
             halted = null
             starting = true; startingSince = System.nanoTime()
             host.post(HostCommand.Play(from, countIn, clicks))
@@ -185,7 +198,8 @@ class EngineTransport(
             if (preparesInFlight > 0) haltedDuringPrepare = true
             // Only a running playback becomes PAUSED; a stopped transport stays STOPPED so the next play starts at the cursor.
             // The published status may lag one poll behind a play that was just posted: ask the engine as well.
-            val running = mutable.value.status == TransportStatus.PLAYING || starting || host.snapshot().let { it.playing || it.countingIn }
+            // …but not right after stop(): the engine reports playing until the stop's Pause has been rendered.
+            val running = halted != TransportStatus.STOPPED && (mutable.value.status == TransportStatus.PLAYING || starting || host.snapshot().let { it.playing || it.countingIn })
             starting = false
             if (running) { halted = TransportStatus.PAUSED; host.post(HostCommand.Pause); publish(TransportStatus.PAUSED, null) }
         }
@@ -197,6 +211,7 @@ class EngineTransport(
         if (preparesInFlight > 0) haltedDuringPrepare = true
         starting = false
         pendingSeek = null
+        restartFromTop = true
         halted = TransportStatus.STOPPED
         host.post(HostCommand.Pause)
         host.post(HostCommand.Seek(loopFrames?.first ?: 0L))
@@ -204,14 +219,13 @@ class EngineTransport(
         Outcome.Success(Unit)
     }
 
-    private fun frameFor(p: PlaybackPlan, position: PlaybackOccurrence): Long? = p.frameOf(position.routeIndex, position.position.offset)
-        ?.takeIf { p.spans.getOrNull(position.routeIndex)?.measureId == position.position.measureId }
-        ?: p.spans.firstOrNull { it.measureId == position.position.measureId }?.let { kotlin.math.round(it.frameAt(position.position.offset.toDouble())).toLong() }
+    private fun frameFor(p: PlaybackPlan, position: PlaybackOccurrence): Long? = p.frameFor(position)
 
     override suspend fun seek(position: PlaybackOccurrence): Outcome<Unit> = mutex.withLock {
         val p = plan ?: run { pendingSeek = position; mutable.value = mutable.value.copy(position = position, sample = null); return@withLock Outcome.Success(Unit) }
         val frame = frameFor(p, position) ?: return@withLock Outcome.Failure(FailureCode.VALIDATION, "Position liegt außerhalb der Route", contractId = "C-AUDIO")
         host.post(HostCommand.Seek(frame))
+        restartFromTop = false
         mutable.value = mutable.value.copy(position = p.positionAt(frame), sample = SamplePosition(frame, p.sampleRate))
         Outcome.Success(Unit)
     }
@@ -356,7 +370,10 @@ class EngineTransport(
                     else -> mutable.value.status
                 }
                 if (held == null && !starting && (status == TransportStatus.PLAYING || snap.countingIn)) {
-                    mutable.value = mutable.value.copy(status = status, position = p?.positionAt(snap.planFrame), sample = SamplePosition(snap.planFrame, p?.sampleRate ?: 48_000),
+                    // The snapshot is taken at the block start plus its length; a wrap or end inside the block is folded back.
+                    val frame = loopFrames?.let { (a, b) -> if (snap.planFrame >= b && b > a) a + (snap.planFrame - b) % (b - a) else snap.planFrame }
+                        ?: p?.let { minOf(snap.planFrame, it.totalFrames) } ?: snap.planFrame
+                    mutable.value = mutable.value.copy(status = status, position = p?.positionAt(frame), sample = SamplePosition(frame, p?.sampleRate ?: 48_000),
                         underruns = snap.underruns, countingIn = snap.countingIn, speed = settings.speed, latencyMs = host.format?.let { it.latencyFrames * 1000.0 / it.sampleRate })
                 } else if (status != mutable.value.status) mutable.value = mutable.value.copy(status = status, countingIn = false)
                 if (snap.loopsCompleted != lastLoops) { val passes = snap.loopsCompleted - lastLoops; lastLoops = snap.loopsCompleted; onLoopPasses(passes) }

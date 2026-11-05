@@ -142,7 +142,7 @@ class RealtimeHost(
                 }
                 is HostCommand.Clips -> e.installClips(c.clips)
                 is HostCommand.Reprogram -> {
-                    val target = c.mapFrom?.positionAt(e.position)?.let { pos -> c.program.plan.frameOf(pos.routeIndex, pos.position.offset) }
+                    val target = c.mapFrom?.positionAt(e.position)?.let { pos -> c.program.plan.frameFor(pos, orNearest = true) }
                     val wasPlaying = e.playing
                     e.install(c.program)
                     if (c.loopStart != -2L) e.setLoop(c.loopStart, c.loopEnd)

@@ -137,6 +137,21 @@ data class PlaybackPlan(
     }
     fun frameOf(routeIndex: Int, offset: Fraction = Fraction.ZERO): Long? =
         spans.getOrNull(routeIndex)?.let { kotlin.math.round(it.frameAt(offset.toDouble())).toLong() }
+
+    /**
+     * Frame of [position] in this plan, by bar rather than by route index (indices go stale when bars are inserted or
+     * deleted): the same route index if it is still that bar, else the same pass of that bar, else its first pass.
+     * When the bar no longer exists, [orNearest] falls back to the start of the span now at that route index.
+     */
+    fun frameFor(position: PlaybackOccurrence, orNearest: Boolean = false): Long? {
+        val id = position.position.measureId
+        val span = spans.getOrNull(position.routeIndex)?.takeIf { it.measureId == id }
+            ?: spans.firstOrNull { it.measureId == id && it.occurrence == position.occurrence }
+            ?: spans.firstOrNull { it.measureId == id }
+        if (span != null) return kotlin.math.round(span.frameAt(position.position.offset.toDouble())).toLong()
+        if (!orNearest || spans.isEmpty()) return null
+        return spans[position.routeIndex.coerceIn(0, spans.lastIndex)].startFrame
+    }
 }
 data class TransportState(val status: TransportStatus = TransportStatus.UNAVAILABLE, val position: PlaybackOccurrence? = null, val sample: SamplePosition? = null, val underruns: Long = 0, val reason: String? = "Audio-Engine nicht verbunden", val speed: Double = 1.0, val loop: LoopRange? = null, val countingIn: Boolean = false, val latencyMs: Double? = null)
 enum class TransportStatus { UNAVAILABLE, STOPPED, PREPARING, PLAYING, PAUSED, INTERRUPTED, FAILED }

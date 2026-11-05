@@ -30,6 +30,8 @@ class Qa13DragGestureTest {
     private val ids = IdSource { EntityId("g-${seq++}") }
     private val moves = mutableListOf<Pair<ScoreTap, ScoreTap>>()
     private val zooms = mutableListOf<Float>()
+    private val taps = mutableListOf<ScoreTap>()
+    private var diag = ""
 
     private fun setUp(): Offset {
         val e = EditorSession(ProjectFactory(ids).create("Drag", withBand = false), ids)
@@ -39,9 +41,10 @@ class Qa13DragGestureTest {
         val box = layout.notes.first()
         compose.setContent {
             ScoreCanvas(layout = layout, cursor = ScoreCursor(p.measures[0].id, Fraction.ZERO, 2), playhead = null, follow = false, zoom = 1f,
-                onZoom = { zooms += it }, onTap = {}, modifier = Modifier.size(600.dp, 320.dp).testTag("score"), onMoveNote = { a, b -> moves += a to b })
+                onZoom = { zooms += it }, onTap = { taps += it }, modifier = Modifier.size(600.dp, 320.dp).testTag("score"), onMoveNote = { a, b -> moves += a to b })
         }
         val d = compose.density.density
+        diag = "box=$box density=$d slop?"
         return Offset((box.x + box.w / 2) * d, (box.y + box.h / 2) * d)
     }
 
@@ -50,7 +53,7 @@ class Qa13DragGestureTest {
         val at = setUp()
         compose.onNodeWithTag("score").performTouchInput { down(at); moveBy(Offset(60f, 0f)); moveBy(Offset(60f, 0f)); up() }
         compose.waitForIdle()
-        assertEquals(1, moves.size)
+        assertEquals("moves=$moves taps=$taps zooms=$zooms at=$at $diag", 1, moves.size)
     }
 
     /**

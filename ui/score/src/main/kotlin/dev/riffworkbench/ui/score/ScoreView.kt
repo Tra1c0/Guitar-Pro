@@ -157,7 +157,9 @@ fun ScoreCanvas(
                 if (currentOnMove == null) return@awaitEachGesture
                 val hx = (down.position.x + offsetX) / currentFactor; val hy = (down.position.y + offsetY) / currentFactor
                 val note = l.notes.firstOrNull { hx >= it.x && hx <= it.x + it.w && hy >= it.y && hy <= it.y + it.h } ?: return@awaitEachGesture
-                if (note.measureId != c.measureId || note.offset != c.offset || note.string != c.string) return@awaitEachGesture
+                // A notehead in the standard staff has no string: it stands for the selected note of that beat.
+                if (note.measureId != c.measureId || note.offset != c.offset || (note.string != null && note.string != c.string)) return@awaitEachGesture
+                val fromString = note.string ?: c.string
                 var dragging = false
                 var last = down.position
                 while (true) {
@@ -174,8 +176,8 @@ fun ScoreCanvas(
                 dragAt = null
                 val x = (last.x + offsetX) / currentFactor; val y = (last.y + offsetY) / currentFactor
                 val column = l.columnAt(x, y) ?: return@awaitEachGesture
-                val string = l.stringAt(y) ?: note.string
-                currentOnMove?.invoke(ScoreTap(note.measureId, note.offset, note.string, note.noteId), ScoreTap(column.measureId, column.offset, string, null))
+                val string = l.stringAt(y) ?: fromString
+                currentOnMove?.invoke(ScoreTap(note.measureId, note.offset, fromString, note.noteId), ScoreTap(column.measureId, column.offset, string, null))
             }
         }) {
         Canvas(Modifier.fillMaxSize()) {
