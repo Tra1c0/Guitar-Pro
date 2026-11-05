@@ -115,7 +115,9 @@ object AppRoutes {
             composable(AppRoutes.PROJECT, arguments = listOf(navArgument("projectId") { type = NavType.StringType })) { entry ->
                 val id = EntityId(requireNotNull(entry.arguments?.getString("projectId")))
                 val vm: WorkspaceViewModel = viewModel(factory = factory { WorkspaceViewModel(id, container.projects, container.projects, container.nativeExchange, container.settings, container.transport, container.ids, container.workspaceServices) })
-                val leave: () -> Unit = { scope.launch { container.transport.stop(); when (val result = vm.flush()) { is Outcome.Failure -> vm.showNotice(result.message); is Outcome.Success -> if (nav.currentBackStackEntry == entry) nav.popBackStack() } }; Unit }
+                // flush() may resume on the thread that released the save mutex (unconfined test dispatchers do that);
+                // the NavController must only be touched on the main thread.
+                val leave: () -> Unit = { scope.launch { container.transport.stop(); when (val result = vm.flush()) { is Outcome.Failure -> vm.showNotice(result.message); is Outcome.Success -> withContext(Dispatchers.Main.immediate) { if (nav.currentBackStackEntry == entry) nav.popBackStack() } } }; Unit }
                 BackHandler(onBack = leave)
                 val lifecycle = LocalLifecycleOwner.current.lifecycle
                 DisposableEffect(lifecycle, vm) {
