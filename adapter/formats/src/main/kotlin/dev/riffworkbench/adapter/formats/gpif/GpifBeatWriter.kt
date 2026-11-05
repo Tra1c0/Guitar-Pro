@@ -191,7 +191,7 @@ internal class BeatWriter(
         val explicit = marks.firstOrNull { it != null }
         val level = explicit ?: GpifUnits.levelOf(beat.notes.first().velocity)
         if (beat.notes.any { GpifUnits.velocityOf(level) != it.velocity } && explicit == null) losses.add("fx.dynamics", "Velocity wird auf die nächste Dynamikstufe gerundet", beat.id)
-        if (marks.any { it != null && it != explicit } || beat.notes.map { it.velocity }.distinct().size > 1) losses.add("fx.dynamics", "Dynamik/Velocity einzelner Noten eines Beats wird vereinheitlicht", beat.id)
+        if (marks.any { it != null && it != explicit } || (explicit != null && marks.any { it == null }) || beat.notes.map { it.velocity }.distinct().size > 1) losses.add("fx.dynamics", "Dynamik/Velocity einzelner Noten eines Beats wird vereinheitlicht", beat.id)
         return level
     }
 

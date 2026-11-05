@@ -519,7 +519,6 @@ private class MusicXmlScoreBuilder(private val score: XmlElement, private val id
                     if (n.grace) { if (!n.rest) pendingGraces += n; continue }
                     if (n.chord && current != null && current.start == n.start && current.first.measure == n.measure && !current.rest && !n.rest) {
                         current.notes += n
-                        if (hasWavy(n, "start")) current.vibrato = true
                         continue
                     }
                     // Tuplet starts on this note open new groups before the beat is created.
@@ -539,8 +538,9 @@ private class MusicXmlScoreBuilder(private val score: XmlElement, private val id
                         beat.notes += n
                         beat.graces += pendingGraces
                         pendingGraces.clear()
-                        if (hasWavy(n, "start")) vibratoOpen = true
+                        // A wavy line opened on an earlier beat covers the whole beat; one that starts here only its own note.
                         beat.vibrato = vibratoOpen
+                        if (hasWavy(n, "start")) vibratoOpen = true
                         if (hasWavy(n, "stop")) vibratoOpen = false
                     } else if (pendingGraces.isNotEmpty()) {
                         losses.add("grace_without_note", "Vorschlagsnoten vor Pausen werden verworfen", trackId); pendingGraces.clear()
@@ -632,7 +632,7 @@ private class MusicXmlScoreBuilder(private val score: XmlElement, private val id
                 val (midi, cents, spelling) = pitchOf(x) ?: continue
                 if (midi !in 0..127) { losses.add("pitch_range", "Tonhöhen außerhalb von MIDI 0–127 wurden verworfen", trackId); continue }
                 if (!seen.add(midi to cents) && instrument.tuning.isEmpty()) continue
-                val parsed = techniques(x, instrument, b.vibrato)
+                val parsed = techniques(x, instrument, b.vibrato || hasWavy(x, "start"))
                 val note = Note(ids.next(), Pitch(midi, cents, spelling), parsed.string, parsed.fret, x.velocity ?: 96, parsed.articulations, fingering = parsed.fingering)
                 notes += note
                 built += Built(x, note.id, starts[m] + b.start, starts[m] + b.start + b.length, voice, note)
@@ -745,7 +745,8 @@ private class MusicXmlScoreBuilder(private val score: XmlElement, private val id
             if (x.el.child("play")?.children("mute")?.any { it.text == "palm" } == true) marks += NoteMark.PALM_MUTE
             if (x.el.children("lyric").isNotEmpty()) losses.add("lyrics", "Liedtexte werden nicht übernommen", trackId)
             harmonic?.let { articulations += Articulation.Harmonic(it) }
-            if (bends.isNotEmpty()) bendArticulations(bends)?.let { articulations += it }
+            // Bend and whammy (with-bar) elements on one note are separate curves.
+            if (bends.isNotEmpty()) bends.partition { it.child("with-bar") == null }.toList().forEach { group -> if (group.isNotEmpty()) bendArticulations(group)?.let { articulations += it } }
             val fingering = if (leftHand != null || rightHand != null) Fingering(leftHand, rightHand) else null
             // String and fret only as a pair: one alone made an invalid note and rejected the whole file; the fret assigner places it.
             val paired = string != null && fret != null
@@ -766,13 +767,15 @@ private class MusicXmlScoreBuilder(private val score: XmlElement, private val id
             for (b in bends) {
                 val alter = parseDecimal(b.textOf("bend-alter"))?.toDouble() ?: continue
                 val cents = Math.round(alter * 100).toInt()
-                if (b.child("with-bar") != null) withBar = true
+                val bar = b.child("with-bar") != null
+                if (bar) withBar = true
                 if (b.child("pre-bend") != null) {
-                    pre = true; value = Math.abs(cents)
+                    // A whammy can start dipped: keep the sign of a with-bar pre-bend.
+                    pre = true; value = if (bar) cents else Math.abs(cents)
                     points.clear(); points += Fraction.ZERO to value
                     continue
                 }
-                if (b.child("release") != null && value == 0 && !pre) {
+                if (b.child("release") != null && value == 0 && !pre && !bar) {
                     // A release with nothing bent before it starts bent (pre-bend) and returns to the fretted pitch.
                     pre = true; value = Math.abs(cents); points.clear(); points += Fraction.ZERO to value
                 }

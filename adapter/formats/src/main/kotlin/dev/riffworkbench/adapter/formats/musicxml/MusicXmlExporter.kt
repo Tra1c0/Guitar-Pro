@@ -140,7 +140,14 @@ private class MusicXmlWriter(private val project: Project, private val losses: L
                         return null
                     }
                     fun link(kind: SpanKind, target: EntityId?) {
-                        if (target == null || target == note.id || target !in allNotes) return
+                        if (target == null || target == note.id || target !in allNotes) {
+                            when (kind) {
+                                SpanKind.HAMMER, SpanKind.PULL -> losses.add("hammer_pull", "Hammer-on/Pull-off ohne folgende Note auf der Saite wird nicht exportiert", note.id)
+                                SpanKind.SLIDE -> losses.add("slide", "Slide ohne folgende Note auf der Saite wird nicht exportiert", note.id)
+                                SpanKind.SLUR -> losses.add("slur", "Bindebogen ohne Zielnote wird nicht exportiert", note.id)
+                            }
+                            return
+                        }
                         if (spanStarts[note.id]?.any { it.kind == kind } == true) return
                         spanStarts.getOrPut(note.id) { ArrayList() } += Span(kind, number)
                         spanStops.getOrPut(target) { ArrayList() } += Span(kind, number)
@@ -391,17 +398,24 @@ private class MusicXmlWriter(private val project: Project, private val losses: L
                 x.start("direction-type").start("metronome", "parentheses" to "no").leaf("beat-unit", "quarter").leaf("per-minute", formatNumber(t.quarterNotesPerMinute, 2)).end().end()
             }) { x.start("sound", "tempo" to formatNumber(t.quarterNotesPerMinute, 3)).end() }
         }
-        project.text.filter { it.position.measureId == m.id && it.kind != TextKind.LYRICS }.forEach { t -> direction(t.position.offset, { words(t.text) }) }
+        project.text.filter { it.position.measureId == m.id && it.kind != TextKind.LYRICS }.forEach { t ->
+            if (t.kind != TextKind.TEXT) losses.add("text_kind", "Textart (Abschnitt, Fingersatz) wird nicht exportiert; der Text wird als freier Text gelesen", t.id)
+            direction(t.position.offset, { words(t.text) })
+        }
         val end = length(mi)
         for (mark in m.navigation) when (mark.kind) {
             NavigationKind.FINE -> direction(end, { words("Fine") }) { x.start("sound", "fine" to "yes").end() }
             NavigationKind.DA_CAPO -> direction(end, { words(if (hasFine) "D.C. al Fine" else if (hasToCoda) "D.C. al Coda" else "D.C.") }) { x.start("sound", "dacapo" to "yes").end() }
             NavigationKind.DAL_SEGNO -> {
                 val target = mark.target?.let { measureIndex[it] }?.let { segnoName[it] } ?: segnoName.entries.minByOrNull { it.key }?.value
+                if (mark.target != null && mark.target.let { measureIndex[it] }?.let { segnoName[it] } == null)
+                    losses.add("navigation", "D.S.-Sprungziel ohne Segno ist in MusicXML nicht darstellbar; es gilt das erste Segno", m.id)
                 direction(end, { words(if (hasFine) "D.S. al Fine" else if (hasToCoda) "D.S. al Coda" else "D.S.") }) { x.start("sound", "dalsegno" to (target ?: "segno")).end() }
             }
             NavigationKind.TO_CODA -> {
                 val target = mark.target?.let { measureIndex[it] }?.let { codaName[it] } ?: codaName.entries.minByOrNull { it.key }?.value
+                if (mark.target != null && mark.target.let { measureIndex[it] }?.let { codaName[it] } == null)
+                    losses.add("navigation", "To-Coda-Sprungziel ohne Coda ist in MusicXML nicht darstellbar; es gilt die erste Coda", m.id)
                 direction(end, { words("To Coda") }) { x.start("sound", "tocoda" to (target ?: "coda")).end() }
             }
             else -> Unit
@@ -616,7 +630,7 @@ private class MusicXmlWriter(private val project: Project, private val losses: L
             items += { x.start("arpeggiate", "direction" to if (strum.direction == StrokeDirection.DOWN) "up" else "down").end() }
             if (index == 0 && strum.kind != StrumKind.STRUM) losses.add("strum_kind", "Arpeggio- und Rasgueado-Anschläge werden als Arpeggiate-Zeichen exportiert", track.id)
             if (index == 0 && strum.spread > Fraction.ZERO) losses.add("strum_spread", "Strum-Dauer wird nicht exportiert", track.id)
-        }
+        } else if (strum != null && beat.notes.size == 1) losses.add("strum", "Anschlag/Arpeggio eines Beats mit nur einer Note wird nicht exportiert", track.id)
         notations(items)
         if (NoteMark.PALM_MUTE in marks) x.start("play").leaf("mute", "palm").end()
         x.end()
@@ -697,7 +711,10 @@ private class MusicXmlWriter(private val project: Project, private val losses: L
         return out
     }
 
-    /** Bend curve -> pre-bend plus one bend/release element per monotonic run (bend-alter is the change in semitones). */
+    /**
+     * Bend curve -> pre-bend plus one bend/release element per monotonic run (bend-alter is the change in semitones).
+     * Whammy curves (with-bar) keep the sign in bend-alter and never use release: a dip is a negative alter, not a release.
+     */
     private fun bends(points: List<PitchCurvePoint>, withBar: Boolean) {
         val pts = points.sortedBy { it.position }
         if (pts.isEmpty()) return
@@ -715,7 +732,7 @@ private class MusicXmlWriter(private val project: Project, private val losses: L
             if (dir == 0) { i++; continue }
             var j = i + 1
             while (j + 1 < pts.size && Integer.signum(pts[j + 1].cents - pts[j].cents) == dir) j++
-            element(pts[j].cents - pts[i].cents, if (dir < 0) "release" else null, pts[i].position, pts[j].position)
+            element(pts[j].cents - pts[i].cents, if (dir < 0 && !withBar) "release" else null, pts[i].position, pts[j].position)
             i = j
         }
     }
@@ -734,6 +751,7 @@ private class MusicXmlWriter(private val project: Project, private val losses: L
                     2 -> out += { x.start("trill-mark", "trill-step" to "whole").end() }
                     else -> { out += { x.start("trill-mark").end() }; losses.add("trill_interval", "Triller-Zielbund ist nur als Halb-/Ganzton darstellbar", track.id) }
                 }
+                if (a.rate != Articulation.Trill(a.targetFret).rate) losses.add("trill_rate", "Triller-Geschwindigkeit wird nicht exportiert (Import liest 1/32)", track.id)
             }
             is Articulation.TremoloPicking -> {
                 val d = a.rate.denominator

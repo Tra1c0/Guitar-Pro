@@ -224,7 +224,9 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
             TrackEdits.setInstrument(p, c.id, c.instrument, c.policy)
         }
         is EditorCommand.SetSound -> requireText(c.sound.mappingDescription, "Klang").let { TrackEdits.update(p, c.id) { it.copy(sound = c.sound) } }
-        is EditorCommand.SetMetadata -> { c.metadata.let { m -> listOf(m.title, m.artist, m.album, m.composer, m.copyright, m.notes).forEach { requireText(it, "Metadaten") } }; require(c.metadata.title.isNotBlank() && c.metadata.title.length <= 200) { "Titel ungültig" }; p.copy(metadata = c.metadata) }
+        is EditorCommand.SetMetadata -> { c.metadata.let { m -> listOf(m.title, m.artist, m.album, m.composer, m.copyright, m.notes).forEach { requireText(it, "Metadaten") } }; require(c.metadata.title.isNotBlank() && c.metadata.title.length <= 200) { "Titel ungültig" }
+            // Canonical form like Rename: surrounding blanks are not part of a field (XML formats trim them anyway).
+            p.copy(metadata = c.metadata.let { m -> m.copy(title = m.title.trim(), artist = m.artist.trim(), album = m.album.trim(), composer = m.composer.trim(), copyright = m.copyright.trim(), notes = m.notes.trim()) }) }
         is EditorCommand.SetMasterMix -> {
             require(c.mix.volume.isFinite() && c.mix.volume in 0.0..1.0 && c.mix.pan.isFinite() && c.mix.pan in -1.0..1.0) { "Master-Werte ungültig" }
             requireFiniteEffects(c.mix.effects)

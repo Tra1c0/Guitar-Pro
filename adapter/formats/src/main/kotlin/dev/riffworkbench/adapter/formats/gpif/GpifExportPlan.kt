@@ -116,7 +116,8 @@ internal class ExportTrack(val track: Track, index: Int, losses: LossCollector) 
     fun drumIndex(midi: Int, technique: String?): Int {
         val existing = drums.indexOfFirst { it.first == midi && it.second == technique }
         if (existing >= 0) return existing
-        val base = drums.firstOrNull { it.first == midi }?.third ?: GpDrums.entry(midi).name
+        // Name after the plain element: a label with a technique suffix would carry the technique to plain hits.
+        val base = drums.firstOrNull { it.first == midi && it.second == null }?.third ?: GpDrums.entry(midi).name
         drums += Triple(midi, technique, if (technique == null) base else "$base ($technique)")
         return drums.lastIndex
     }

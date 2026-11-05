@@ -15,7 +15,8 @@ import kotlin.math.abs
  * four voices; notes crossing bar lines become tied notes, odd lengths are spelled as tied written values.
  *
  * Channel 10 becomes a percussion track (MIDI pitch, no string/fret; each hit lasts until the next hit, at most a
- * quarter). Programs 24–31 become a six-string guitar in standard E tuning (a seventh string tuned to the lowest
+ * quarter, written as one untied value because percussion playback does not merge ties). Named tracks without
+ * notes stay as empty tracks. Programs 24–31 become a six-string guitar in standard E tuning (a seventh string tuned to the lowest
  * note is added for material below E2), 32–39 a four-string E A D G bass (fifth string for lower material),
  * everything else piano/other without strings. Fretted notes are placed by [FretAssigner]; unplayable notes are
  * dropped with a loss entry. Pitch bends become per-note bend curves, markers become sections.
@@ -65,6 +66,7 @@ private class MidiScoreBuilder(private val smf: SmfData, private val ids: IdSour
     private class RawNote(val track: Int, val channel: Int, val key: Int, val velocity: Int, val on: Long, val off: Long, val program: Int)
     private class Group(val track: Int, val channel: Int) {
         val notes = ArrayList<RawNote>()
+        var program: Int? = null
         var volume: Int? = null
         var pan: Int? = null
         var bendRange = 200
@@ -102,9 +104,16 @@ private class MidiScoreBuilder(private val smf: SmfData, private val ids: IdSour
         val total = spans.last().end
         fun locate(p: Long): Int { val i = java.util.Arrays.binarySearch(starts, p); return if (i >= 0) i else maxOf(0, -i - 2) }
 
-        val trackGroups = groups.values.filter { it.notes.isNotEmpty() }.sortedWith(compareBy({ it.track }, { it.channel }))
+        val noteGroups = groups.values.filter { it.notes.isNotEmpty() }
+        val conductorHasNotes = noteGroups.any { it.track == 0 }
+        // A named track without notes (e.g. an empty track of our own export) is kept as an empty track: its first
+        // channel with a program change or controller, unless the track already has notes or is the conductor.
+        val emptyNamed = groups.values.filter { g ->
+            g.notes.isEmpty() && g.track != 0 && !names[g.track].isNullOrBlank() &&
+                noteGroups.none { it.track == g.track }
+        }.distinctBy { it.track }
+        val trackGroups = (noteGroups + emptyNamed).sortedWith(compareBy({ it.track }, { it.channel }))
         val channelsPerTrack = trackGroups.groupBy { it.track }.mapValues { it.value.size }
-        val conductorHasNotes = trackGroups.any { it.track == 0 }
         val tracks = trackGroups.map { g -> track(g, spans, measures, locate = ::locate, total = total, single = channelsPerTrack[g.track] == 1, conductorHasNotes = conductorHasNotes) }
             .ifEmpty { listOf(emptyTrack(measures)) }
 
@@ -197,6 +206,7 @@ private class MidiScoreBuilder(private val smf: SmfData, private val ids: IdSour
                 0xC0 -> {
                     if (started[ch] && program[ch] != d1) losses.add("program_change", "Programmwechsel innerhalb einer Spur: es gilt jeweils das Programm am Notenbeginn, die Spur erhält das erste")
                     program[ch] = d1
+                    group(ch).let { if (it.program == null) it.program = d1 }
                 }
                 0xB0 -> when (d1) {
                     7 -> group(ch).let { if (it.volume == null) it.volume = d2 }
@@ -267,7 +277,7 @@ private class MidiScoreBuilder(private val smf: SmfData, private val ids: IdSour
     // ---- tracks ------------------------------------------------------------------------------------------------
 
     private class QNote(val raw: RawNote, val start: Long, var end: Long) { var string: Int? = null; var fret: Int? = null }
-    private class Chord(val start: Long, val end: Long) { val notes = ArrayList<QNote>(); var voice = 0 }
+    private class Chord(val start: Long, val end: Long) { val notes = ArrayList<QNote>(); var voice = 0; var bendBlocked = false }
 
     private fun emptyTrack(measures: List<Measure>): Track {
         val kind = InstrumentKind.PIANO
@@ -276,9 +286,9 @@ private class MidiScoreBuilder(private val smf: SmfData, private val ids: IdSour
     }
 
     private fun track(g: Group, spans: List<Span>, measures: List<Measure>, locate: (Long) -> Int, total: Long, single: Boolean, conductorHasNotes: Boolean): Track {
-        val program = g.notes.minByOrNull { it.on }?.program ?: 0
+        val program = g.notes.minByOrNull { it.on }?.program ?: g.program ?: 0
         val kind = if (g.channel == 9) InstrumentKind.PERCUSSION else DefaultInstruments.kindForProgram(program)
-        val lowest = g.notes.minOf { it.key }
+        val lowest = g.notes.minOfOrNull { it.key }
         val instrument = when (kind) {
             InstrumentKind.GUITAR -> DefaultInstruments.guitar(lowest, program)
             InstrumentKind.BASS -> DefaultInstruments.bass(lowest, program)
@@ -349,7 +359,12 @@ private class MidiScoreBuilder(private val smf: SmfData, private val ids: IdSour
             for (n in unique) {
                 val at = java.util.Arrays.binarySearch(onsets, n.start)
                 val next = onsets.getOrNull(if (at >= 0) at + 1 else -at - 1) ?: Long.MAX_VALUE
-                n.end = minOf(next, n.start + quarter, spans[locate(n.start)].end, total)
+                val m = locate(n.start)
+                val end = minOf(next, n.start + quarter, spans[m].end, total)
+                // Percussion playback ignores ties: keep a single untied value (the first, largest piece of the span).
+                val first = Rhythm.spell(Fraction.of(n.start - spans[m].start, units), Fraction.of(end - spans[m].start, units),
+                    Fraction.of(spans[m].length, units)) { w -> (m * 1024L + w) in triplet }.first()
+                n.end = n.start + (first.duration.length() * Fraction.of(units)).let { it.numerator / it.denominator }
             }
         }
         val chords = unique.groupBy { it.start to it.end }.map { (span, notes) -> Chord(span.first, span.second).also { it.notes += notes.sortedBy { n -> n.raw.key } } }
@@ -365,7 +380,8 @@ private class MidiScoreBuilder(private val smf: SmfData, private val ids: IdSour
             if (host != null) host.notes += c.notes.filter { n -> host.notes.none { it.raw.key == n.raw.key } }
         }
         if (instrument.tuning.isNotEmpty()) assignFrets(placed, instrument, trackId)
-        val bars = buildBars(placed.filter { it.notes.isNotEmpty() }, g, spans, measures, triplet, locate)
+        blockQuantizedBendOverlaps(placed, g)
+        val bars = buildBars(placed.filter { it.notes.isNotEmpty() }, g, spans, measures, triplet, locate, trackId)
         val volume = g.volume?.let { Math.round(it / 127.0 * 100) / 100.0 } ?: ChannelMix().volume
         val pan = g.pan?.let { Math.round(((it - 64) / 63.0).coerceIn(-1.0, 1.0) * 100) / 100.0 } ?: 0.0
         return Track(trackId, name, instrument, listOf(Staff(ids.next(), DefaultInstruments.notation(kind), bars)), mix = ChannelMix(volume = volume, pan = pan))
@@ -390,7 +406,23 @@ private class MidiScoreBuilder(private val smf: SmfData, private val ids: IdSour
         }
     }
 
-    private fun buildBars(chords: List<Chord>, g: Group, spans: List<Span>, measures: List<Measure>, triplet: Set<Long>, locate: (Long) -> Int): List<Bar> {
+    /**
+     * Pitch bend is channel-wide. When quantization makes chords overlap whose raw notes did not, a bend can no longer be
+     * attributed to one of them (the exporter drops such bends too); the bends of those chords are dropped with a loss.
+     * At most four voices overlap, so the active list stays small.
+     */
+    private fun blockQuantizedBendOverlaps(chords: List<Chord>, g: Group) {
+        if (g.channel == 9 || g.bendTicks.isEmpty()) return
+        fun rawOverlap(a: Chord, b: Chord) = a.notes.any { x -> b.notes.any { y -> x.raw.on < y.raw.off && y.raw.on < x.raw.off } }
+        val active = ArrayList<Chord>()
+        for (c in chords.sortedBy { it.start }) {
+            active.removeAll { it.end <= c.start }
+            for (o in active) if ((o.start != c.start || o.end != c.end) && !rawOverlap(o, c)) { o.bendBlocked = true; c.bendBlocked = true }
+            active += c
+        }
+    }
+
+    private fun buildBars(chords: List<Chord>, g: Group, spans: List<Span>, measures: List<Measure>, triplet: Set<Long>, locate: (Long) -> Int, trackId: EntityId): List<Bar> {
         // beats[measure][voice]
         val beats = Array(spans.size) { Array(4) { ArrayList<Beat>() } }
         val groupIds = HashMap<Long, EntityId>()
@@ -414,9 +446,16 @@ private class MidiScoreBuilder(private val smf: SmfData, private val ids: IdSour
                 val (m, piece) = mp
                 val from = spans[m].start + piece.offset.toDouble() * units
                 val to = from + piece.duration.length().toDouble() * units
+                // Pitch bend is channel-wide: notes quantized into one chord share the first note's curve (per-note curves
+                // from different raw note spans could not be exported again and would be dropped).
+                val bends = c.notes.map { n -> bendPiece(n, g, c, from, to) }.let { list ->
+                    if (!c.bendBlocked || list.all { it == null }) list
+                    else { losses.add("pitch_bend_overlap", "Pitch-Bend überlappender, erst durch die Quantisierung gleichzeitiger Noten wurde verworfen", trackId); list.map { null } }
+                }
+                val shared = bends.firstOrNull { it != null }
                 val notes = c.notes.mapIndexed { i, n ->
                     val link = if (k + 1 < pieces.size) listOf(NoteLink(LinkKind.TIE, noteIds[i][k + 1])) else emptyList()
-                    val bend = bendPiece(n, g, c, from, to)
+                    val bend = if (bends.distinct().size > 1) shared else bends[i]
                     Note(noteIds[i][k], Pitch(n.raw.key), n.string, n.fret, n.raw.velocity.coerceIn(1, 127), listOfNotNull(bend), link)
                 }
                 beats[m][c.voice] += Beat(ids.next(), piece.offset, piece.duration, notes, tupletGroupIds = tupletGroup(m, c.voice, piece.tripletWindow))
@@ -481,8 +520,11 @@ private class MidiScoreBuilder(private val smf: SmfData, private val ids: IdSour
             return if (x1 <= x0) y1.toDouble() else y0 + (x - x0) / (x1 - x0) * (y1 - y0)
         }
         val xs = (listOf(a, b) + raw.map { it.first }.filter { it > a && it < b }).sorted()
-        var points = xs.map { x -> Math.round((x - a) / (b - a) * 96).coerceIn(0, 96) to Math.round(valueAt(x)).toInt() }
-            .groupBy { it.first }.map { it.value.last() }.sortedBy { it.first }
+        // Several events can fall on one 1/96 slot: keep the one nearest to the slot (the last on a tie), so a re-exported
+        // curve, whose points sit exactly on their slots, imports to the same values.
+        var points = xs.map { x -> val pos = (x - a) / (b - a) * 96; Triple(Math.round(pos).coerceIn(0, 96), Math.round(valueAt(x)).toInt(), pos) }
+            .groupBy { it.first }.map { (slot, same) -> same.withIndex().minWith(compareBy({ Math.abs(it.value.third - slot) }, { -it.index })).value }
+            .sortedBy { it.first }.map { it.first to it.second }
         points = simplify(points)
         if (points.all { it.second == 0 }) return null
         val curve = points.map { PitchCurvePoint(Fraction.of(it.first, 96), it.second) }

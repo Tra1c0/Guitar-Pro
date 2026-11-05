@@ -8,6 +8,7 @@ dependencies {
     implementation(project(":core:editor"))
     implementation(project(":core:playback"))
     implementation(libs.coroutines.core)
+    testImplementation(project(":data:local"))
     testImplementation(libs.junit)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.serialization.json)
