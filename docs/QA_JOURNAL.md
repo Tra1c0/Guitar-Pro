@@ -250,3 +250,21 @@ Methode (neu): 984 Projekte (Fixtures, Werks-/Stress-Projekte, 27 handgebaute Fe
 **Ohne Befund:** XSD 979/984 (die 5 Fälle oben), MIDI 959/959 parsebar, Onsets 955/959 innerhalb 1 ms (Rest: Swing-Ornamente), GP7-ZIP 984/984 sauber, referenzielle Integrität überall, ASCII 984/984, SVG 502/502, WAV 86/86 identisch mit `soundfile`.
 
 Ergebnis Zyklus 9: **6 Defekte bestätigt und repariert** → nicht defektfrei.
+
+### Zyklus 10 — Spezifikationstreue und UI unter Gerätekonfigurationen
+
+Methoden (neu): (a) ≈ 150 überprüfbare Aussagen aus CONTRACTS, PROJECT_FORMAT, ARCHITECTURE, VALIDATION, README, features.json, KDoc und UI-Texten gegen das Verhalten getestet, Grenzen jeweils genau, ±1; (b) Robolectric-Matrix auf CI für den Hauptablauf (Projekt anlegen, Note setzen, Üben, „Mehr“/Seitenleiste, Diagnose) in Englisch, 320-dp-Telefon, Schriftgröße 2,0, Querformat (Seitenleiste ab 840 dp) und Dunkelmodus — alle grün (CI-Lauf 41994140082).
+
+**Bestätigt und repariert (rot → grün bzw. CI):**
+1. WAV-Export über 4 GiB (lange Routen, z. B. ×32-Wiederholungen) warf eine Exception statt `RESOURCE_LIMIT` — im App-Export auf dem Hintergrund-Scope vermutlich ein Absturz (`WavLimitRegressionTest`).
+2. „Letztes Projekt öffnen“ / „Weiter mit“ öffneten das alphabetisch erste Projekt; Projektzusammenfassungen tragen jetzt die Speicherzeit (`RecentProjectRegressionTest`).
+3. Mit Hardware-Tastatur fingen Editor-Kürzel Eingaben in Textfeldern ab (Leertaste startete die Wiedergabe statt ein Leerzeichen zu schreiben; Strg+Z/C/V wirkten auf die Partitur) — Kürzel ruhen jetzt, solange ein Textfeld fokussiert ist (`hardwareKeysInATextFieldTypeTextInsteadOfRunningShortcuts`, CI grün).
+4. Übungstempo erreichte über „+5 %“ 200 %, dokumentiert sind 25–150 %.
+
+**Dokumentation korrigiert (Code war richtig):** README/ARCHITECTURE nennen die mitgelieferte CC0-Gitarrenbank; 14 statt 13 Arbeitsbereiche; VALIDATION behauptet nicht mehr, spätere Commits hätten nur Doku geändert (VERIFICATION.json gilt als veraltet bis zur Neuerzeugung); PROJECT_FORMAT beschreibt Papierkorb, Waisen-Revisionen und beiseitegelegte Einstellungen; Count-in-Bereich (UI 0–2, Modell 0–4), MiB statt MB, Erkennungs-Ausnahmen (.tef, rohes GPIF); KDoc zu Faltungskosten und Stimmgerät-Allokation; veraltete Hinweistexte (Mixer, Techniken, Layout, Strikte Prüfung — letztere ist tatsächlich noch nicht schaltbar).
+
+**Bekannt, nicht geändert:** Fehlermeldungen bei IO-Fehlern enthalten den app-privaten absoluten Pfad (nur Anzeige, nichts gespeichert). Ein Asset größer als deklariert wird als RESOURCE_LIMIT statt CORRUPT gemeldet (abgelehnt wird es korrekt). Ein offenes Stimmgerät wird nur beim Verlassen des Bildschirms, nicht bei ON_STOP gestoppt (Android blockiert das Mikrofon für Hintergrund-Apps ohnehin). Abgebrochener/fehlgeschlagener Export hinterlässt eine Teildatei beim Anbieter (in C-DOCUMENT dokumentiert). `ClearBars`, `SetStrum`, `SetVelocity`, `SetSound`, `SetMasterMix` nur indirekt getestet.
+
+**Konform (Auswahl):** alle Größen-/Tiefen-/Anzahlgrenzen (Assets, Archive, Importer, ZIP-Einträge, Routen 20 000), Fehlercodes, Undo-Tiefe genau 200, Leerlauf-Stopp 20 s, 10-Minuten-Clips, Wellenform-Cache 16, keine INTERNET-Berechtigung, keine Pfade/URIs im Modell, Stimmen-Pools, Breakpoints.
+
+Ergebnis Zyklus 10: **4 Code-Defekte + 9 Doku-Defekte bestätigt und behoben** → nicht defektfrei.
