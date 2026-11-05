@@ -6,6 +6,12 @@ enum class Align { START, CENTER, END }
 
 /** Renderer-neutral drawing primitives in layout units (1 unit = 1 dp at zoom 1). */
 sealed interface Glyph { val minX: Float; val maxX: Float }
+
+/** Representative y of a glyph (used to assign it to a system for paging and culling). */
+fun Glyph.anchorY(): Float = when (this) {
+    is LineGlyph -> (y1 + y2) / 2; is RectGlyph -> y + h / 2; is TextGlyph -> y; is OvalGlyph -> cy
+    is PathGlyph -> if (ops.size >= 3) ops[2] else 0f
+}
 data class LineGlyph(val x1: Float, val y1: Float, val x2: Float, val y2: Float, val width: Float, val ink: Ink, val dashed: Boolean = false) : Glyph {
     override val minX get() = minOf(x1, x2); override val maxX get() = maxOf(x1, x2)
 }

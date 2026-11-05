@@ -37,17 +37,19 @@ object PdfExport {
             y += 48f
             for (t in tracks.filter { it in project.tracks.indices }) {
                 val layout = ScoreLayouter.layout(LayoutRequest(project, t, style, width = PAGE_W - 2 * MARGIN, margin = 0f))
-                if (y + 40f > PAGE_H - MARGIN) newPage()
+                // Keep the heading with the first system (it was left alone at a page bottom).
+                val firstHeight = layout.systems.firstOrNull()?.let { it.bottom - it.top } ?: 22f
+                if (y + 18f + firstHeight > PAGE_H - MARGIN - 12f) newPage()
                 page!!.canvas.drawText(project.tracks[t].name, MARGIN, y + 10f, heading)
                 y += 18f
-                for (system in layout.systems) {
+                for ((index, system) in layout.systems.withIndex()) {
                     val h = system.bottom - system.top
                     if (y + h > PAGE_H - MARGIN - 12f) newPage()
                     val c = page!!.canvas
                     c.save()
                     c.translate(MARGIN, y - system.top)
                     c.clipRect(-MARGIN, system.top - 2f, PAGE_W.toFloat(), system.bottom)
-                    painter.draw(c, layout.glyphs.filter { g -> glyphY(g) in system.top..system.bottom })
+                    painter.draw(c, layout.glyphsBySystem[index])
                     c.restore()
                     y += h
                 }
@@ -59,8 +61,4 @@ object PdfExport {
         } finally { doc.close() }
     }
 
-    private fun glyphY(g: Glyph): Float = when (g) {
-        is LineGlyph -> (g.y1 + g.y2) / 2; is RectGlyph -> g.y + g.h / 2; is TextGlyph -> g.y; is OvalGlyph -> g.cy
-        is PathGlyph -> if (g.ops.size >= 3) g.ops[2] else 0f
-    }
 }

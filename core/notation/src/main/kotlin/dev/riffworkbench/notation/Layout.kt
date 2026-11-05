@@ -48,8 +48,22 @@ class SystemBox(val index: Int, val top: Float, val bottom: Float, val x0: Float
 class ScoreLayout(val width: Float, val height: Float, val glyphs: List<Glyph>, val measures: List<MeasureBox>, val columns: List<Column>, val notes: List<NoteBox>, val systems: List<SystemBox>) {
     /** x position for a cursor or playhead at [offset] in a measure, interpolated between columns. */
     fun xFor(measureId: EntityId, offset: Fraction): Float? = xFor(measureId, offset.toDouble())
+    // Per-measure and per-system indexes, built once: the playhead and the view query them every frame.
+    private val columnsByMeasure: Map<EntityId, List<Column>> by lazy { columns.groupBy { it.measureId } }
+    private val measureById: Map<EntityId, MeasureBox> by lazy { measures.associateBy { it.measureId } }
+    /** Glyphs grouped by the system their anchor lies in; the extra last list holds glyphs outside every system. */
+    val glyphsBySystem: List<List<Glyph>> by lazy {
+        val buckets = List(systems.size + 1) { ArrayList<Glyph>() }
+        for (g in glyphs) {
+            val y = g.anchorY()
+            var lo = 0; var hi = systems.size
+            while (lo < hi) { val mid = (lo + hi) ushr 1; if (systems[mid].bottom < y) lo = mid + 1 else hi = mid }
+            buckets[if (lo < systems.size && y >= systems[lo].top) lo else systems.size] += g
+        }
+        buckets
+    }
     fun xFor(measureId: EntityId, offset: Double): Float? {
-        val cols = columns.filter { it.measureId == measureId }
+        val cols = columnsByMeasure[measureId].orEmpty()
         if (cols.isEmpty()) return measures.firstOrNull { it.measureId == measureId }?.let { it.contentX }
         var prev = cols.first()
         if (offset <= prev.offset.toDouble()) return prev.x
@@ -60,9 +74,11 @@ class ScoreLayout(val width: Float, val height: Float, val glyphs: List<Glyph>, 
             }
             prev = c
         }
-        val m = measures.first { it.measureId == measureId }
+        val m = measureById.getValue(measureId)
         val length = prev.offset.toDouble() + 1e-9
-        return (prev.x + (m.x + m.width - 6f - prev.x) * ((offset - prev.offset.toDouble()) / max(1e-9, measureLength(measureId) - length))).toFloat().coerceAtMost(m.x + m.width - 4f)
+        // Towards the barline, but never backwards when the last column already sits close to it.
+        val end = max(prev.x, m.x + m.width - 6f)
+        return (prev.x + (end - prev.x) * ((offset - prev.offset.toDouble()) / max(1e-9, measureLength(measureId) - length))).toFloat().coerceIn(prev.x, max(prev.x, m.x + m.width - 4f))
     }
     private val lengths = HashMap<EntityId, Double>()
     internal fun registerLength(id: EntityId, length: Double) { lengths[id] = length }
@@ -139,9 +155,14 @@ object ScoreLayouter {
 
         /** Ties are drawn once every note has a position, so they can cross barlines (and end at the system edge). */
         fun resolveTies() {
+            // Indexed once: a lookup per tie over all notes made layout quadratic in long tied scores.
+            val boxById = HashMap<EntityId, NoteBox>(noteBoxes.size * 2)
+            for (nb in noteBoxes) boxById.putIfAbsent(nb.noteId, nb)
+            val systemByMeasure = HashMap<EntityId, Int>(measureBoxes.size * 2)
+            for (mb in measureBoxes) systemByMeasure.putIfAbsent(mb.measureId, mb.system)
             for (t in pendingTies) {
                 val target = if (t.standard) standardHeads[t.target]?.let { Triple(it.first - style.staffSpace * 0.6f, it.second, it.third) }
-                    else noteBoxes.firstOrNull { it.noteId == t.target }?.let { nb -> Triple(nb.x + 1f, t.y, measureBoxes.firstOrNull { it.measureId == nb.measureId }?.system ?: -1) }
+                    else boxById[t.target]?.let { nb -> Triple(nb.x + 1f, t.y, systemByMeasure[nb.measureId] ?: -1) }
                 val x1 = if (target != null && target.third == t.system && target.first > t.x) target.first else t.systemEnd + 4f
                 val a = t.x; val b = x1
                 glyphs += PathGlyph.Builder().move(a, t.y).cubic(a + (b - a) * 0.25f, t.y + t.height, a + (b - a) * 0.75f, t.y + t.height, b, t.y).build(t.ink, false, 1f)
@@ -188,7 +209,16 @@ object ScoreLayouter {
             if (s.showKey && showStandard && !first) w += keyWidth(s.measure.key)
             if (s.measure.repeat.starts) w += 8f
             if (s.measure.repeat.endCount != null) w += 8f
-            return w
+            // The top lane (number, section, tempo, ending, jump marks) must fit inside the bar, or it runs into the next one.
+            return max(w, laneWidth(s.measure))
+        }
+        fun laneWidth(m: Measure): Float {
+            var lane = 16f
+            sectionByMeasure[m.id]?.let { lane += TextMetrics.width(it.label, 10f, true) + 16f }
+            tempoByMeasure[m.id]?.forEach { t -> if (t.position.offset == Fraction.ZERO) lane += TextMetrics.width("♩ = ${formatBpm(t.quarterNotesPerMinute)}", 9.5f, true) + 6f }
+            if (m.repeat.alternateEndings.isNotEmpty()) lane += TextMetrics.width(m.repeat.alternateEndings.sorted().joinToString(", ") + ".", 9f, true) + 6f
+            m.navigation.forEach { lane += TextMetrics.width("To Coda", 9.5f, true) + 6f }
+            return lane
         }
         fun timeWidth() = (if (showTab) style.tabLine * 1.4f else style.staffSpace * 2.4f) + 4f
         fun keyWidth(k: KeySignature) = abs(k.fifths) * style.staffSpace * 1.1f + if (k.fifths != 0) 4f else 0f
@@ -217,19 +247,25 @@ object ScoreLayouter {
             if (line.isNotEmpty()) result += line
             result.forEachIndexed { si, list ->
                 val naturalWidths = list.mapIndexed { k, s -> natural(s, k == 0) + if (k == 0) firstExtras(s) else 0f }
-                val total = naturalWidths.sum()
-                val stretch = if (si < result.lastIndex || total > avail * 0.7f) (avail / total).coerceIn(0.5f, 3f) else 1f
+                // Signatures and repeat signs keep their size; only the note columns stretch or compress
+                // (compressing them pushed signatures onto the clef/TAB letters and columns past the barline).
+                val fixed = list.mapIndexed { k, s -> fixedWidth(s, k == 0) }
+                val total = naturalWidths.sum(); val fixedTotal = fixed.sum()
+                val stretch = if (si < result.lastIndex || total > avail * 0.7f) ((avail - fixedTotal) / (total - fixedTotal).coerceAtLeast(1f)).coerceIn(0.5f, 3f) else 1f
                 var x = start
-                list.forEachIndexed { k, s -> s.system = si; s.x = x; s.width = naturalWidths[k] * stretch; place(s, k == 0, stretch); x += s.width }
+                list.forEachIndexed { k, s -> s.system = si; s.x = x; s.width = fixed[k] + (naturalWidths[k] - fixed[k]) * stretch; place(s, k == 0, stretch); x += s.width }
             }
             return result
         }
+        fun fixedWidth(s: MeasureSpec, first: Boolean): Float =
+            (if (first) firstExtras(s) else (if (s.showTime) timeWidth() else 0f) + (if (s.showKey && showStandard) keyWidth(s.measure.key) else 0f)) +
+                (if (s.measure.repeat.starts) 8f else 0f) + (if (s.measure.repeat.endCount != null) 8f else 0f)
         fun firstExtras(s: MeasureSpec): Float = (if (showStandard) keyWidth(s.measure.key) else 0f) + if (s.showTime || true) timeWidth() else 0f
 
         fun place(s: MeasureSpec, first: Boolean, stretch: Float = 1f) {
             var x = s.x + style.measurePadding
-            if (first) x += firstExtras(s) * stretch
-            else { if (s.showTime) x += timeWidth() * stretch; if (s.showKey && showStandard) x += keyWidth(s.measure.key) * stretch }
+            if (first) x += firstExtras(s)
+            else { if (s.showTime) x += timeWidth(); if (s.showKey && showStandard) x += keyWidth(s.measure.key) }
             if (s.measure.repeat.starts) x += 8f
             s.contentX = x
             s.columnXs = FloatArray(s.columns.size); s.columnWs = FloatArray(s.columns.size)
@@ -345,18 +381,24 @@ object ScoreLayouter {
             tempoByMeasure[m.id]?.forEach { t ->
                 val tx = if (t.position.offset == Fraction.ZERO) laneX else (xFor(s, t.position.offset) - 8f)
                 glyphs += TextGlyph(tx, sys.top + 11f, "♩ = ${formatBpm(t.quarterNotesPerMinute)}", 9.5f, Ink.TEXT, Align.START, bold = true)
-                laneX = tx + 52f
+                laneX = tx + TextMetrics.width("♩ = ${formatBpm(t.quarterNotesPerMinute)}", 9.5f, true) + 6f
             }
             if (m.repeat.alternateEndings.isNotEmpty()) {
                 val y = sys.top + 17f
                 glyphs += LineGlyph(s.x + 2f, y, right - 3f, y, 1f, Ink.TEXT)
                 glyphs += LineGlyph(s.x + 2f, y, s.x + 2f, y + 6f, 1f, Ink.TEXT)
-                glyphs += TextGlyph(s.x + 16f, y - 2f, m.repeat.alternateEndings.sorted().joinToString(", ") + ".", 9f, Ink.TEXT, Align.START, bold = true)
+                val label = m.repeat.alternateEndings.sorted().joinToString(", ") + "."
+                glyphs += TextGlyph(laneX, y - 2f, label, 9f, Ink.TEXT, Align.START, bold = true)
+                laneX += TextMetrics.width(label, 9f, true) + 6f
             }
+            var endX = right - 4f
             m.navigation.forEach { nav ->
                 val label = when (nav.kind) { NavigationKind.DA_CAPO -> "D.C."; NavigationKind.DAL_SEGNO -> "D.S."; NavigationKind.SEGNO -> "Segno"; NavigationKind.TO_CODA -> "To Coda"; NavigationKind.CODA -> "Coda"; NavigationKind.FINE -> "Fine" }
                 val atEnd = nav.kind == NavigationKind.DA_CAPO || nav.kind == NavigationKind.DAL_SEGNO || nav.kind == NavigationKind.TO_CODA || nav.kind == NavigationKind.FINE
-                glyphs += TextGlyph(if (atEnd) right - 4f else laneX, sys.top + 11f, label, 9.5f, Ink.ACCENT, if (atEnd) Align.END else Align.START, bold = true, italic = true)
+                // Several marks in one bar: start marks continue the lane to the right, end marks stack leftwards from the barline.
+                val w = TextMetrics.width(label, 9.5f, true) + 6f
+                glyphs += TextGlyph(if (atEnd) endX else laneX, sys.top + 11f, label, 9.5f, Ink.ACCENT, if (atEnd) Align.END else Align.START, bold = true, italic = true)
+                if (atEnd) endX -= w else laneX += w
             }
             // Time signature
             val showTime = s.showTime || first

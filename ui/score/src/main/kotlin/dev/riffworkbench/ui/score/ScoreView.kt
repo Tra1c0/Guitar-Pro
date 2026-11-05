@@ -126,8 +126,10 @@ fun ScoreCanvas(
                 val x = (pos.x + offsetX) / currentFactor
                 val y = (pos.y + offsetY) / currentFactor
                 val note = l.notes.firstOrNull { x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h }
+                // A hit fret number selects its own beat, even where compressed note boxes overlap the neighbouring column.
+                if (note != null) { currentOnTap(ScoreTap(note.measureId, note.offset, note.string ?: l.stringAt(y), note.noteId)); return@detectTapGestures }
                 val column = l.columnAt(x, y) ?: return@detectTapGestures
-                currentOnTap(ScoreTap(column.measureId, column.offset, note?.string ?: l.stringAt(y), note?.noteId))
+                currentOnTap(ScoreTap(column.measureId, column.offset, l.stringAt(y), null))
             }
         }) {
         Canvas(Modifier.fillMaxSize()) {
@@ -140,7 +142,10 @@ fun ScoreCanvas(
                 val x0 = offsetX / factor; val x1 = (offsetX + size.width) / factor
                 // Selection overlay below the notes.
                 cursor?.let { c -> drawCursor(nc, l, c, overlay) }
-                painter.draw(nc, l.glyphs, x0, x1)
+                // Cull by system first (y), then by x inside the painter: off-screen systems cost nothing per frame.
+                val y0 = offsetY / factor; val y1 = (offsetY + size.height) / factor
+                l.systems.forEachIndexed { i, sys -> if (sys.bottom >= y0 - 40f && sys.top <= y1 + 40f) painter.draw(nc, l.glyphsBySystem[i], x0, x1) }
+                painter.draw(nc, l.glyphsBySystem.last(), x0, x1)
                 playhead?.let { (measure, offset) ->
                     val px = l.xFor(measure, offset)
                     val sys = l.measures.firstOrNull { it.measureId == measure }?.let { m -> l.systems.getOrNull(m.system) }

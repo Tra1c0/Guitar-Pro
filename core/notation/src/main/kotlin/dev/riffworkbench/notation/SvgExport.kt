@@ -10,13 +10,32 @@ object SvgExport {
         Ink.PLAYHEAD -> "#c83c28"; Ink.SECTION -> "#4c6611"; Ink.ON_SECTION -> "#ffffff"; Ink.ERROR -> "#c00000"; Ink.GRID -> "#dddddd"
     }
     private fun f(v: Float): String { val r = (v * 100).roundToInt() / 100.0; return if (r == r.toLong().toDouble()) r.toLong().toString() else r.toString() }
-    private fun esc(t: String) = t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+    /** XML-safe text: markup characters escaped, characters XML 1.0 forbids (controls, lone surrogates) dropped. */
+    private fun esc(t: String): String {
+        val sb = StringBuilder(t.length)
+        var i = 0
+        while (i < t.length) {
+            val c = t[i]
+            when {
+                c == '&' -> sb.append("&amp;"); c == '<' -> sb.append("&lt;"); c == '>' -> sb.append("&gt;"); c == '"' -> sb.append("&quot;")
+                c.isHighSurrogate() && i + 1 < t.length && t[i + 1].isLowSurrogate() -> { sb.append(c).append(t[i + 1]); i++ }
+                c.isSurrogate() -> Unit
+                c < ' ' && c != '\t' && c != '\n' && c != '\r' -> Unit
+                c == '\uFFFE' || c == '\uFFFF' -> Unit
+                else -> sb.append(c)
+            }
+            i++
+        }
+        return sb.toString()
+    }
 
     /** One SVG document with every requested track stacked, each laid out to [width] units. */
     fun render(project: Project, tracks: List<Int>, style: LayoutStyle = LayoutStyle.READ.copy(showStandard = true), width: Float = 760f): String {
         val parts = tracks.filter { it in project.tracks.indices }.map { project.tracks[it].name to ScoreLayouter.layout(LayoutRequest(project, it, style, width)) }
         val header = 64f
         val totalHeight = header + parts.sumOf { it.second.height.toDouble() + 28 }.toFloat()
+        // Dense bars can make a layout wider than requested; size the document to what is drawn instead of cutting it off.
+        val width = maxOf(width, parts.maxOfOrNull { it.second.width } ?: width)
         val sb = StringBuilder()
         sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
         sb.append("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"${f(width)}\" height=\"${f(totalHeight)}\" viewBox=\"0 0 ${f(width)} ${f(totalHeight)}\" font-family=\"sans-serif\">\n")
