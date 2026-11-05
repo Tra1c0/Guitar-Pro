@@ -40,13 +40,13 @@ class AndroidPcmOutput : PcmOutput {
 
     @Synchronized override fun play(stereo: FloatArray, sampleRate: Int) {
         stop()
+        if (stereo.size < 2) return
         val bytes = stereo.size * 4
         val t = AudioTrack.Builder()
             .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
             .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_FLOAT).setSampleRate(sampleRate).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build())
             .setTransferMode(AudioTrack.MODE_STATIC).setBufferSizeInBytes(bytes).build()
-        t.write(stereo, 0, stereo.size, AudioTrack.WRITE_BLOCKING)
-        t.play()
+        try { t.write(stereo, 0, stereo.size, AudioTrack.WRITE_BLOCKING); t.play() } catch (e: Exception) { t.release(); return }
         track = t
     }
 

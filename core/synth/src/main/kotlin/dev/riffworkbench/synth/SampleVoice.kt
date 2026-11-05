@@ -179,7 +179,7 @@ internal class SampleVoice(private val sampleRate: Int) {
             for (k in 0 until chunk) {
                 val ratio = ratio0 + (ratio1 - ratio0) * k / chunk
                 var s = 0f
-                if (r.loopEnd > 0 && pos >= r.loopEnd) { pos -= (r.loopEnd - r.loopStart); looped = true; if (loopDecay == 1f) loopDecay = exp(-ln(10.0) * r.decayDbPerSec / 20.0 / sampleRate).toFloat() }
+                if (r.loopEnd > 0 && pos >= r.loopEnd) { while (pos >= r.loopEnd) pos -= (r.loopEnd - r.loopStart); looped = true; if (loopDecay == 1f) loopDecay = exp(-ln(10.0) * r.decayDbPerSec / 20.0 / sampleRate).toFloat() }
                 if (r.loopEnd > 0) s = cubicLoop(data, pos, r.loopStart, r.loopEnd) else if (pos < r.frames - 2) s = cubic(data, pos) else fade = 0f
                 pos += ratio
                 if (looped) env *= loopDecay
@@ -222,7 +222,7 @@ internal class SampleVoice(private val sampleRate: Int) {
     private fun cubicLoop(d: ShortArray, p: Double, loopStart: Int, loopEnd: Int): Float {
         val base = floor(p).toInt()
         val f = (p - base).toFloat()
-        fun at(i: Int): Float { var j = i; if (j >= loopEnd) j -= loopEnd - loopStart; return d[if (j < 0) 0 else j].toFloat() }
+        fun at(i: Int): Float { var j = i; while (j >= loopEnd) j -= loopEnd - loopStart; return d[j.coerceIn(0, d.size - 1)].toFloat() }
         val y0 = at(base - 1); val y1 = at(base); val y2 = at(base + 1); val y3 = at(base + 2)
         val c1 = 0.5f * (y2 - y0)
         val c2 = y0 - 2.5f * y1 + 2f * y2 - 0.5f * y3

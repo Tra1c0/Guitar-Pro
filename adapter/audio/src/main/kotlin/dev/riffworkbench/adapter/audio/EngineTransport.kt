@@ -47,6 +47,8 @@ class EngineTransport(
     private val clipCache = HashMap<Pair<AssetHash, Int>, PcmBuffer>()
     /** Seek requested before a plan existed; applied when playback starts. */
     @Volatile private var pendingSeek: PlaybackOccurrence? = null
+    /** Set by pause()/stop() until the next play(): the render thread may still report the old playing state for one block. */
+    @Volatile private var halted: TransportStatus? = null
 
     /**
      * Stores [project] for playback. While the output is running the new plan is compiled and swapped in at the
@@ -73,6 +75,12 @@ class EngineTransport(
         val previous = plan
         val program = EngineProgram.prepare(next)
         if (previous == null || installedRate != rate) host.post(HostCommand.Install(program)) else host.post(HostCommand.Reprogram(program, previous))
+        // While not playing, the published frame belongs to the old plan (speed or tempo changes move bars): carry it over.
+        if (previous != null && installedRate == rate && mutable.value.status != TransportStatus.PLAYING) mutable.value.sample?.let { s ->
+            previous.positionAt(s.frame)?.let { pos -> next.frameOf(pos.routeIndex, pos.position.offset) }?.let { f ->
+                mutable.value = mutable.value.copy(sample = SamplePosition(f, rate), position = next.positionAt(f))
+            }
+        }
         installedRate = rate
         plan = next
         applyLoopLocked(settings.loop)
@@ -122,15 +130,17 @@ class EngineTransport(
         if (snap.ended || from >= current.totalFrames) from = loopFrames?.first ?: 0L
         loopFrames?.let { (start, end) -> if (from !in start until end) from = start }
         val (countIn, clicks) = countIn(current, from)
+        halted = null
         host.post(HostCommand.Play(from, countIn, clicks))
         trainerPasses = 0; lastLoops = snap.loopsCompleted
         publish(TransportStatus.PLAYING, null)
         Outcome.Success(Unit)
     }
 
-    override suspend fun pause(): Outcome<Unit> { host.post(HostCommand.Pause); publish(TransportStatus.PAUSED, null); return Outcome.Success(Unit) }
+    override suspend fun pause(): Outcome<Unit> { halted = TransportStatus.PAUSED; host.post(HostCommand.Pause); publish(TransportStatus.PAUSED, null); return Outcome.Success(Unit) }
 
     override suspend fun stop(): Outcome<Unit> {
+        halted = TransportStatus.STOPPED
         host.post(HostCommand.Pause)
         host.post(HostCommand.Seek(loopFrames?.first ?: 0L))
         mutable.value = mutable.value.copy(status = TransportStatus.STOPPED, position = plan?.positionAt(loopFrames?.first ?: 0L), sample = SamplePosition(loopFrames?.first ?: 0L, plan?.sampleRate ?: 48_000))
@@ -255,7 +265,9 @@ class EngineTransport(
                 delay(pollMillis)
                 val snap = host.snapshot()
                 val p = plan
+                val held = halted
                 val status = when {
+                    held != null -> held
                     !snap.running && mutable.value.status == TransportStatus.PLAYING -> TransportStatus.STOPPED
                     snap.countingIn -> TransportStatus.PLAYING
                     snap.playing -> TransportStatus.PLAYING
@@ -263,7 +275,7 @@ class EngineTransport(
                     mutable.value.status == TransportStatus.PLAYING -> TransportStatus.PAUSED
                     else -> mutable.value.status
                 }
-                if (status == TransportStatus.PLAYING || snap.countingIn) {
+                if (held == null && (status == TransportStatus.PLAYING || snap.countingIn)) {
                     mutable.value = mutable.value.copy(status = status, position = p?.positionAt(snap.planFrame), sample = SamplePosition(snap.planFrame, p?.sampleRate ?: 48_000),
                         underruns = snap.underruns, countingIn = snap.countingIn, speed = settings.speed, latencyMs = host.format?.let { it.latencyFrames * 1000.0 / it.sampleRate })
                 } else if (status != mutable.value.status) mutable.value = mutable.value.copy(status = status, countingIn = false)

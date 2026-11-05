@@ -74,6 +74,8 @@ class InputTuner(
     private var thread: Thread? = null
 
     private val lock = Any()
+    /** Guards [source] hand-over between stop() and the reader thread's cleanup; never held while joining. */
+    private val sourceLock = Any()
 
     override suspend fun start(inputDeviceId: String?): Outcome<Unit> = synchronized(lock) { startLocked() }
 
@@ -84,7 +86,7 @@ class InputTuner(
         source = s; running = true
         val factor = (rate / 12_000).coerceAtLeast(1)
         val detector = YinPitchDetector(rate / factor, 1024)
-        thread = threadStarter("riff-tuner") {
+        thread = threadStarter("riff-tuner") { try {
             val input = FloatArray(512 * factor)
             val ring = FloatArray(1024)
             var filled = 0
@@ -108,13 +110,16 @@ class InputTuner(
                     }
                 }
             }
-        }
+        } finally {
+            // Input died (device removed, dead object) or stop(): allow the next start() to open a fresh source.
+            synchronized(sourceLock) { if (source === s) { running = false; source = null; s.close() } }
+        } }
         return Outcome.Success(Unit)
     }
 
     override suspend fun stop(): Outcome<Unit> = synchronized(lock) {
         running = false
-        source?.close(); source = null
+        synchronized(sourceLock) { source?.close(); source = null }
         thread?.join(1000); thread = null
         Outcome.Success(Unit)
     }

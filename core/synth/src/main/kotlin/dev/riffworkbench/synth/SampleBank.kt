@@ -57,7 +57,7 @@ class SampleBank private constructor(val sampleRate: Int, internal val regions: 
                 readFully(reader, chunk, frames * 2)
                 val data = ShortArray(frames) { i -> ((chunk[2 * i].toInt() and 0xFF) or (chunk[2 * i + 1].toInt() shl 8)).toShort() }
                 val loopStart = s32(meta, 10); val loopEnd = s32(meta, 14)
-                require(loopEnd == 0 || (loopStart in 0 until loopEnd && loopEnd <= frames)) { "Ungültige Loop-Punkte" }
+                require(loopEnd == 0 || (loopStart >= 0 && loopEnd - loopStart >= 4 && loopEnd <= frames)) { "Ungültige Loop-Punkte" }
                 Region(meta[0].toInt(), meta[1].toInt() and 0xFF, meta[2].toInt() and 0xFF, meta[3].toInt() and 0xFF, meta[4].toInt(), meta[5].toInt(),
                     Float.fromBits(s32(meta, 6)), loopStart, loopEnd, data)
             }

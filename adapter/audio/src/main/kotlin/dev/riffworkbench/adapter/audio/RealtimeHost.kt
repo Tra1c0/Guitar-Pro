@@ -55,7 +55,8 @@ class RealtimeHost(
     @Volatile private var noteOnNanos = -1L
     @Volatile private var lastVoices = 0
     private val commands = ConcurrentLinkedQueue<HostCommand>()
-    @Volatile private var sink: AudioSink? = null
+    private val sinkRef = java.util.concurrent.atomic.AtomicReference<AudioSink?>(null)
+    private val sink: AudioSink? get() = sinkRef.get()
     @Volatile var format: SinkFormat? = null; private set
     @Volatile private var running = false
     /** Set when the render thread stopped because of an unexpected error (device or driver). */
@@ -79,21 +80,29 @@ class RealtimeHost(
 
     @Synchronized fun start(): Outcome<SinkFormat> {
         format?.let { if (running) return Outcome.Success(it) }
+        // A render thread that is winding down (idle stop or error) must finish before a new session reuses the engine;
+        // its cleanup never takes this monitor, so joining here cannot deadlock.
+        thread?.let { old -> if (old !== Thread.currentThread() && old.isAlive) { old.join(2000); if (old.isAlive) return Outcome.Failure(FailureCode.UNAVAILABLE, "Audio-Thread reagiert nicht", contractId = "C-AUDIO") } }
         val s = sinkFactory()
         val opened = s.open(preferredRate, preferredBlock)
         if (opened is Outcome.Failure) { s.close(); return opened }
         val f = (opened as Outcome.Success).value
-        sink = s; format = f
+        sinkRef.getAndSet(s)?.close(); format = f
         val previous = engine
         val bank = bankProvider()
         engine = if (previous != null && previous.sampleRate == f.sampleRate && previous.hasBank == (bank != null)) previous else SynthEngine(f.sampleRate, maxOf(1024, f.blockFrames), bank)
         buffer = FloatArray(f.blockFrames * 2)
         written = 0; blocks = 0; idleBlocks = 0
         running = true
+        val session = ++generation
         thread = threadStarter("riff-audio") {
             try { while (running && renderBlock()) Unit }
             catch (t: Throwable) { lastError = t.message ?: t::class.java.simpleName }
-            finally { running = false; closeSink() }
+            finally {
+                // Only this session's state: a newer start() may already own `running` and the current sink.
+                if (generation == session) running = false
+                if (sinkRef.compareAndSet(s, null)) s.close()
+            }
         }
         return Outcome.Success(f)
     }
@@ -105,7 +114,8 @@ class RealtimeHost(
         closeSink()
     }
 
-    @Synchronized private fun closeSink() { sink?.close(); sink = null }
+    @Volatile private var generation = 0
+    @Synchronized private fun closeSink() { sinkRef.getAndSet(null)?.close() }
 
     fun post(command: HostCommand) { commands.add(command) }
 

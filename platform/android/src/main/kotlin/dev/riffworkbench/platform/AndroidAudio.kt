@@ -33,7 +33,8 @@ val audioThreadStarter: (String, () -> Unit) -> Thread = { name, body ->
  */
 class AudioTrackSink(private val context: Context) : AudioSink {
     @Volatile private var track: AudioTrack? = null
-    private val timestamp = AudioTimestamp()
+    // presentedFrame() runs on the render, poller and stats threads; one shared AudioTimestamp would mix their reads.
+    private val timestamp = ThreadLocal.withInitial { AudioTimestamp() }
     private var rate = 48_000
 
     override fun open(preferredSampleRate: Int, preferredBlockFrames: Int): Outcome<SinkFormat> = try {
@@ -52,7 +53,7 @@ class AudioTrackSink(private val context: Context) : AudioSink {
             .build()
         if (t.state != AudioTrack.STATE_INITIALIZED) { t.release(); Outcome.Failure(FailureCode.UNAVAILABLE, "Audioausgabe konnte nicht initialisiert werden", contractId = "C-AUDIO") }
         else {
-            t.play()
+            try { t.play() } catch (e: Exception) { t.release(); throw e }
             track = t
             val device = t.routedDevice?.productName?.toString() ?: "Lautsprecher"
             Outcome.Success(SinkFormat(rate, block, t.bufferSizeInFrames, device))
@@ -70,7 +71,8 @@ class AudioTrackSink(private val context: Context) : AudioSink {
     override fun presentedFrame(): Long? {
         val t = track ?: return null
         return try {
-            if (t.getTimestamp(timestamp)) timestamp.framePosition + (System.nanoTime() - timestamp.nanoTime) * rate / 1_000_000_000L else null
+            val ts = timestamp.get()
+            if (t.getTimestamp(ts)) ts.framePosition + (System.nanoTime() - ts.nanoTime) * rate / 1_000_000_000L else null
         } catch (e: IllegalStateException) { null }
     }
 

@@ -142,7 +142,7 @@ internal class DrumVoice(private val sampleRate: Int) {
             right[offset + k] += out * gr
             t++
         }
-        if (amp < 1e-3f && noiseEnv < 1e-3f && clickLeft == 0) active = false
+        if (amp < 1e-3f && (noiseLevel == 0f || noiseEnv < 1e-3f) && clickLeft == 0) active = false
     }
 
     /** Drum heads damp their previous vibration when struck again; cymbals keep ringing. */

@@ -66,7 +66,7 @@ class ChannelRack internal constructor(internal val channels: Array<Channel>, in
 class MixState internal constructor(internal val gains: FloatArray, internal val pans: FloatArray, internal val master: Float, val metronome: Float) {
     companion object {
         val SILENT = MixState(FloatArray(0), FloatArray(0), 1f, 0f)
-        fun volumeToGain(volume: Double): Float = (volume.coerceIn(0.0, 1.0).let { it * it } / 0.64).toFloat()
+        fun volumeToGain(volume: Double): Float = ((if (volume.isFinite()) volume else 0.8).coerceIn(0.0, 1.0).let { it * it } / 0.64).toFloat()
         fun from(project: Project, metronome: Float = 0f, soloOverride: Int? = null): MixState {
             val anySolo = soloOverride != null || project.tracks.any { it.mix.solo } || project.audio.clips.any { it.solo }
             val gains = FloatArray(project.tracks.size) { i ->
@@ -74,7 +74,7 @@ class MixState internal constructor(internal val gains: FloatArray, internal val
                 val audible = if (soloOverride != null) i == soloOverride else !mix.mute && (!anySolo || mix.solo)
                 if (audible) volumeToGain(mix.volume) else 0f
             }
-            val pans = FloatArray(project.tracks.size) { project.tracks[it].mix.pan.toFloat().coerceIn(-1f, 1f) }
+            val pans = FloatArray(project.tracks.size) { project.tracks[it].mix.pan.toFloat().takeIf { p -> p.isFinite() }?.coerceIn(-1f, 1f) ?: 0f }
             return MixState(gains, pans, volumeToGain(project.mix.master.volume), metronome.coerceIn(0f, 2f))
         }
     }
@@ -288,34 +288,44 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
         when (ch.kind) {
             ChannelKind.STRING -> {
                 if (t >= MAX_TRACKS) return
-                val key = t * 16 + (note.string ?: 15).coerceIn(0, 15)
+                // Notes without a string (unplaced imports, guitar preset on an unfretted track) never choke each other.
+                val s = note.string
+                val key = if (s != null && s in 0..15) t * 16 + s else -1
+                // A map entry is only trusted while its voice still plays this track and string (stolen voices move on).
+                fun ownsSample(i: Int) = i >= 0 && samples[i].active && samples[i].track == t && samples[i].string == s
+                fun ownsString(i: Int) = i >= 0 && strings[i].active && strings[i].track == t && strings[i].string == s
                 val b = bank
                 if (b != null && ch.sampled && note.harmonic == null) {
-                    val existing = sampleMap[key]
-                    if (existing >= 0) {
-                        val v = samples[existing]
-                        if (v.active && v.track == t && note.attack == AttackKind.LEGATO && !v.releasing) { v.legato(note, now, endClock, ch.sampleGain); return }
-                        // A new pick on the same string stops the old vibration at once (no damping noise).
-                        if (v.active && v.track == t) v.release(fast = true)
+                    if (key >= 0) {
+                        val existing = sampleMap[key]
+                        if (ownsSample(existing)) {
+                            val v = samples[existing]
+                            if (note.attack == AttackKind.LEGATO && !v.releasing) { v.legato(note, now, endClock, ch.sampleGain); return }
+                            // A new pick on the same string stops the old vibration at once (no damping noise).
+                            v.release(fast = true)
+                        }
+                        stringMap[key].let { if (ownsString(it)) strings[it].release(fast = true) }
                     }
-                    stringMap[key].let { if (it >= 0 && strings[it].active && strings[it].track == t) strings[it].release(fast = true) }
                     val index = allocate(samples, { it.active }, { it.releasing }, { it.startClock })
                     samples[index].kill()
-                    samples[index].start(note, t, b, now, endClock, roundRobin[key]++ and 0xFFFF, ch.sampleGain)
-                    sampleMap[key] = index
+                    val rr = if (key >= 0) roundRobin[key]++ and 0xFFFF else seed ushr 16 and 0xFFFF
+                    samples[index].start(note, t, b, now, endClock, rr, ch.sampleGain)
+                    if (key >= 0) sampleMap[key] = index
                     return
                 }
-                sampleMap[key].let { if (it >= 0 && samples[it].active && samples[it].track == t) samples[it].release(fast = true) }
-                val existing = stringMap[key]
-                if (existing >= 0) {
-                    val v = strings[existing]
-                    if (v.active && v.track == t && note.attack == AttackKind.LEGATO && !v.releasing) { v.legato(note, now, endClock); return }
-                    if (v.active && v.track == t) v.release(fast = true)
+                if (key >= 0) {
+                    sampleMap[key].let { if (ownsSample(it)) samples[it].release(fast = true) }
+                    val existing = stringMap[key]
+                    if (ownsString(existing)) {
+                        val v = strings[existing]
+                        if (note.attack == AttackKind.LEGATO && !v.releasing) { v.legato(note, now, endClock); return }
+                        v.release(fast = true)
+                    }
                 }
                 val index = allocate(strings, { it.active }, { it.releasing }, { it.startClock })
                 strings[index].kill()
                 strings[index].start(note, t, ch.stringTone, now, endClock, seed)
-                stringMap[key] = index
+                if (key >= 0) stringMap[key] = index
             }
             ChannelKind.DRUMS -> {
                 val midi = note.soundingPitch.toInt()
