@@ -18,8 +18,10 @@ import kotlinx.coroutines.withContext
  * header) is clamped to the bytes present instead of being rejected.
  */
 class WavAudioDecoder : AudioDecoder {
-    private class Layout(val format: Int, val channels: Int, val rate: Int, val bits: Int, val dataStart: Int, val dataBytes: Int) {
-        val frameBytes get() = channels * bits / 8
+    private class Layout(val format: Int, val channels: Int, val rate: Int, val bits: Int, val dataStart: Int, val dataBytes: Int, val blockAlign: Int = channels * bits / 8) {
+        /** Bytes per sample slot; larger than bits/8 for padded containers (e.g. 24-bit in 4 bytes, MSB-aligned). */
+        val container get() = blockAlign / channels
+        val frameBytes get() = blockAlign
         val frames get() = dataBytes / frameBytes
         fun info() = AudioInfo("audio/wav", rate, channels, frames * 1_000_000L / rate)
     }
@@ -32,8 +34,9 @@ class WavAudioDecoder : AudioDecoder {
     override suspend fun decode(bytes: ByteArray, sink: PcmSink): Outcome<AudioInfo> {
         val layout = when (val l = layout(bytes)) { is Outcome.Success -> l.value; is Outcome.Failure -> return l }
         val chunk = ShortArray(4096 * layout.channels)
-        val step = layout.bits / 8
-        var p = layout.dataStart
+        val step = layout.container
+        val pad = layout.container - layout.bits / 8
+        var p = layout.dataStart + pad
         var remaining = layout.frames
         return try {
             while (remaining > 0) {
@@ -63,7 +66,7 @@ class WavAudioDecoder : AudioDecoder {
     private fun layout(bytes: ByteArray): Outcome<Layout> {
         if (!isWav(bytes)) return Outcome.Failure(FailureCode.VALIDATION, "Keine WAV-Datei")
         var pos = 12
-        var format = 0; var channels = 0; var rate = 0; var bits = 0; var haveFormat = false
+        var format = 0; var channels = 0; var rate = 0; var bits = 0; var align = 0; var haveFormat = false
         while (pos + 8 <= bytes.size) {
             val id = String(CharArray(4) { (bytes[pos + it].toInt() and 0xFF).toChar() })
             val size = u32(bytes, pos + 4)
@@ -74,15 +77,18 @@ class WavAudioDecoder : AudioDecoder {
                 val supported = (format == 1 && bits in setOf(8, 16, 24, 32)) || (format == 3 && (bits == 32 || bits == 64))
                 if (!supported) return Outcome.Failure(FailureCode.VALIDATION, "WAV: nur PCM 8/16/24/32 Bit oder Float 32/64 Bit")
                 val available = (bytes.size - body).toLong()
-                val dataBytes = minOf(size, available).toInt()
-                val layout = Layout(format, channels, rate, bits, body, dataBytes)
+                // Recorders that never patch the header leave 0 or 0xFFFFFFFF: use the bytes that are there.
+                val dataBytes = if (size == 0L) available.toInt() else minOf(size, available).toInt()
+                val minAlign = channels * bits / 8
+                if (align != 0 && (align < minAlign || align % channels != 0 || align / channels > 8)) return Outcome.Failure(FailureCode.CORRUPT, "WAV: ungültige Blockausrichtung")
+                val layout = Layout(format, channels, rate, bits, body, dataBytes, if (align == 0) minAlign else align)
                 if (layout.frames == 0) return Outcome.Failure(FailureCode.VALIDATION, "WAV enthält keine Samples")
                 return Outcome.Success(layout)
             }
             if (size > (bytes.size - body).toLong()) return Outcome.Failure(FailureCode.CORRUPT, "WAV: beschädigter Block $id")
             if (id == "fmt ") {
                 if (size < 16) return Outcome.Failure(FailureCode.CORRUPT, "WAV: Formatblock zu kurz")
-                format = u16(bytes, body); channels = u16(bytes, body + 2); rate = u32(bytes, body + 4).toInt(); bits = u16(bytes, body + 14)
+                format = u16(bytes, body); channels = u16(bytes, body + 2); rate = u32(bytes, body + 4).toInt(); align = u16(bytes, body + 12); bits = u16(bytes, body + 14)
                 if (format == 0xFFFE && size >= 26) format = u16(bytes, body + 24)
                 haveFormat = true
             }
@@ -169,7 +175,7 @@ class StreamingWaveforms(private val assets: AssetStore, private val decoder: Au
         if (decoded is Outcome.Failure) return decoded
         if (count > 0) { minimum += lo; maximum += hi }
         if (minimum.isEmpty() || rate == 0) return Outcome.Failure(FailureCode.VALIDATION, "Die Audiodatei enthält keine Samples", contractId = "C-WAVEFORM")
-        val level = WaveformLevel(samplesPerPeak, minimum, maximum, rate)
+        val level = WaveformLevel(samplesPerPeak, minimum, maximum, rate, frames)
         mutex.withLock {
             cache[asset to samplesPerPeak] = level
             while (cache.size > 16) cache.remove(cache.keys.first())

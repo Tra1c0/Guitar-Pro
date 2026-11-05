@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.SharedFlow
 class YinPitchDetector(private val sampleRate: Int, private val window: Int = 1024, private val threshold: Float = 0.12f) {
     private val half = window / 2
     private val diff = FloatArray(half)
+    private val raw = FloatArray(half)
     data class Estimate(val hz: Double, val confidence: Double)
 
     fun detect(samples: FloatArray, offset: Int = 0, minHz: Double = 25.0, maxHz: Double = 2000.0): Estimate? {
@@ -29,7 +30,7 @@ class YinPitchDetector(private val sampleRate: Int, private val window: Int = 10
         for (tau in 1 until half) {
             var sum = 0f
             for (j in 0 until half) { val d = samples[offset + j] - samples[offset + j + tau]; sum += d * d }
-            diff[tau] = sum
+            diff[tau] = sum; raw[tau] = sum
         }
         var running = 0f
         diff[0] = 1f
@@ -46,10 +47,11 @@ class YinPitchDetector(private val sampleRate: Int, private val window: Int = 10
             if (diff[best] > 0.35f) return null
             found = best
         }
-        val x0 = diff[found - 1]; val x1 = diff[found]; val x2 = diff[found + 1]
-        val denom = x0 - 2 * x1 + x2
-        val refined = if (denom != 0f) found + 0.5 * (x0 - x2) / denom else found.toDouble()
-        return Estimate(sampleRate / refined, (1.0 - x1).coerceIn(0.0, 1.0))
+        // Parabolic refinement on the raw difference function: the normalised curve is skewed and read sharp at high pitches.
+        val r0 = raw[found - 1]; val r1 = raw[found]; val r2 = raw[found + 1]
+        val denom = r0 - 2 * r1 + r2
+        val refined = if (denom > 0f) found + (0.5 * (r0 - r2) / denom).coerceIn(-1.0, 1.0) else found.toDouble()
+        return Estimate(sampleRate / refined, (1.0 - diff[found]).coerceIn(0.0, 1.0))
     }
 
     companion object {
@@ -91,7 +93,11 @@ class InputTuner(
             val ring = FloatArray(1024)
             var filled = 0
             var lp1 = 0f; var lp2 = 0f
-            val a = 0.25f
+            // Fixed ~2.2 kHz anti-alias corner whatever the input rate (a constant coefficient moved it with the rate).
+            val a = (1.0 - kotlin.math.exp(-2.0 * Math.PI * 2200.0 / rate)).toFloat()
+            // In-band energy gate: a tone far above the guitar range must not produce a confident false pitch.
+            var rawMean = 0f; var bandMean = 0f
+            val k = 1f / 4096f
             while (running) {
                 val n = s.read(input, input.size)
                 if (n < 0) break
@@ -99,11 +105,11 @@ class InputTuner(
                 while (i + factor <= n) {
                     // Two cascaded one-pole low-passes as a cheap anti-alias filter before decimation.
                     var acc = 0f
-                    for (k in 0 until factor) { lp1 += a * (input[i + k] - lp1); lp2 += a * (lp1 - lp2); acc = lp2 }
+                    for (j in 0 until factor) { val x = input[i + j]; rawMean += k * (x * x - rawMean); lp1 += a * (x - lp1); lp2 += a * (lp1 - lp2); acc = lp2; bandMean += k * (acc * acc - bandMean) }
                     ring[filled++] = acc
                     i += factor
                     if (filled == ring.size) {
-                        detector.detect(ring)?.let { e -> if (e.confidence > 0.75) flow.tryEmit(YinPitchDetector.reading(e.hz, e.confidence, clock())) }
+                        if (bandMean >= 0.1f * rawMean) detector.detect(ring)?.let { e -> if (e.confidence > 0.75) flow.tryEmit(YinPitchDetector.reading(e.hz, e.confidence, clock())) }
                         // Hop of 512 samples (~43 ms at 12 kHz): keep the newer half for overlap.
                         System.arraycopy(ring, 512, ring, 0, ring.size - 512)
                         filled = ring.size - 512
