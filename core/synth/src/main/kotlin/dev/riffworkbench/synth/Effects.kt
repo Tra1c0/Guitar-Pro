@@ -14,7 +14,24 @@ internal interface Effect {
 }
 
 internal fun EffectUnit.p(name: String, default: Double, range: ClosedFloatingPointRange<Double>): Double =
-    (parameters[name]?.takeIf { it.isFinite() } ?: default).coerceIn(range)
+    (parameters[name]?.takeIf { it.isFinite() } ?: EffectDefaults.value(kind, name) ?: default).coerceIn(range)
+
+/** Parameter values the DSP uses when a unit does not store them; the UI shows the same values (one source of truth). */
+object EffectDefaults {
+    private val table: Map<EffectKind, Map<String, Double>> = mapOf(
+        EffectKind.GATE to mapOf("thresholdDb" to -60.0, "releaseMs" to 60.0),
+        EffectKind.OVERDRIVE to mapOf("drive" to 0.5, "tone" to 0.5, "level" to 0.0),
+        EffectKind.AMP to mapOf("gain" to 0.5, "bass" to 0.0, "mid" to 0.0, "treble" to 0.0, "presence" to 0.0, "level" to 0.0),
+        EffectKind.CABINET_IR to mapOf("model" to 0.0),
+        EffectKind.EQ to mapOf("low" to 0.0, "mid" to 0.0, "high" to 0.0, "midHz" to 800.0),
+        EffectKind.COMPRESSOR to mapOf("thresholdDb" to -18.0, "ratio" to 3.0, "attackMs" to 8.0, "releaseMs" to 120.0, "makeupDb" to 3.0),
+        EffectKind.DELAY to mapOf("timeMs" to 380.0, "feedback" to 0.3, "mix" to 0.25),
+        EffectKind.REVERB to mapOf("size" to 0.5, "damping" to 0.5, "mix" to 0.2),
+        EffectKind.CHORUS to mapOf("rateHz" to 0.8, "depthMs" to 3.0, "mix" to 0.35),
+        EffectKind.FILTER to mapOf("type" to 0.0, "cutoffHz" to 2000.0, "q" to 0.7),
+    )
+    fun value(kind: EffectKind, name: String): Double? = table[kind]?.get(name)
+}
 
 internal object Effects {
     fun create(unit: EffectUnit, sampleRate: Int, maxBlock: Int): Effect? = if (!unit.enabled) null else when (unit.kind) {
@@ -60,13 +77,30 @@ internal class Overdrive(sr: Int, drive: Double, tone: Double, levelDb: Double) 
     private val lp2 = Biquad().apply { lowPass(1500.0 + tone * 5500.0, 0.7, sr) }
     private val gain = Dsp.dbToGain(drive * 30.0).toFloat()
     private val out = (Dsp.dbToGain(levelDb) * 0.7).toFloat()
+    // 4x oversampled clipping (as in AmpSim): at full drive, harmonics of a 3.5 kHz note folded back at -18 dB.
+    private val os = 4
+    private val upL = Array(3) { i -> Biquad().apply { lowPass(sr * 0.45, doubleArrayOf(0.518, 0.707, 1.932)[i], sr * os) } }
+    private val downL = Array(3) { i -> Biquad().apply { lowPass(sr * 0.45, doubleArrayOf(0.518, 0.707, 1.932)[i], sr * os) } }
+    private val upR = Array(3) { i -> Biquad().apply { lowPass(sr * 0.45, doubleArrayOf(0.518, 0.707, 1.932)[i], sr * os) } }
+    private val downR = Array(3) { i -> Biquad().apply { lowPass(sr * 0.45, doubleArrayOf(0.518, 0.707, 1.932)[i], sr * os) } }
+    private fun clip(x: Float, up: Array<Biquad>, down: Array<Biquad>): Float {
+        var acc = 0f
+        for (phase in 0 until os) {
+            var u = if (phase == 0) x * os else 0f
+            for (f in up) u = f.process(u)
+            u = Dsp.softClip(u * gain)
+            for (f in down) u = f.process(u)
+            if (phase == 0) acc = u
+        }
+        return acc
+    }
     override fun process(left: FloatArray, right: FloatArray?, n: Int) {
         for (i in 0 until n) {
-            left[i] = lp.process(Dsp.softClip(hump.process(left[i]) * gain)) * out
-            if (right != null) right[i] = lp2.process(Dsp.softClip(hump2.process(right[i]) * gain)) * out
+            left[i] = lp.process(clip(hump.process(left[i]), upL, downL)) * out
+            if (right != null) right[i] = lp2.process(clip(hump2.process(right[i]), upR, downR)) * out
         }
     }
-    override fun reset() { hump.reset(); hump2.reset(); lp.reset(); lp2.reset() }
+    override fun reset() { hump.reset(); hump2.reset(); lp.reset(); lp2.reset(); (upL + downL + upR + downR).forEach { it.reset() } }
 }
 
 /**
@@ -80,7 +114,9 @@ internal class AmpSim(sr: Int, maxBlock: Int, gain: Double, bass: Double, mid: D
     private val push = Biquad().apply { peak(750.0, 0.8, 2.0 + gain * 6.0, sr) }
     private val up = Array(3) { i -> Biquad().apply { lowPass(sr * 0.45, doubleArrayOf(0.518, 0.707, 1.932)[i], sr * os) } }
     private val down = Array(3) { i -> Biquad().apply { lowPass(sr * 0.45, doubleArrayOf(0.518, 0.707, 1.932)[i], sr * os) } }
-    private val stages = when { gain > 0.68 -> 3; gain > 0.3 -> 2; else -> 1 }
+    private val stages = when { gain > 0.68 -> 3; gain > 0.25 -> 2; else -> 1 }
+    /** The second stage fades in between gain 0.25 and 0.35 (it used to switch on at 0.3 with a level and timbre jump). */
+    private val stage2Mix = ((gain - 0.25) / 0.1).coerceIn(0.0, 1.0).let { it * it * (3 - 2 * it) }.toFloat()
     private val couple = Array(3) { Biquad().apply { highPass(if (it == 0) 25.0 else 90.0 + 40.0 * gain, 0.6, sr * os) } }
     private val miller = Array(3) { Biquad().apply { lowPass(if (it == 0) 11000.0 else 7000.0 - 2500.0 * gain, 0.6, sr * os) } }
     private val stageGain = FloatArray(3) { i -> when (i) { 0 -> Dsp.dbToGain(2.0 + gain * 30.0); 1 -> Dsp.dbToGain(4.0 + gain * 16.0); else -> Dsp.dbToGain(gain * 14.0) }.toFloat() }
@@ -91,7 +127,7 @@ internal class AmpSim(sr: Int, maxBlock: Int, gain: Double, bass: Double, mid: D
     private val high = Biquad().apply { highShelf(3200.0, treble, sr) }
     private val pres = Biquad().apply { peak(4500.0, 0.8, presence, sr) }
     private val reso = Biquad().apply { peak(95.0, 1.0, 1.5 + 1.5 * gain, sr) }
-    private val output = (Dsp.dbToGain(levelDb) * (if (gain > 0.3) 0.8 else 1.5)).toFloat()
+    private val output = (Dsp.dbToGain(levelDb) * (1.5 + (0.8 - 1.5) * ((gain - 0.25) / 0.1).coerceIn(0.0, 1.0).let { it * it * (3 - 2 * it) })).toFloat()
     private val dc = DcBlocker()
     override fun process(left: FloatArray, right: FloatArray?, n: Int) {
         processChannel(left, n)
@@ -106,8 +142,10 @@ internal class AmpSim(sr: Int, maxBlock: Int, gain: Double, bass: Double, mid: D
                 var u = if (phase == 0) x * os else 0f
                 for (f in up) u = f.process(u)
                 for (s in 0 until stages) {
+                    val before = u
                     u = Dsp.softClip(couple[s].process(u) * stageGain[s] + bias[s]) - biasOut[s]
                     u = miller[s].process(u)
+                    if (s == 1 && stage2Mix < 1f) u = before + (u - before) * stage2Mix
                 }
                 for (f in down) u = f.process(u)
                 if (phase == 0) acc = u
@@ -285,11 +323,23 @@ internal class Limiter(sr: Int, private val ceiling: Float = 0.94f) : Effect {
     override fun process(left: FloatArray, right: FloatArray?, n: Int) {
         for (i in 0 until n) {
             val peak = if (right != null) max(abs(left[i]), abs(right[i])) else abs(left[i])
-            val needed = if (peak * gain > ceiling) ceiling / peak else 1f
+            // The gain computer allows the knee's input up to 1.2 x ceiling, where the knee output is ~0.99 x ceiling.
+            val needed = if (peak * gain > target) target / peak else 1f
             gain = if (needed < gain) needed else needed + (gain - needed) * release
-            left[i] = Dsp.softClip(left[i] * gain * 1.05f) * ceiling
-            if (right != null) right[i] = Dsp.softClip(right[i] * gain * 1.05f) * ceiling
+            left[i] = knee(left[i] * gain)
+            if (right != null) right[i] = knee(right[i] * gain)
         }
     }
     override fun reset() { gain = 1f }
+    // Transparent below 80 % of the ceiling, then a smooth knee that approaches the ceiling (it used to saturate every sample
+    // and top out at 0.73 instead of the documented 0.94).
+    private val kneeStart = ceiling * 0.8f
+    private val target = ceiling * 1.2f
+    private fun knee(y: Float): Float {
+        val a = abs(y)
+        if (a <= kneeStart) return y
+        val r = ceiling - kneeStart
+        val v = kneeStart + r * kotlin.math.tanh((a - kneeStart) / r)
+        return if (y < 0f) -v else v
+    }
 }

@@ -2,6 +2,7 @@ package dev.riffworkbench.synth
 
 import dev.riffworkbench.model.*
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -33,12 +34,17 @@ class EngineProgram private constructor(
 internal enum class ChannelKind { STRING, DRUMS, KEYS }
 
 internal class Channel(val kind: ChannelKind, val stringTone: StringTone, val keysMode: KeysMode, val effects: Array<Effect>, maxBlock: Int,
-                       /** Electric guitar: played from the sample bank when one is installed. */ val sampled: Boolean = false, val sampleGain: Float = 1f) {
+                       /** Electric guitar: played from the sample bank when one is installed. */ val sampled: Boolean = false, val sampleGain: Float = 1f,
+                       /** What the voices depend on (kind, preset, samples); equal voices can keep sounding across a rack swap. */ val voiceSignature: String = "",
+                       /** The units behind [effects], to keep the state of unchanged effects across a rack swap. */ val units: List<EffectUnit> = emptyList()) {
     val left = FloatArray(maxBlock)
     val right = FloatArray(maxBlock)
     val stereo = kind == ChannelKind.DRUMS
     var idleBlocks = Int.MAX_VALUE / 2
     var lastGainL = 0f; var lastGainR = 0f
+    /** Consecutive blocks whose processed output was silent; long delay/reverb tails keep the channel alive. */
+    var silentBlocks = 0
+    var effectsCleared = true
 }
 
 /** Per-track DSP channels. Rebuilt only when sounds or effect chains change, so reverb tails survive note edits. */
@@ -53,8 +59,11 @@ class ChannelRack internal constructor(internal val channels: Array<Channel>, in
                     track.instrument.tuning.isNotEmpty() || preset.family == TonePreset.Family.GUITAR || preset.family == TonePreset.Family.BASS -> ChannelKind.STRING
                     else -> ChannelKind.KEYS
                 }
-                val chain = TonePresets.effectiveChain(track).mapNotNull { Effects.create(it, sampleRate, maxBlock) }.toTypedArray()
-                Channel(kind, TonePresets.stringTone(preset), TonePresets.keysMode(preset), chain, maxBlock, kind == ChannelKind.STRING && TonePresets.isSampledGuitar(preset), TonePresets.sampleGain(preset))
+                val built = TonePresets.effectiveChain(track).mapNotNull { u -> Effects.create(u, sampleRate, maxBlock)?.let { u to it } }
+                val units = built.map { it.first }
+                val chain = built.map { it.second }.toTypedArray()
+                val sampled = kind == ChannelKind.STRING && TonePresets.isSampledGuitar(preset)
+                Channel(kind, TonePresets.stringTone(preset), TonePresets.keysMode(preset), chain, maxBlock, sampled, TonePresets.sampleGain(preset), "$kind:${preset.id}:$sampled", units)
             }.toTypedArray()
             val master = if (includeMasterFx) (project.mix.master.effects.mapNotNull { Effects.create(it, sampleRate, maxBlock) } + Limiter(sampleRate)).toTypedArray() else emptyArray()
             return ChannelRack(channels, master, signature(project) + includeMasterFx)
@@ -132,7 +141,22 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
         ended = false
     }
     fun installClips(next: ClipSet) { clipSet = next }
-    fun installRack(next: ChannelRack) { if (rack !== next) { releaseAll(fast = true); rack = next } }
+    /**
+     * Swaps the DSP rack. When every channel keeps its voice signature (an effect parameter changed), sounding notes go on
+     * and unchanged effects keep their state; otherwise all voices stop (track list or sounds changed).
+     */
+    fun installRack(next: ChannelRack) {
+        val old = rack
+        if (old === next) return
+        val compatible = old != null && old.channels.size == next.channels.size && old.channels.indices.all { old.channels[it].voiceSignature == next.channels[it].voiceSignature }
+        if (!compatible) { releaseAll(fast = true); rack = next; return }
+        for (t in next.channels.indices) {
+            val a = old!!.channels[t]; val b = next.channels[t]
+            for (i in b.effects.indices) if (i < a.effects.size && i < a.units.size && i < b.units.size && a.units[i] == b.units[i]) b.effects[i] = a.effects[i]
+            b.idleBlocks = a.idleBlocks; b.lastGainL = a.lastGainL; b.lastGainR = a.lastGainR; b.silentBlocks = a.silentBlocks; b.effectsCleared = a.effectsCleared
+        }
+        rack = next
+    }
     fun setMix(next: MixState) { mix = next }
     fun currentRack(): ChannelRack? = rack
 
@@ -246,7 +270,10 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
 
     private fun mixDown(frames: Int) {
         val r = rack ?: return
-        val tailBlocks = (6L * sampleRate / frames).toInt()
+        // A channel is skipped once its voices are gone and its processed output has been silent long enough to cover the
+        // longest delay gap; then its effects are cleared so no frozen tail comes back on the next note.
+        val idleMin = (sampleRate / 4 / frames).coerceAtLeast(1)
+        val silentLimit = (3L * sampleRate / frames).toInt()
         for (t in r.channels.indices) {
             val ch = r.channels[t]
             val g = if (t < mix.gains.size) mix.gains[t] else 0f
@@ -254,8 +281,16 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
             val angle = (pan + 1f) * (PI / 4).toFloat()
             val targetL = g * cos(angle) * 1.414f
             val targetR = g * sin(angle) * 1.414f
-            if (ch.idleBlocks > tailBlocks && ch.lastGainL == targetL && ch.lastGainR == targetR) { ch.idleBlocks++; continue }
+            if (ch.idleBlocks > idleMin && ch.silentBlocks > silentLimit && ch.lastGainL == targetL && ch.lastGainR == targetR) {
+                if (!ch.effectsCleared) { for (fx in ch.effects) fx.reset(); ch.effectsCleared = true }
+                ch.idleBlocks++; continue
+            }
+            ch.effectsCleared = false
             for (fx in ch.effects) fx.process(ch.left, if (ch.stereo) ch.right else null, frames)
+            var peak = 0f
+            for (i in 0 until frames) { val v = abs(ch.left[i]); if (v > peak) peak = v }
+            if (ch.stereo) for (i in 0 until frames) { val v = abs(ch.right[i]); if (v > peak) peak = v }
+            ch.silentBlocks = if (peak < 1e-5f) ch.silentBlocks + 1 else 0
             val startL = ch.lastGainL; val startR = ch.lastGainR
             for (i in 0 until frames) {
                 val a = (i + 1).toFloat() / frames

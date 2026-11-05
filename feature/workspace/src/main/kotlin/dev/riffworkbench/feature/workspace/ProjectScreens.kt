@@ -263,8 +263,9 @@ import dev.riffworkbench.ui.score.pitchName
     Text(tr("Effektkette", "Effect chain"), style = MaterialTheme.typography.titleSmall)
     chain.forEachIndexed { i, unit ->
         val main = when (unit.kind) { EffectKind.AMP -> "gain"; EffectKind.OVERDRIVE -> "drive"; EffectKind.GATE -> "thresholdDb"; EffectKind.REVERB, EffectKind.DELAY, EffectKind.CHORUS -> "mix"; EffectKind.COMPRESSOR -> "thresholdDb"; EffectKind.EQ -> "mid"; EffectKind.FILTER -> "cutoffHz"; EffectKind.CABINET_IR -> "model" }
-        val range = when (main) { "thresholdDb" -> -80f..0f; "mid" -> -12f..12f; "cutoffHz" -> 100f..12000f; "model" -> 0f..4f; else -> 0f..1f }
-        var value by remember(unit) { mutableFloatStateOf((unit.parameters[main] ?: range.start.toDouble()).toFloat().coerceIn(range)) }
+        val range = when (main) { "thresholdDb" -> if (unit.kind == EffectKind.COMPRESSOR) -60f..0f else -80f..0f; "mid" -> -12f..12f; "cutoffHz" -> 100f..12000f; "model" -> 0f..4f; else -> 0f..1f }
+        // Show what the DSP actually uses when the unit does not store the value yet.
+        var value by remember(unit) { mutableFloatStateOf((unit.parameters[main] ?: dev.riffworkbench.synth.EffectDefaults.value(unit.kind, main) ?: range.start.toDouble()).toFloat().coerceIn(range)) }
         fun write(updated: EffectUnit) = vm.command(EditorCommand.SetMix(track.id, track.mix.copy(effects = chain.mapIndexed { k, u -> if (k == i) updated else u })))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Switch(unit.enabled, { write(unit.copy(enabled = it)) })
