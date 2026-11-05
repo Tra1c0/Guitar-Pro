@@ -3,20 +3,36 @@ package dev.riffworkbench.editor
 import dev.riffworkbench.model.*
 
 class ProjectFactory(private val ids: IdSource) {
-    fun create(title: String, withBand: Boolean = true): Project {
-        val measures = listOf(Measure(ids.next()), Measure(ids.next(), TimeSignature(7, 8)))
+    /**
+     * Product default for a new project: one 4/4 bar, 150 BPM, section "Riff A", a 6-string E-standard guitar named
+     * "Gitarre" plus bass and drums. The model default InstrumentDefinition() stays Drop A (fixtures and formats rely on it).
+     */
+    fun create(
+        title: String,
+        withBand: Boolean = true,
+        signatures: List<TimeSignature> = listOf(TimeSignature()),
+        guitar: InstrumentDefinition = E_STANDARD,
+        guitarName: String = "Gitarre",
+    ): Project {
+        require(signatures.isNotEmpty()) { "Mindestens ein Takt" }
+        val measures = signatures.map { Measure(ids.next(), it) }
         return Project(
             id = ids.next(), metadata = ProjectMetadata(title = title.trim().ifBlank { "Neues Riff" }),
             measures = measures,
             tracks = (if (withBand) listOf(InstrumentKind.GUITAR, InstrumentKind.BASS, InstrumentKind.PERCUSSION) else listOf(InstrumentKind.GUITAR))
-                .map { track(it, measures) },
+                .map { if (it == InstrumentKind.GUITAR) track(it, measures, guitarName, guitar) else track(it, measures) },
             sections = listOf(Section(ids.next(), measures.first().id, "Riff A")),
             tempo = listOf(TempoChange(ScorePosition(measures.first().id), 150.0)),
         )
     }
-    fun track(kind: InstrumentKind, measures: List<Measure>, name: String? = null): Track {
+
+    /** The shape the app shipped before the one-bar default: 4/4 + 7/8 and a 7-string Drop A guitar. Used by tests and fixtures. */
+    fun demo(title: String, withBand: Boolean = true): Project =
+        create(title, withBand, listOf(TimeSignature(), TimeSignature(7, 8)), InstrumentDefinition(), "Gitarre · Drop A")
+
+    fun track(kind: InstrumentKind, measures: List<Measure>, name: String? = null, guitar: InstrumentDefinition = InstrumentDefinition()): Track {
         val instrument = when (kind) {
-            InstrumentKind.GUITAR -> InstrumentDefinition()
+            InstrumentKind.GUITAR -> guitar
             InstrumentKind.BASS -> InstrumentDefinition(kind = kind, tuning = listOf(28, 33, 38, 43), capoByString = List(4) { 0 }, midiProgram = 33)
             InstrumentKind.PERCUSSION -> InstrumentDefinition(kind = kind, tuning = emptyList(), capoByString = emptyList(), midiProgram = 0)
             InstrumentKind.PIANO -> InstrumentDefinition(kind = kind, tuning = emptyList(), capoByString = emptyList(), midiProgram = 0)
@@ -31,6 +47,11 @@ class ProjectFactory(private val ids: IdSource) {
         }, instrument, listOf(Staff(ids.next(), setOf(if (kind == InstrumentKind.PERCUSSION) NotationKind.PERCUSSION else if (instrument.tuning.isEmpty()) NotationKind.STANDARD else NotationKind.TAB), measures.map { bar(it.id) })))
     }
     fun bar(measureId: EntityId) = Bar(ids.next(), measureId, List(4) { Voice(ids.next(), it) })
+
+    companion object {
+        /** 6-string E standard, low to high: E2 A2 D3 G3 B3 E4. */
+        val E_STANDARD = InstrumentDefinition(tuning = listOf(40, 45, 50, 55, 59, 64), capoByString = List(6) { 0 })
+    }
 }
 
 /** Own synthetic data only. No third-party tabs or sounds. */

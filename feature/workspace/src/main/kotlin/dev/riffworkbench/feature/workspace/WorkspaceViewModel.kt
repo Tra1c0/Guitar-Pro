@@ -184,6 +184,28 @@ class WorkspaceViewModel(
     /** Changes only the entry duration (grid), never the selected beat. */
     fun setGrid(duration: WrittenDuration) { mutableInput.value = input.value.copy(duration = duration); relayout() }
     fun retunePolicy(): RetuningPolicy = settings.settings.value.retuningPolicy
+    /** Persists the retuning policy chosen on the Instruments screen (AppSettings.retuningPolicy). */
+    fun setRetunePolicy(policy: RetuningPolicy) { viewModelScope.launch { settings.update(settings.settings.value.copy(retuningPolicy = policy)) } }
+    /** Dry run of [retune] for the selected track: the notes that would be octaved or dropped; a non-retunable change throws into an empty list plus notice. */
+    fun retuneProblems(instrument: InstrumentDefinition, policy: RetuningPolicy = retunePolicy()): List<RetuneProblem> {
+        val e = state.value.editor ?: return emptyList()
+        return try { Retuning.problems(e.project, e.selection.trackId, instrument, policy) } catch (ex: IllegalArgumentException) { emptyList() }
+    }
+    /**
+     * Retunes the selected track as ONE command (one undo step): the dry run first, then SetInstrument; without [allowDrop]
+     * a change that would remove notes is refused with the bars in the notice. After success the notice summarises what was
+     * resolved, e.g. '3 Noten um eine Oktave versetzt (Takt 1, 2)'.
+     */
+    fun retune(instrument: InstrumentDefinition, policy: RetuningPolicy = retunePolicy(), allowDrop: Boolean = false): Outcome<Unit> {
+        val e = state.value.editor ?: return Outcome.Failure(FailureCode.VALIDATION, "Projekt noch nicht geladen")
+        val problems = try { Retuning.problems(e.project, e.selection.trackId, instrument, policy) }
+            catch (ex: IllegalArgumentException) { val m = ex.message ?: "Umstimmen nicht möglich"; showNotice(m); publish(); return Outcome.Failure(FailureCode.VALIDATION, m) }
+        val drops = problems.filter { it.resolution == RetuneResolution.DROP }
+        if (drops.isNotEmpty() && !allowDrop) { val m = Retuning.failureMessage(drops); showNotice(m); publish(); return Outcome.Failure(FailureCode.VALIDATION, m) }
+        val result = command(EditorCommand.SetInstrument(e.selection.trackId, instrument, policy, allowDrop))
+        if (result is Outcome.Success) { Retuning.summary(problems)?.let { showNotice(it); publish() } }
+        return result
+    }
 
     fun move(direction: Int) {
         val current = state.value.editor ?: return

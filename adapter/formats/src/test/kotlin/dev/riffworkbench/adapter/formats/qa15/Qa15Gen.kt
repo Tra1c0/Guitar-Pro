@@ -24,7 +24,8 @@ object Qa15Gen {
     fun build(spec: Spec): Built {
         var n = 0
         val ids = IdSource { EntityId("g${n++}") }
-        val e = EditorSession(ProjectFactory(ids).create("QA15", withBand = spec.band), ids)
+        // demo(): the campaign keeps its 7/8-bar and 7-string coverage (and its seeds) now that create() is the one-bar E-standard default.
+        val e = EditorSession(ProjectFactory(ids).demo("QA15", withBand = spec.band), ids)
         val log = mutableListOf<String>()
         for ((i, s) in spec.steps.withIndex()) {
             val r = Random(s)

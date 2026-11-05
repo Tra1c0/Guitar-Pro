@@ -8,7 +8,7 @@ import org.junit.Test
 class Qa13MoveNoteReviewTest {
     private var sequence = 0
     private val ids = IdSource { EntityId("q-${sequence++}") }
-    private fun session(p: Project = ProjectFactory(ids).create("Drag")) = EditorSession(p, ids)
+    private fun session(p: Project = ProjectFactory(ids).demo("Drag")) = EditorSession(p, ids)
     private fun EditorSession.at(offset: Fraction, string: Int = 0, measure: Int = 0, voice: Int = 0) =
         select(state.value.selection.copy(measureId = state.value.project.measures[measure].id, offset = offset, string = string, voice = voice))
     private fun EditorSession.ok(c: EditorCommand) { val r = dispatch(c); assertTrue("$c -> $r", r is Outcome.Success) }
@@ -131,7 +131,7 @@ class Qa13MoveNoteReviewTest {
     }
 
     @Test fun capoAndTranspositionKeepSoundingPitch() {
-        val p0 = ProjectFactory(ids).create("Capo")
+        val p0 = ProjectFactory(ids).demo("Capo")
         val inst = p0.tracks[0].instrument.copy(capoByString = List(7) { 2 }, transposition = -12)
         val e = session(p0.copy(tracks = p0.tracks.mapIndexed { i, t -> if (i == 0) t.copy(instrument = inst) else t }))
         e.at(Fraction.ZERO, 5); e.ok(EditorCommand.PutNote(fret = 3, duration = q))

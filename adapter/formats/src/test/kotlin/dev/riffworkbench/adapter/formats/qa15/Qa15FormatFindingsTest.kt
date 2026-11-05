@@ -18,7 +18,7 @@ import org.junit.Test
 class Qa15FormatFindingsTest {
     private var n = 0
     private val ids = IdSource { EntityId("q${n++}") }
-    private fun session(band: Boolean = false) = EditorSession(ProjectFactory(ids).create("QA15", withBand = band), ids)
+    private fun session(band: Boolean = false) = EditorSession(ProjectFactory(ids).demo("QA15", withBand = band), ids)
     private val EditorSession.p get() = state.value.project
     private fun EditorSession.at(m: Int, off: Fraction, string: Int = 0, track: Int = 0, voice: Int = 0) =
         select(Selection(p.tracks[track].id, p.measures[m].id, voice, off, string))

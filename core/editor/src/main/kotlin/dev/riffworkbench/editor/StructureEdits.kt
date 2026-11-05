@@ -213,42 +213,23 @@ internal object TrackEdits {
     /**
      * Changes tuning, string count, capo or instrument. Strings are top-aligned (adding a low string keeps the
      * high strings). KEEP_FINGER_POSITION keeps string/fret and re-derives pitch; KEEP_SOUNDING_PITCH keeps pitch
-     * and moves to another free string when the fret leaves the neck.
+     * and moves to another free string when the fret leaves the neck. Notes that fit nowhere are shifted an octave
+     * (see [Retuning]); notes that still fit nowhere are removed only with [allowDrop], otherwise the edit is rejected
+     * with the affected bars in the message.
      */
-    fun setInstrument(p: Project, id: EntityId, instrument: InstrumentDefinition, policy: RetuningPolicy): Project {
+    fun setInstrument(p: Project, id: EntityId, instrument: InstrumentDefinition, policy: RetuningPolicy, allowDrop: Boolean = false): Project {
         val track = p.tracks.firstOrNull { it.id == id } ?: throw IllegalArgumentException("Spur fehlt")
         val old = track.instrument
-        val shift = instrument.tuning.size - old.tuning.size
         val newFretted = instrument.tuning.isNotEmpty()
         val oldFretted = old.tuning.isNotEmpty()
-        val problems = mutableListOf<String>()
-        val staves = track.staves.map { st -> st.copy(bars = st.bars.map { bar -> bar.copy(voices = bar.voices.map { v -> v.copy(beats = v.beats.map { b ->
-            val occupied = mutableSetOf<Int>()
-            b.copy(notes = b.notes.mapNotNull { n ->
-                val ns = n.string
-                when {
-                    instrument.kind == InstrumentKind.PERCUSSION || old.kind == InstrumentKind.PERCUSSION -> if (instrument.kind == old.kind) n else { problems += "Schlagzeug ↔ Tonhöheninstrument"; n }
-                    !newFretted -> n.copy(string = null, fret = null)
-                    !oldFretted || ns == null -> {
-                        val placed = NoteEdits.place(instrument, n.pitch.midiNumber, instrument.tuning.lastIndex, occupied)
-                        if (placed == null) { problems += "Ton ${n.pitch.midiNumber} nicht spielbar"; n } else { occupied += placed.first; n.copy(string = placed.first, fret = placed.second) }
-                    }
-                    policy == RetuningPolicy.KEEP_FINGER_POSITION -> {
-                        val s = ns + shift; val f = n.fret ?: 0
-                        if (s !in instrument.tuning.indices || f > instrument.maxFret) { problems += "Saite ${ns + 1} existiert nicht mehr"; n }
-                        else { occupied += s; n.copy(string = s, pitch = n.pitch.copy(midiNumber = instrument.pitch(s, f), spelling = null)) }
-                    }
-                    else -> {
-                        val preferred = (ns + shift).coerceIn(instrument.tuning.indices)
-                        val placed = NoteEdits.place(instrument, n.pitch.midiNumber, preferred, occupied)
-                        if (placed == null) { problems += "Ton ${n.pitch.midiNumber} nicht spielbar"; n } else { occupied += placed.first; n.copy(string = placed.first, fret = placed.second) }
-                    }
-                }
-            })
-        }) }) }) }
-        require(problems.isEmpty()) { "Umstimmen nicht möglich: ${problems.distinct().take(3).joinToString("; ")}" + if (problems.size > 3) " …" else "" }
+        val plan = Retuning.plan(p, id, instrument, policy)
+        val drops = plan.problems.filter { it.resolution == RetuneResolution.DROP }
+        require(allowDrop || drops.isEmpty()) { Retuning.failureMessage(drops) }
         val notation = if (instrument.kind == InstrumentKind.PERCUSSION) setOf(NotationKind.PERCUSSION) else if (newFretted) setOf(NotationKind.TAB) else setOf(NotationKind.STANDARD)
-        val updated = track.copy(instrument = instrument, staves = staves.map { if (oldFretted != newFretted || (old.kind == InstrumentKind.PERCUSSION) != (instrument.kind == InstrumentKind.PERCUSSION)) it.copy(notation = notation) else it })
+        val updated = track.copy(instrument = instrument, staves = plan.staves.map { if (oldFretted != newFretted || (old.kind == InstrumentKind.PERCUSSION) != (instrument.kind == InstrumentKind.PERCUSSION)) it.copy(notation = notation) else it })
         return p.copy(tracks = p.tracks.map { if (it.id == id) updated else it })
     }
+
+    /** Pure dry run of [setInstrument]: the notes that would be octaved or dropped, with bar and string. */
+    fun retuneProblems(p: Project, id: EntityId, instrument: InstrumentDefinition, policy: RetuningPolicy): List<RetuneProblem> = Retuning.problems(p, id, instrument, policy)
 }

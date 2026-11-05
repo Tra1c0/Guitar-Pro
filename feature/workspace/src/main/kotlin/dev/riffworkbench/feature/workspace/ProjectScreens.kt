@@ -255,35 +255,95 @@ import dev.riffworkbench.ui.score.pitchName
     }
 }
 
+private fun noteName(midi: Int) = "${pitchName(midi)}${midi / 12 - 1}"
+
+/** Top-aligned string count change: the high strings keep their pitches, the lowest string is added (a fourth below, or from a matching preset) or removed. */
+internal fun resizeTuning(instrument: InstrumentDefinition, strings: Int): InstrumentDefinition {
+    val tuning = instrument.tuning
+    if (strings == tuning.size || tuning.isEmpty()) return instrument
+    val capo = instrument.capoByString.firstOrNull() ?: 0
+    val next = if (strings < tuning.size) tuning.drop(tuning.size - strings) else {
+        val preset = TuningPresets.all.firstOrNull { it.kind == instrument.kind && it.tuning.size == strings && it.tuning.takeLast(tuning.size) == tuning }
+        preset?.tuning ?: (List(strings - tuning.size) { 0 } + tuning).let { padded -> padded.toMutableList().also { t -> for (i in (strings - tuning.size - 1) downTo 0) t[i] = (t[i + 1] - 5).coerceAtLeast(0) } }
+    }
+    return instrument.copy(tuning = next, capoByString = List(strings) { capo })
+}
+
 @Composable fun InstrumentsScreen(vm: WorkspaceViewModel, state: EditorState) {
     val track = state.project.tracks.first { it.id == state.selection.trackId }
     val instrument = track.instrument
-    val settings = vm.retunePolicy()
-    var policy by remember { mutableStateOf(settings) }
+    var policy by remember { mutableStateOf(vm.retunePolicy()) }
+    // The draft is edited locally; one "Anwenden" dispatches a single SetInstrument (one undo step).
+    var draft by remember(track.id, instrument) { mutableStateOf(instrument) }
+    var allowDrop by remember(track.id, instrument) { mutableStateOf(false) }
+    val dirty = draft != instrument
+    val problems = remember(draft, policy, state.project, track.id) { if (dirty) vm.retuneProblems(draft, policy) else emptyList() }
+    val drops = problems.filter { it.resolution == RetuneResolution.DROP }
     val chords by vm.chords.collectAsStateWithLifecycle()
     var chordName by remember { mutableStateOf("E5") }
     ScrollPage(stringResource(R.string.instruments), stringResource(R.string.instrument_hint)) {
         TrackAndVoice(vm, state)
         Text(track.name, style = MaterialTheme.typography.titleLarge)
         if (instrument.tuning.isNotEmpty()) {
-            Text(stringResource(R.string.tuning), style = MaterialTheme.typography.titleSmall)
-            Text(instrument.tuning.joinToString(" – ") { "${pitchName(it)}${it / 12 - 1}" } + (TuningPresets.matching(instrument.tuning)?.let { "  (${it.name})" } ?: ""))
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(policy == RetuningPolicy.KEEP_SOUNDING_PITCH, { policy = RetuningPolicy.KEEP_SOUNDING_PITCH }, label = { Text(stringResource(R.string.retain_pitch)) })
-                FilterChip(policy == RetuningPolicy.KEEP_FINGER_POSITION, { policy = RetuningPolicy.KEEP_FINGER_POSITION }, label = { Text(stringResource(R.string.retain_fret)) })
-            }
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TuningPresets.all.filter { it.kind == instrument.kind || (instrument.kind == InstrumentKind.OTHER) }.forEach { preset ->
-                    FilterChip(preset.tuning == instrument.tuning, { vm.command(EditorCommand.SetInstrument(track.id, instrument.copy(tuning = preset.tuning, capoByString = List(preset.tuning.size) { instrument.capoByString.firstOrNull() ?: 0 }), policy)) }, label = { Text(preset.name) })
+            OutlinedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("${stringResource(R.string.tuning)} · ${TuningPresets.matching(draft.tuning)?.name ?: tr("eigene", "custom")}", style = MaterialTheme.typography.titleMedium)
+                Text(draft.tuning.joinToString(" – ") { noteName(it) }, fontFamily = FontFamily.Monospace)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(policy == RetuningPolicy.KEEP_SOUNDING_PITCH, { policy = RetuningPolicy.KEEP_SOUNDING_PITCH; vm.setRetunePolicy(policy) }, label = { Text(stringResource(R.string.retain_pitch)) })
+                    FilterChip(policy == RetuningPolicy.KEEP_FINGER_POSITION, { policy = RetuningPolicy.KEEP_FINGER_POSITION; vm.setRetunePolicy(policy) }, label = { Text(stringResource(R.string.retain_fret)) })
                 }
-            }
-            Text(tr("Einzelne Saiten (tief → hoch)", "Individual strings (low → high)"), style = MaterialTheme.typography.titleSmall)
-            instrument.tuning.forEachIndexed { s, pitch ->
-                Stepper("${s + 1}", "${pitchName(pitch)}${pitch / 12 - 1}", { if (pitch > 12) vm.command(EditorCommand.SetInstrument(track.id, instrument.copy(tuning = instrument.tuning.toMutableList().also { it[s] = pitch - 1 }), policy)) },
-                    { if (pitch < 100) vm.command(EditorCommand.SetInstrument(track.id, instrument.copy(tuning = instrument.tuning.toMutableList().also { it[s] = pitch + 1 }), policy)) })
-            }
-            Stepper(tr("Capo", "Capo"), "${instrument.capoByString.firstOrNull() ?: 0}", { val c = (instrument.capoByString.firstOrNull() ?: 0) - 1; if (c >= 0) vm.command(EditorCommand.SetInstrument(track.id, instrument.copy(capoByString = List(instrument.tuning.size) { c }), policy)) },
-                { val c = (instrument.capoByString.firstOrNull() ?: 0) + 1; if (c <= 12) vm.command(EditorCommand.SetInstrument(track.id, instrument.copy(capoByString = List(instrument.tuning.size) { c }), policy)) })
+                Text(if (policy == RetuningPolicy.KEEP_SOUNDING_PITCH) tr("Gleiche Tonhöhe: Bünde ändern sich, Noten wandern auf passende Saiten; was nirgends passt, wird oktaviert.", "Same pitch: frets change and notes move to fitting strings; what fits nowhere is shifted an octave.")
+                    else tr("Gleicher Griff: Saite und Bund bleiben, die Tonhöhen ändern sich; Noten verschwundener Saiten werden nach Tonhöhe gesetzt.", "Same fingering: string and fret stay, pitches change; notes of vanished strings are placed by pitch."),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TuningPresets.all.filter { it.kind == instrument.kind || (instrument.kind == InstrumentKind.OTHER) }.forEach { preset ->
+                        FilterChip(preset.tuning == draft.tuning, { draft = draft.copy(tuning = preset.tuning, capoByString = List(preset.tuning.size) { draft.capoByString.firstOrNull() ?: 0 }) }, label = { Text(preset.name) })
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(tr("Saiten", "Strings"), style = MaterialTheme.typography.titleSmall)
+                    listOf(6, 7, 8).forEach { n -> FilterChip(draft.tuning.size == n, { draft = resizeTuning(draft, n) }, label = { Text("$n") }) }
+                }
+                Text(tr("Oben bündig: Mehr oder weniger Saiten ändern nur die tiefste Saite; die hohen Saiten behalten ihre Noten.", "Top-aligned: more or fewer strings change only the lowest string; the high strings keep their notes."),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(tr("Einzelne Saiten (tief → hoch)", "Individual strings (low → high)"), style = MaterialTheme.typography.titleSmall)
+                val reference = TuningPresets.all.filter { it.kind == draft.kind && it.tuning.size == draft.tuning.size }
+                    .minByOrNull { preset -> preset.tuning.indices.sumOf { kotlin.math.abs(preset.tuning[it] - draft.tuning[it]) } }
+                draft.tuning.forEachIndexed { s, pitch ->
+                    val delta = reference?.let { pitch - it.tuning[s] } ?: 0
+                    Stepper("${s + 1}", noteName(pitch) + (if (delta != 0) " ${if (delta > 0) "+" else "−"}${kotlin.math.abs(delta)}" else ""),
+                        { if (pitch > 12) draft = draft.copy(tuning = draft.tuning.toMutableList().also { it[s] = pitch - 1 }) },
+                        { if (pitch < 100) draft = draft.copy(tuning = draft.tuning.toMutableList().also { it[s] = pitch + 1 }) })
+                }
+                reference?.let { Text(tr("Abweichung gegenüber ${it.name}", "Offset from ${it.name}"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                Stepper(tr("Capo", "Capo"), "${draft.capoByString.firstOrNull() ?: 0}",
+                    { val c = (draft.capoByString.firstOrNull() ?: 0) - 1; if (c >= 0) draft = draft.copy(capoByString = List(draft.tuning.size) { c }) },
+                    { val c = (draft.capoByString.firstOrNull() ?: 0) + 1; if (c <= 12) draft = draft.copy(capoByString = List(draft.tuning.size) { c }) })
+                if (draft.tuning.any { it < 37 }) Text(tr("Hinweis: unter D♭2 (MIDI 37) wird aus dem tiefsten Sample gestimmt.", "Note: below D♭2 (MIDI 37) the lowest sample is pitched down."),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                if (dirty) {
+                    if (problems.isEmpty()) Text(tr("Alle Noten bleiben spielbar.", "All notes stay playable."), style = MaterialTheme.typography.bodyMedium)
+                    else {
+                        Text(tr("Konflikte", "Conflicts") + " (${problems.size})", style = MaterialTheme.typography.titleSmall)
+                        problems.take(12).forEach { pr ->
+                            val resolution = when (pr.resolution) {
+                                RetuneResolution.OCTAVE_UP -> tr("oktavieren (+12)", "octave up (+12)")
+                                RetuneResolution.OCTAVE_DOWN -> tr("oktavieren (−12)", "octave down (−12)")
+                                RetuneResolution.DROP -> tr("entfernen", "remove")
+                            }
+                            Text("${tr("Takt", "Bar")} ${pr.barIndex + 1} · ${stringResource(R.string.string_label)} ${pr.string + 1} · ${noteName(pr.midi)} → $resolution", style = MaterialTheme.typography.bodySmall,
+                                color = if (pr.resolution == RetuneResolution.DROP) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+                        }
+                        if (problems.size > 12) Text("… +${problems.size - 12}", style = MaterialTheme.typography.bodySmall)
+                        if (drops.isNotEmpty()) ToggleRow(tr("${drops.size} nicht spielbare Noten entfernen", "Remove ${drops.size} unplayable notes"), allowDrop, { allowDrop = it })
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { vm.retune(draft, policy, allowDrop) }, enabled = dirty && (drops.isEmpty() || allowDrop)) { Text(tr("Anwenden", "Apply")) }
+                    OutlinedButton(onClick = { draft = instrument; allowDrop = false }, enabled = dirty) { Text(tr("Zurücksetzen", "Reset")) }
+                }
+            } }
+            HorizontalDivider()
             Text(stringResource(R.string.fretboard), style = MaterialTheme.typography.titleMedium)
             Column(Modifier.horizontalScroll(rememberScrollState())) { instrument.tuning.indices.reversed().forEach { string -> Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(pitchName(instrument.tuning[string]), Modifier.width(28.dp))

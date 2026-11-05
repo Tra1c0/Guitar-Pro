@@ -30,7 +30,7 @@ fun main(args: Array<String>) = runBlocking {
             File(root, "$name.riffproj").writeBytes(encoded.value.bytes)
             if (writeJson) File(root, "$name.json").writeText(json.encodeToString(project))
         }
-        val session = EditorSession(factory.create("Metal · Drop A · 150 BPM"), ids)
+        val session = EditorSession(factory.demo("Metal · Drop A · 150 BPM"), ids)
         val first = session.state.value.selection
         repeat(8) { index ->
             session.select(first.copy(offset = Fraction.of(index.toLong(), 16)))

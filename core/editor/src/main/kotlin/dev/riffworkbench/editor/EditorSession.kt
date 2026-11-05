@@ -72,7 +72,8 @@ sealed interface EditorCommand {
     // Tracks and project
     data class DuplicateTrack(val id: EntityId) : EditorCommand
     data class RenameTrack(val id: EntityId, val name: String) : EditorCommand
-    data class SetInstrument(val id: EntityId, val instrument: InstrumentDefinition, val policy: RetuningPolicy) : EditorCommand
+    /** [allowDrop]: notes that fit nowhere even an octave away are removed instead of rejecting the edit. */
+    data class SetInstrument(val id: EntityId, val instrument: InstrumentDefinition, val policy: RetuningPolicy, val allowDrop: Boolean = false) : EditorCommand
     data class SetSound(val id: EntityId, val sound: SoundAssignment) : EditorCommand
     data class SetMetadata(val metadata: ProjectMetadata) : EditorCommand
     data class SetMasterMix(val mix: ChannelMix) : EditorCommand
@@ -221,7 +222,7 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
             // Non-finite numbers cannot be saved (JSON) and would make every sounding pitch NaN.
             require(c.instrument.fineTuneCents.isFinite() && kotlin.math.abs(c.instrument.fineTuneCents) <= 1200.0) { "Feinstimmung ungültig" }
             require(c.instrument.drumKit.all { it.volume.isFinite() && it.pan.isFinite() }) { "Schlagzeug-Werte ungültig" }
-            TrackEdits.setInstrument(p, c.id, c.instrument, c.policy)
+            TrackEdits.setInstrument(p, c.id, c.instrument, c.policy, c.allowDrop)
         }
         is EditorCommand.SetSound -> requireText(c.sound.mappingDescription, "Klang").let { TrackEdits.update(p, c.id) { it.copy(sound = c.sound) } }
         is EditorCommand.SetMetadata -> { c.metadata.let { m -> listOf(m.title, m.artist, m.album, m.composer, m.copyright, m.notes).forEach { requireText(it, "Metadaten") } }; require(c.metadata.title.isNotBlank() && c.metadata.title.length <= 200) { "Titel ungültig" }

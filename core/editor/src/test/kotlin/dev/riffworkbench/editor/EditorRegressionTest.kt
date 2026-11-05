@@ -7,7 +7,7 @@ import org.junit.Test
 class EditorRegressionTest {
     private var sequence = 0
     private val ids = IdSource { EntityId("q-${sequence++}") }
-    private fun session() = EditorSession(ProjectFactory(ids).create("QA"), ids)
+    private fun session() = EditorSession(ProjectFactory(ids).demo("QA"), ids)
     private fun EditorSession.at(offset: Fraction, string: Int = 0, measure: Int = 0, track: Int = 0) =
         select(state.value.selection.copy(trackId = state.value.project.tracks[track].id, measureId = state.value.project.measures[measure].id, offset = offset, string = string))
     private fun EditorSession.ok(c: EditorCommand) { val r = dispatch(c); assertTrue("$c -> $r", r is Outcome.Success) }

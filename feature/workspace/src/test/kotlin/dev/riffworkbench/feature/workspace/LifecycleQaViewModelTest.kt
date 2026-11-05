@@ -68,7 +68,7 @@ class LifecycleQaViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val host = RealtimeHost({ Sink() }, threadStarter = { _, _ -> Thread {} }, idleStopSeconds = 1000.0)
         val transport = EngineTransport(host, pollMillis = 1_000_000)
-        val repo = Repository(ProjectFactory(ids).create("Cursor"))
+        val repo = Repository(ProjectFactory(ids).demo("Cursor"))
         val vm = WorkspaceViewModel(repo.stored.id, repo, Snapshots(), exchange, settings, transport, ids, WorkspaceServices(), background = StandardTestDispatcher(testScheduler))
         val store = ViewModelStore(); store.put("test", vm)
         try {
