@@ -34,6 +34,10 @@ class PendingExports {
     var bytes: dev.riffworkbench.model.ExportResult? = null
     var stream: Pair<dev.riffworkbench.feature.workspace.ExportTarget, dev.riffworkbench.feature.workspace.WorkspaceViewModel>? = null
     var pdf: dev.riffworkbench.feature.workspace.WorkspaceViewModel? = null
+    /** Launcher of the current composition; an export finishing after a rotation must not use a disposed one. */
+    var launchBytes: ((String) -> Unit)? = null
+    /** An in-memory export finished while no composition was attached; launched by the next one. */
+    var bytesQueued = false
 }
 
 open class RiffApplication : Application() {

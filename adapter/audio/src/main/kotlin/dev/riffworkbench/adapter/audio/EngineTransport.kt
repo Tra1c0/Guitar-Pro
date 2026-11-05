@@ -49,6 +49,9 @@ class EngineTransport(
     @Volatile private var pendingSeek: PlaybackOccurrence? = null
     /** Set by pause()/stop() until the next play(): the render thread may still report the old playing state for one block. */
     @Volatile private var halted: TransportStatus? = null
+    /** Bumped by every pause()/stop(); a play() that was requested before cannot start afterwards. Guarded by [haltLock]. */
+    private var haltEpoch = 0L
+    private val haltLock = Any()
     /** Speed last requested by the caller (practice settings), as opposed to the speed the trainer has reached. */
     @Volatile private var requestedSpeed = 1.0
 
@@ -135,7 +138,7 @@ class EngineTransport(
         return ClipSet.build(project, buffers, rate, settings.speed)
     }
 
-    override suspend fun play(): Outcome<Unit> = mutex.withLock {
+    override suspend fun play(): Outcome<Unit> { val epoch = synchronized(haltLock) { haltEpoch }; return mutex.withLock {
         val p = project ?: return@withLock Outcome.Failure(FailureCode.VALIDATION, "Kein Projekt vorbereitet", contractId = "C-AUDIO")
         val wasRunning = host.isRunning
         val format = ensureHost() ?: return@withLock unavailable("C-AUDIO", "Audioausgabe konnte nicht geöffnet werden")
@@ -147,21 +150,34 @@ class EngineTransport(
         if (snap.ended || from >= current.totalFrames) from = loopFrames?.first ?: 0L
         loopFrames?.let { (start, end) -> if (from !in start until end) from = start }
         val (countIn, clicks) = countIn(current, from)
-        halted = null
-        host.post(HostCommand.Play(from, countIn, clicks))
-        trainerPasses = 0; lastLoops = snap.loopsCompleted
-        publish(TransportStatus.PLAYING, null)
+        synchronized(haltLock) {
+            // Stop/pause (button, background, audio focus) arrived while this play was compiling or decoding: they win.
+            if (haltEpoch != epoch) return@withLock Outcome.Success(Unit)
+            halted = null
+            host.post(HostCommand.Play(from, countIn, clicks))
+            trainerPasses = 0; lastLoops = snap.loopsCompleted
+            publish(TransportStatus.PLAYING, null)
+        }
         Outcome.Success(Unit)
+    } }
+
+    override suspend fun pause(): Outcome<Unit> {
+        synchronized(haltLock) {
+            haltEpoch++
+            // Only a running playback becomes PAUSED; a stopped transport stays STOPPED so the next play starts at the cursor.
+            if (mutable.value.status == TransportStatus.PLAYING) { halted = TransportStatus.PAUSED; host.post(HostCommand.Pause); publish(TransportStatus.PAUSED, null) }
+        }
+        return Outcome.Success(Unit)
     }
 
-    override suspend fun pause(): Outcome<Unit> { halted = TransportStatus.PAUSED; host.post(HostCommand.Pause); publish(TransportStatus.PAUSED, null); return Outcome.Success(Unit) }
-
-    override suspend fun stop(): Outcome<Unit> {
+    override suspend fun stop(): Outcome<Unit> = synchronized(haltLock) {
+        haltEpoch++
+        pendingSeek = null
         halted = TransportStatus.STOPPED
         host.post(HostCommand.Pause)
         host.post(HostCommand.Seek(loopFrames?.first ?: 0L))
         mutable.value = mutable.value.copy(status = TransportStatus.STOPPED, position = plan?.positionAt(loopFrames?.first ?: 0L), sample = SamplePosition(loopFrames?.first ?: 0L, plan?.sampleRate ?: 48_000))
-        return Outcome.Success(Unit)
+        Outcome.Success(Unit)
     }
 
     private fun frameFor(p: PlaybackPlan, position: PlaybackOccurrence): Long? = p.frameOf(position.routeIndex, position.position.offset)
@@ -177,8 +193,8 @@ class EngineTransport(
     }
 
     override suspend fun setLoop(range: LoopRange?): Outcome<Unit> = mutex.withLock {
-        settings = settings.copy(loop = range)
-        applyLoopLocked(range)
+        // A rejected range must not replace the loop that is active (it would be dropped on the next recompile).
+        applyLoopLocked(range).also { if (it is Outcome.Success) settings = settings.copy(loop = range) }
     }
 
     /** Loop frames of [range] in [p], or null when the range is not on the route. */

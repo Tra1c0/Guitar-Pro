@@ -64,6 +64,11 @@ object AppRoutes {
         }
         else if (uri != null) notice = "Export nach Prozessneustart bitte erneut starten."
     }
+    DisposableEffect(exportLauncher) {
+        pending.launchBytes = { name -> exportLauncher.launch(name) }
+        if (pending.bytesQueued) { pending.bytesQueued = false; pending.bytes?.let { exportLauncher.launch(it.fileName) } }
+        onDispose { pending.launchBytes = null }
+    }
     val streamLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri: Uri? ->
         val job = pendingStream; pendingStream = null
         // Rendering a long mix takes seconds to minutes: run it outside the composition so a rotation does not truncate the file.
@@ -71,6 +76,7 @@ object AppRoutes {
             val r = container.documents.stream(uri) { sink -> job.second.renderAudio(job.first, sink) }
             withContext(Dispatchers.Main) { notice = if (r is Outcome.Failure) r.message else success }
         }
+        else if (uri != null) notice = "Export nach Prozessneustart bitte erneut starten."
     }
     val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri: Uri? ->
         val vm = pendingPdf; pendingPdf = null
@@ -88,6 +94,7 @@ object AppRoutes {
             }
             withContext(Dispatchers.Main) { notice = if (r is Outcome.Failure) r.message else success }
         }
+        else if (uri != null) notice = "Export nach Prozessneustart bitte erneut starten."
     }
     LaunchedEffect(container) { when (val result = container.settings.load()) { is Outcome.Failure -> notice = result.message; is Outcome.Success -> Unit } }
     RiffTheme(settings.darkTheme) { Surface(Modifier.fillMaxSize()) { Column {
@@ -98,7 +105,8 @@ object AppRoutes {
         NavHost(navController = nav, startDestination = AppRoutes.LIBRARY, modifier = Modifier.weight(1f)) {
             composable(AppRoutes.LIBRARY) {
                 val vm: LibraryViewModel = viewModel(factory = factory { LibraryViewModel(container.projects, container.nativeExchange, container.ids, container.formats, container.assets) })
-                val open: (EntityId) -> Unit = { nav.navigate(AppRoutes.project(it)) }
+                // A double tap during the transition must not stack two sessions of the same project.
+                val open: (EntityId) -> Unit = { if (nav.currentBackStackEntry?.destination?.route == AppRoutes.LIBRARY) nav.navigate(AppRoutes.project(it)) }
                 val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) scope.launch {
                     when (val read = container.documents.read(uri)) { is Outcome.Failure -> vm.showError(read.message); is Outcome.Success -> vm.importFile(read.value, container.documents.displayName(uri), open) }
                 } }
@@ -107,7 +115,7 @@ object AppRoutes {
             composable(AppRoutes.PROJECT, arguments = listOf(navArgument("projectId") { type = NavType.StringType })) { entry ->
                 val id = EntityId(requireNotNull(entry.arguments?.getString("projectId")))
                 val vm: WorkspaceViewModel = viewModel(factory = factory { WorkspaceViewModel(id, container.projects, container.projects, container.nativeExchange, container.settings, container.transport, container.ids, container.workspaceServices) })
-                val leave: () -> Unit = { scope.launch { container.transport.stop(); when (val result = vm.flush()) { is Outcome.Failure -> vm.showNotice(result.message); is Outcome.Success -> nav.popBackStack() } }; Unit }
+                val leave: () -> Unit = { scope.launch { container.transport.stop(); when (val result = vm.flush()) { is Outcome.Failure -> vm.showNotice(result.message); is Outcome.Success -> if (nav.currentBackStackEntry == entry) nav.popBackStack() } }; Unit }
                 BackHandler(onBack = leave)
                 val lifecycle = LocalLifecycleOwner.current.lifecycle
                 DisposableEffect(lifecycle, vm) {
@@ -119,7 +127,7 @@ object AppRoutes {
                     when (val read = container.documents.read(uri)) { is Outcome.Failure -> vm.showNotice(read.message); is Outcome.Success -> vm.importAudio(read.value, container.documents.displayName(uri)) }
                 } }
                 val actions = remember(vm) { ExportActions(
-                    bytes = { result -> if (pendingExport == null) { pendingExport = result; exportLauncher.launch(result.fileName) } },
+                    bytes = { result -> if (pendingExport == null) { pendingExport = result; pending.launchBytes?.invoke(result.fileName) ?: run { pending.bytesQueued = true } } },
                     stream = { target -> if (pendingStream == null) { pendingStream = target to vm; streamLauncher.launch(vm.suggestedName(target)) } },
                     pdf = { if (pendingPdf == null) { pendingPdf = vm; pdfLauncher.launch(vm.suggestedName(ExportTarget.PDF)) } },
                     importAudio = { audioLauncher.launch(arrayOf("audio/*", "application/ogg")) },

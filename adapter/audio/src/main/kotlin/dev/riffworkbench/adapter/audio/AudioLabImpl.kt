@@ -93,6 +93,8 @@ class EngineAudioLab(
         try {
             for (sec in 1..seconds.coerceIn(5, 3600)) {
                 delay(1000)
+                // An external pause (background, audio focus, headphones unplugged) ends the test instead of being undone.
+                if (transport.state.value.status == TransportStatus.PAUSED) break
                 if (transport.state.value.status != TransportStatus.PLAYING) {
                     transport.seek(PlaybackOccurrence(ScorePosition(project.measures[0].id), 0, 0)); transport.play()
                 }
