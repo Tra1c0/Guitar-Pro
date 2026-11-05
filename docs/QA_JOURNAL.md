@@ -363,3 +363,27 @@ Tests: `Qa14EditorFindingsTest` (14 Tests), `Qa14StorageCrashFindingsTest`.
 **Bekannt, nicht geändert:** Takte einfügen/duplizieren zwischen gebundenen Takten behält den Bogen über die neuen Takte (bewusstes Design, `EditorExtensionsTest`); Transpose/SetInstrument können Bögen über Saiten teilen. Doppelfehler: Absturz zwischen `head.previous` und `head.json` lässt beide auf Revision N zeigen — ist N danach zusätzlich beschädigt, ist N−1 nicht mehr erreichbar. Ein Projekt mit nur einer Revision, dessen beide Heads verloren gehen, ist nun ebenfalls unsichtbar statt als unlesbar gemeldet (beides ohne Zugriff; Dateien bleiben erhalten).
 
 Ergebnis Zyklus 14: **7 Defektgruppen bestätigt und behoben** → nicht defektfrei.
+
+### Zyklus 15 — Generative Rundreise-Prüfung der Formate („Verlust-Ehrlichkeit“) und eigenschaftsbasierte Layout-Prüfung
+
+Methoden (neu): (a) `Qa15FormatRoundTripTest`: zufällige gültige Projekte ausschließlich über EditorCommands erzeugt, Export→Import für GP7, MusicXML/.mxl, MIDI, nativ; merkmalsgenauer Vergleich, jede Abweichung muss durch einen Export-Verlust oder dokumentierte Formatgrenzen erklärt sein (L1), keine Ausnahme (L2), kein ERROR beim Import des eigenen Exports (L3), Idempotenz nach einer Runde (L4) — > 5 000 Projekte je Format. (b) `Qa15LayoutPropertyTest`: 2 000 zufällige Projekte, 8 000 Layouts (bis 300 Takte, 4–8 Saiten, Schlagzeug, Klavier, Tuplets, alle Artikulationen, TAB/Noten/beides, Umbruchbreiten, Raster); Invarianten P1–P9 (eine NoteBox je Note, Hit-Test trifft eigene Note, `xFor` monoton, `columnAt` invers, Glyphen im System, keine Überlappung, lineare Laufzeit, gültiges SVG, Determinismus). (c) Gegenprobe mit dem Realkorpus aus Zyklus 8 (673 Dateien): **keine Statusänderung**; einzige Zahlenänderung `test-all-gm-percussion.mid` 251 → 183 Noten = exakt die 183 Note-On-Ereignisse der Datei (vorher zerlegte Schlagzeugschläge).
+
+**Korrektur Zyklus 13:** Die dortige Angabe „Notenkopf in der Standardnotation ist ebenfalls greifbar“ war falsch — ohne TAB gab es gar keine NoteBoxes (siehe 1).
+
+**Bestätigt und repariert:**
+1. Ohne TAB (nur Noten bei Gitarre, Schlagzeug, Klavier) gab es keine Trefferflächen: Noten waren nicht antippbar und nicht ziehbar → Notenköpfe erzeugen NoteBoxes (`Qa15LayoutFindingsTest`).
+2. Whammy-Dip wurde unter das System bzw. aus der Seite gezeichnet (PDF schnitt ihn ab) → auf den Systemraum begrenzt.
+3. Das „(n)“ einer Bindeziel-Note war breiter als ihre Spalte: Tippen auf die Mitte der Nachbarnote wählte das Bindeziel → Spaltenbreite berücksichtigt Bindeziele.
+4. MIDI: ein Schlagzeugschlag erklang nach Re-Import doppelt (in gebundene Stücke zerlegt, Schlagzeug ignoriert Bindungen) → ein ungebundener Wert.
+5. GP7: Dynamik einer einzelnen Akkordnote änderte die anderen ohne Verlustmeldung; Schlagtechnik (Side-Stick/Rimshot) übertrug sich auf normale Schläge desselben Instruments.
+6. MusicXML: Whammy-Dip kam mit umgekehrter Richtung zurück; Bend+Whammy auf einer Note verschmolzen; Vibrato einer Akkordnote breitete sich auf den Akkord aus.
+7. MusicXML ohne Verlustmeldung: expliziter D.S.-/Coda-Ziel, Textart (Fingersatz/Abschnitt), Hammer-on/Pull-off/Slide ohne Folgenote, Strum auf Einzelnote, Triller-Rate → jetzt gemeldet.
+8. MIDI: benannte leere Spuren verschwanden; Bend-Kurven drifteten bei jeder Rundreise um einige Cent bzw. fielen in der zweiten Runde weg → stabil.
+9. Metadaten: Leerzeichen am Rand gingen in XML-Formaten verloren → `SetMetadata` trimmt kanonisch wie `Rename` (die UI trimmte bereits).
+Tests: `Qa15FormatFindingsTest` (13), `Qa15LayoutFindingsTest` (4), beide Kampagnen als kurze Läufe in der Suite.
+
+**Gehalten:** nativ verlustfrei in allen Projekten; keine Ausnahmen/ERRORs; GP7 idempotent; Layout: TAB-Trefferflächen, `stringAt`, Monotonie, Inversität, keine Überlappung, kein NaN, 300 dichte Takte ≤ 128 ms bei linearer Glyphenzahl, alle SVGs gültig, deterministisch.
+
+**Bekannt, nicht geändert (Standard-Ausnahmen der Layout-Kampagne):** Hit-Test ignoriert die Stimme; Notenköpfe ohne TAB können sich bei Sekund-Akkorden und extremer Kompression überdecken; Noten weit außerhalb des Systems (Klavier < m24, Gitarre > Bund 30) verlassen das Band; bei Rand 0 ragen Labels/letzte Spalte bis 2 Einheiten über den Schlussstrich; seltene Bend-Pfeile unter dem System. Formate: MusicXML erkennt tief gestimmte 4/5-Saiter ohne Namen „Bass“ als Bass; MIDI Let-Ring am Schluss/verschobene Texte erzeugen Zusatztakte; einzelne MIDI-Rundungsdifferenzen bei Bends und 7-Saiter-Stimmung in der zweiten Runde.
+
+Ergebnis Zyklus 15: **9 Defektgruppen (16 Einzelbefunde) bestätigt und behoben** → nicht defektfrei.
