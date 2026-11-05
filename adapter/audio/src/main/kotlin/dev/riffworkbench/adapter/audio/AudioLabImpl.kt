@@ -88,13 +88,15 @@ class EngineAudioLab(
         val settings = PracticeSettings(speed = 1.0, countInBars = 0, metronome = false)
         transport.prepare(project, settings).let { if (it is Outcome.Failure) return it }
         transport.play().let { if (it is Outcome.Failure) return it }
+        val ownHalts = transport.halts
         val samples = ArrayList<StressSample>()
         val start = stats()
         try {
             for (sec in 1..seconds.coerceIn(5, 3600)) {
                 delay(1000)
-                // An external pause (background, audio focus, headphones unplugged) ends the test instead of being undone.
-                if (transport.state.value.status == TransportStatus.PAUSED) break
+                // An external pause/stop (background, audio focus, headphones unplugged) ends the test instead of being undone,
+                // also between passes when the playback had just ended.
+                if (transport.halts != ownHalts || transport.state.value.status == TransportStatus.PAUSED) break
                 if (transport.state.value.status != TransportStatus.PLAYING) {
                     transport.seek(PlaybackOccurrence(ScorePosition(project.measures[0].id), 0, 0)); transport.play()
                 }

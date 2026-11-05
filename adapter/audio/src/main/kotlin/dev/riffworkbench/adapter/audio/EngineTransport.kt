@@ -51,6 +51,13 @@ class EngineTransport(
     @Volatile private var halted: TransportStatus? = null
     /** Bumped by every pause()/stop(); a play() that was requested before cannot start afterwards. Guarded by [haltLock]. */
     private var haltEpoch = 0L
+    /** Play was posted but the render thread has not started yet: its snapshot still shows the old, non-playing position. */
+    @Volatile private var starting = false
+    @Volatile private var startingSince = 0L
+    /** Halt epoch when the caller began preparing this play (togglePlay compiles in prepare() while the output is open). */
+    @Volatile private var prepareEpoch: Long? = null
+    /** Number of pause()/stop() calls so far; lets callers (stress test) notice an external halt between its passes. */
+    val halts: Long get() = synchronized(haltLock) { haltEpoch }
     private val haltLock = Any()
     /** Speed last requested by the caller (practice settings), as opposed to the speed the trainer has reached. */
     @Volatile private var requestedSpeed = 1.0
@@ -59,7 +66,15 @@ class EngineTransport(
      * Stores [project] for playback. While the output is running the new plan is compiled and swapped in at the
      * same musical position; otherwise compilation waits for the next play/preview so edits never open the device.
      */
-    override suspend fun prepare(project: Project, settings: PracticeSettings): Outcome<Unit> = mutex.withLock {
+    override suspend fun prepare(project: Project, settings: PracticeSettings): Outcome<Unit> {
+        val epoch = synchronized(haltLock) { haltEpoch }
+        prepareEpoch = epoch
+        return prepareLocked(project, settings).also {
+            // Only a halt that arrived during this prepare is remembered for the following play().
+            synchronized(haltLock) { if (haltEpoch == epoch && prepareEpoch == epoch) prepareEpoch = null }
+        }
+    }
+    private suspend fun prepareLocked(project: Project, settings: PracticeSettings): Outcome<Unit> = mutex.withLock {
         // The speed trainer raises the speed here; a caller that re-sends its unchanged start speed (cursor move, edit)
         // must not reset it. A different speed from the caller is a user change and wins.
         val running = mutable.value.status == TransportStatus.PLAYING || mutable.value.status == TransportStatus.PAUSED
@@ -138,7 +153,10 @@ class EngineTransport(
         return ClipSet.build(project, buffers, rate, settings.speed)
     }
 
-    override suspend fun play(): Outcome<Unit> { val epoch = synchronized(haltLock) { haltEpoch }; return mutex.withLock {
+    override suspend fun play(): Outcome<Unit> {
+        // A stop/pause during the preceding prepare() (where the compile happens while the output runs) also wins.
+        val epoch = synchronized(haltLock) { (prepareEpoch ?: haltEpoch).also { prepareEpoch = null } }
+        return mutex.withLock {
         val p = project ?: return@withLock Outcome.Failure(FailureCode.VALIDATION, "Kein Projekt vorbereitet", contractId = "C-AUDIO")
         val wasRunning = host.isRunning
         val format = ensureHost() ?: return@withLock unavailable("C-AUDIO", "Audioausgabe konnte nicht geöffnet werden")
@@ -154,6 +172,7 @@ class EngineTransport(
             // Stop/pause (button, background, audio focus) arrived while this play was compiling or decoding: they win.
             if (haltEpoch != epoch) return@withLock Outcome.Success(Unit)
             halted = null
+            starting = true; startingSince = System.nanoTime()
             host.post(HostCommand.Play(from, countIn, clicks))
             trainerPasses = 0; lastLoops = snap.loopsCompleted
             publish(TransportStatus.PLAYING, null)
@@ -164,14 +183,17 @@ class EngineTransport(
     override suspend fun pause(): Outcome<Unit> {
         synchronized(haltLock) {
             haltEpoch++
+            starting = false
             // Only a running playback becomes PAUSED; a stopped transport stays STOPPED so the next play starts at the cursor.
-            if (mutable.value.status == TransportStatus.PLAYING) { halted = TransportStatus.PAUSED; host.post(HostCommand.Pause); publish(TransportStatus.PAUSED, null) }
+            // The published status may lag one poll behind a play that was just posted: ask the engine as well.
+            if (mutable.value.status == TransportStatus.PLAYING || starting || host.snapshot().let { it.playing || it.countingIn }) { halted = TransportStatus.PAUSED; host.post(HostCommand.Pause); publish(TransportStatus.PAUSED, null) }
         }
         return Outcome.Success(Unit)
     }
 
     override suspend fun stop(): Outcome<Unit> = synchronized(haltLock) {
         haltEpoch++
+        starting = false
         pendingSeek = null
         halted = TransportStatus.STOPPED
         host.post(HostCommand.Pause)
@@ -318,8 +340,12 @@ class EngineTransport(
                 val snap = host.snapshot()
                 val p = plan
                 val held = halted
+                // (An `ended` flag left over from the previous run is not an answer; give up after 1 s if the thread never starts.)
+                if (starting && (snap.playing || snap.countingIn || !snap.running || System.nanoTime() - startingSince > 1_000_000_000L)) starting = false
                 val status = when {
                     held != null -> held
+                    // Until the first block of the new playback the snapshot is stale: keep PLAYING and the seek position.
+                    starting -> TransportStatus.PLAYING
                     !snap.running && mutable.value.status == TransportStatus.PLAYING -> TransportStatus.STOPPED
                     snap.countingIn -> TransportStatus.PLAYING
                     snap.playing -> TransportStatus.PLAYING
@@ -327,7 +353,7 @@ class EngineTransport(
                     mutable.value.status == TransportStatus.PLAYING -> TransportStatus.PAUSED
                     else -> mutable.value.status
                 }
-                if (held == null && (status == TransportStatus.PLAYING || snap.countingIn)) {
+                if (held == null && !starting && (status == TransportStatus.PLAYING || snap.countingIn)) {
                     mutable.value = mutable.value.copy(status = status, position = p?.positionAt(snap.planFrame), sample = SamplePosition(snap.planFrame, p?.sampleRate ?: 48_000),
                         underruns = snap.underruns, countingIn = snap.countingIn, speed = settings.speed, latencyMs = host.format?.let { it.latencyFrames * 1000.0 / it.sampleRate })
                 } else if (status != mutable.value.status) mutable.value = mutable.value.copy(status = status, countingIn = false)

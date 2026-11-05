@@ -29,6 +29,7 @@ import dev.riffworkbench.ui.components.R
 /** Library after the Tabino V2 design: big title, a colourful "continue" card, quick tiles and the project list. */
 @Composable fun LibraryScreen(vm: LibraryViewModel, onOpen: (EntityId) -> Unit, onImport: () -> Unit, onSettings: () -> Unit) {
     val projects by vm.projects.collectAsStateWithLifecycle()
+    val recent = projects.maxByOrNull { it.modifiedMillis }
     val error by vm.error.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     val issues by vm.issues.collectAsStateWithLifecycle()
@@ -53,7 +54,7 @@ import dev.riffworkbench.ui.components.R
                 items(issues) { issue -> NoticeCard(issue.message, true) }
                 if (creating) item { CreateCard(title, { title = it.take(200) }, busy, onCreate = { creating = false; vm.create(title, onOpen); title = "" }, onCancel = { creating = false }) }
                 item { Row(Modifier.fillMaxWidth().height(230.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ContinueCard(projects.maxByOrNull { it.modifiedMillis }, onOpen, onNew = { creating = true }, Modifier.weight(1f).fillMaxHeight())
+                    ContinueCard(recent, onOpen, onNew = { creating = true }, Modifier.weight(1f).fillMaxHeight())
                     Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         QuickTile("+ ${stringResource(R.string.new_project)}", if (en) "Drop A guitar, bass, drums" else "Drop-A-Gitarre, Bass, Drums", Tabino.Lime, Modifier.weight(1f).fillMaxWidth().testTag("new-project"), enabled = !busy) { creating = true }
                         QuickTile(stringResource(R.string.open_native), "GP3–8 · MusicXML · MIDI", Tabino.Lavender, Modifier.weight(1f).fillMaxWidth(), enabled = !busy, onClick = onImport)
@@ -64,7 +65,8 @@ import dev.riffworkbench.ui.components.R
                         fontFamily = Tabino.Display, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.padding(start = 8.dp, top = 4.dp))
                 }
                 if (projects.isEmpty()) item { Text(stringResource(R.string.empty_description), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp)) }
-                items(projects.drop(1), key = { it.id.value }) { project -> ProjectRow(project, projects.indexOf(project), onOpen = { onOpen(project.id) }, onDelete = { confirmDelete = project }) }
+                // Every project except the one on the "continue" card (that is the most recent, not the first one).
+                items(projects.filter { it.id != recent?.id }, key = { it.id.value }) { project -> ProjectRow(project, projects.indexOf(project), onOpen = { onOpen(project.id) }, onDelete = { confirmDelete = project }) }
                 item { Text(if (en) "Opens Guitar Pro 3–8 (.gp3/.gp4/.gp5/.gpx/.gp), MusicXML (.musicxml/.mxl), MIDI and RiffWorkbench projects (.riffproj). The original file is kept with the project." else
                     "Öffnet Guitar Pro 3–8 (.gp3/.gp4/.gp5/.gpx/.gp), MusicXML (.musicxml/.mxl), MIDI und RiffWorkbench-Projekte (.riffproj). Die Originaldatei bleibt im Projekt erhalten.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) }

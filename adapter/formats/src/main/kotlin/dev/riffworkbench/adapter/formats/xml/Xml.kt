@@ -31,8 +31,11 @@ class XmlElement(val name: String, val attributes: Map<String, String>, val chil
 
 object XmlReader {
     const val MAX_DEPTH = 256
-    /** Elements plus attributes; real scores stay far below (largest corpus GPIF ≈ 90 000). Bounds retained heap to ≈ 150 MiB. */
-    const val MAX_NODES = 1_000_000
+    /**
+     * Elements plus attributes (≈ 130 B retained each). Our own GP7 export needs ≈ 18.5 per note, so 3 M keeps ≈ 160 000-note
+     * scores importable; hostile inputs above that fail early, and the format guards turn a remaining OOM into RESOURCE_LIMIT.
+     */
+    const val MAX_NODES = 3_000_000
     const val MAX_CHARS = 64 * 1024 * 1024
 
     fun parse(bytes: ByteArray): XmlElement {
