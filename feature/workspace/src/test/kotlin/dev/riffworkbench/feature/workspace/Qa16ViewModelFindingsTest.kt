@@ -87,7 +87,7 @@ class Qa16ViewModelFindingsTest {
     private fun expectedLayout(vm: WorkspaceViewModel, width: Float? = null): ScoreLayout {
         val e = vm.state.value.editor!!
         val style = LayoutStyle.EDIT.copy(showTab = true, showStandard = false)
-        return ScoreLayouter.layout(LayoutRequest(e.project, 0, style, width, vm.input.value.duration.length(), e.selection.voice, null))
+        return ScoreLayouter.layout(LayoutRequest(e.project, 0, style, width, vm.input.value.duration.length(), e.selection.voice, null, margin = WorkspaceViewModel.EDITOR_MARGIN))
     }
 
     // ------------------------------------------------------------------ F1: entry duration vs. edit grid

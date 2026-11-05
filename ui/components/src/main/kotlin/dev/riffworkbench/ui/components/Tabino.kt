@@ -123,6 +123,7 @@ object TabinoIcons {
     val More = icon("more", fills = listOf("M5 10a2 2 0 1 0 0 4a2 2 0 1 0 0-4zM12 10a2 2 0 1 0 0 4a2 2 0 1 0 0-4zM19 10a2 2 0 1 0 0 4a2 2 0 1 0 0-4z"))
     val Play = icon("play", fills = listOf("M7 4l13 8-13 8z"))
     val Pause = icon("pause", fills = listOf("M6 4h4v16H6zM14 4h4v16h-4z"))
+    val SkipStart = icon("skipstart", fills = listOf("M5 4h2.5v16H5zM19 5v14L9 12z"))
     val Stop = icon("stop", fills = listOf("M6 6h12v12H6z"))
     val Plus = icon("plus", listOf("M12 5v14M5 12h14"), width = 2.5f)
     val Minus = icon("minus", listOf("M5 12h14"), width = 2.5f)
@@ -202,16 +203,27 @@ data class PillItem(val icon: ImageVector, val label: String, val selected: Bool
 
 /**
  * The floating bottom navigation: a raised pill with round items and one large coral action in the middle.
+ * [beforeCenter] is a small round action next to the centre (jump to start); [centerPaused] marks a paused transport
+ * with a ring and a "II" badge, so "resume" and "start at the cursor" look different behind the same Play icon.
  */
-@Composable fun PillNavBar(items: List<PillItem>, centerIcon: ImageVector, centerLabel: String, onCenter: () -> Unit, modifier: Modifier = Modifier, centerTag: String? = null) {
+@Composable fun PillNavBar(items: List<PillItem>, centerIcon: ImageVector, centerLabel: String, onCenter: () -> Unit, modifier: Modifier = Modifier, centerTag: String? = null,
+                           beforeCenter: PillItem? = null, centerPaused: Boolean = false) {
     val half = items.size / 2
     Surface(shape = RoundedCornerShape(32.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = modifier.fillMaxWidth().height(64.dp)) {
-        Row(Modifier.fillMaxSize().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+        // With the start button six targets must fit a 320-dp phone: 5 × 44 + 56 + 2 × 6 = 288 = 320 − 2 × 16 outer padding.
+        Row(Modifier.fillMaxSize().padding(horizontal = if (beforeCenter != null) 6.dp else 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             items.take(half).forEach { PillNavItem(it) }
-            Surface(onClick = onCenter, shape = CircleShape, color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(56.dp).shadow(10.dp, CircleShape, ambientColor = MaterialTheme.colorScheme.primary, spotColor = MaterialTheme.colorScheme.primary)
-                    .semantics { contentDescription = centerLabel }.let { m -> centerTag?.let { m.testTag(it) } ?: m }) {
-                Box(contentAlignment = Alignment.Center) { Icon(centerIcon, null, Modifier.size(24.dp)) }
+            beforeCenter?.let { PillNavItem(it) }
+            Box {
+                Surface(onClick = onCenter, shape = CircleShape, color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary,
+                    border = if (centerPaused) BorderStroke(3.dp, MaterialTheme.colorScheme.onSurface) else null,
+                    modifier = Modifier.size(56.dp).shadow(10.dp, CircleShape, ambientColor = MaterialTheme.colorScheme.primary, spotColor = MaterialTheme.colorScheme.primary)
+                        .semantics { contentDescription = centerLabel }.let { m -> centerTag?.let { m.testTag(it) } ?: m }) {
+                    Box(contentAlignment = Alignment.Center) { Icon(centerIcon, null, Modifier.size(24.dp)) }
+                }
+                if (centerPaused) Box(Modifier.align(Alignment.TopEnd).size(18.dp).background(MaterialTheme.colorScheme.onSurface, CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(TabinoIcons.Pause, null, Modifier.size(10.dp), tint = MaterialTheme.colorScheme.surface)
+                }
             }
             items.drop(half).forEach { PillNavItem(it) }
         }
@@ -239,7 +251,7 @@ data class PillItem(val icon: ImageVector, val label: String, val selected: Bool
 
 /** Outlined pill showing context information (selection, hints). */
 @Composable fun InfoPill(text: String, dot: Color?, modifier: Modifier = Modifier) {
-    Surface(shape = RoundedCornerShape(20.dp), color = Color.Transparent, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline), modifier = modifier.height(40.dp)) {
+    Surface(shape = RoundedCornerShape(18.dp), color = Color.Transparent, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline), modifier = modifier.heightIn(min = 36.dp)) {
         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             dot?.let { ColorDot(it, square = true) }
             Text(text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)

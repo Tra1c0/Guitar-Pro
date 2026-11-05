@@ -85,6 +85,9 @@
     <string name="loop">A/B-Loop</string>
     <string name="play">Abspielen</string>
     <string name="stop">Stoppen</string>
+    <string name="jump_to_start">Zum Anfang</string>
+    <string name="follow_resume">Folgen</string>
+    <string name="bar_settings">Taktart und Tempo bearbeiten</string>
     <string name="transport_unavailable">Audio-Engine noch nicht verfügbar</string>
     <string name="audio_hint">Mehrere Clips und Stems teilen sich später denselben Transport. Aktuell wird kein Audio abgespielt.</string>
     <string name="audio_empty">Noch keine Audioclips</string>

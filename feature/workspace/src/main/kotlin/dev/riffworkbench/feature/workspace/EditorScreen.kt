@@ -19,6 +19,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -49,34 +51,55 @@ import dev.riffworkbench.ui.score.pitchName
 @Composable fun EditorScreen(vm: WorkspaceViewModel, state: EditorState) {
     val input by vm.input.collectAsStateWithLifecycle()
     var moreTools by rememberSaveable { mutableStateOf(false) }
+    // Bar whose signature/tempo sheet is open (EntityId is a value class over String, so the id itself is saveable).
+    var signatureEditor by rememberSaveable { mutableStateOf<String?>(null) }
     val track = state.project.tracks.first { it.id == state.selection.trackId }
+    // Long press on a drawn time signature (or a tap on the bar info in the header): select that bar and open its sheet.
+    val editSignature: (EntityId) -> Unit = { id ->
+        if (id != state.selection.measureId) vm.select(state.selection.copy(measureId = id, offset = Fraction.ZERO, rangeEnd = null))
+        signatureEditor = id.value
+    }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         if (maxWidth >= 700.dp) Row(Modifier.fillMaxSize()) {
-            Column(Modifier.weight(1f).fillMaxHeight()) { EditorHeader(vm, state); BarMap(vm, state); TabCard(vm, state, Modifier.weight(1f)) }
+            Column(Modifier.weight(1f).fillMaxHeight()) { EditorHeader(vm, state, editSignature); BarMap(vm, state); TabCard(vm, state, Modifier.weight(1f), editSignature) }
             Column(Modifier.width(360.dp).fillMaxHeight().verticalScroll(rememberScrollState()).padding(top = 8.dp)) { Controls(vm, state, track, input) { moreTools = true } }
         } else Column(Modifier.fillMaxSize()) {
-            EditorHeader(vm, state)
+            EditorHeader(vm, state, editSignature)
             BarMap(vm, state)
-            TabCard(vm, state, Modifier.weight(1f))
+            TabCard(vm, state, Modifier.weight(1f), editSignature)
             Controls(vm, state, track, input) { moreTools = true }
         }
     }
     if (moreTools) ModalBottomSheet(onDismissRequest = { moreTools = false }, containerColor = MaterialTheme.colorScheme.surface) { MoreTools(vm, state, input) }
+    signatureEditor?.let { id -> SignatureSheet(vm, EntityId(id), onDismiss = { signatureEditor = null }) }
 }
 
-@Composable private fun EditorHeader(vm: WorkspaceViewModel, state: EditorState) {
+/**
+ * Title row. The bar info ("Takt N · 4/4 · 150 BPM") sits next to the title in label size instead of a second display
+ * line (Bericht 1 §9: metadata had too much weight and height) and opens the signature/tempo sheet of the selected bar:
+ * the accessible alternative to the long press on the drawn signature.
+ */
+@Composable private fun EditorHeader(vm: WorkspaceViewModel, state: EditorState, onEditSignature: (EntityId) -> Unit) {
     val transport by vm.transport.state.collectAsStateWithLifecycle()
     val practice by vm.practice.collectAsStateWithLifecycle()
     val p = state.project
     val index = p.measures.indexOfFirst { it.id == state.selection.measureId }
-    val bpm = p.tempo.filter { t -> p.measures.indexOfFirst { it.id == t.position.measureId } <= index }.maxByOrNull { t -> p.measures.indexOfFirst { it.id == t.position.measureId } }?.quarterNotesPerMinute
+    val bpm = tempoInEffect(p, index)
     val measure = p.measures.getOrNull(index)
     val sig = measure?.signature?.let { "${it.numerator}/${it.denominator}" }.orEmpty()
-    Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        BigTitle(p.metadata.title, "${stringResource(R.string.measure)} ${index + 1} · $sig" + (bpm?.let { " · ${it.toInt()} BPM" } ?: ""), Modifier.weight(1f), size = 24)
+    val info = "${stringResource(R.string.measure)} ${index + 1} · $sig" + (bpm?.let { " · ${it.toInt()} BPM" } ?: "")
+    Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        BigTitle(p.metadata.title, null, Modifier.weight(1f), size = 22)
         val playing = transport.status == TransportStatus.PLAYING && !transport.countingIn
         val beat = transport.position?.let { pos -> p.measures.firstOrNull { it.id == pos.position.measureId }?.let { it.signature to pos.position.offset } }
         if (practice.visualMetronome && playing && beat != null) BeatDots(beat.first, beat.second)
+        val action = stringResource(R.string.bar_settings)
+        Surface(onClick = { measure?.let { onEditSignature(it.id) } }, shape = RoundedCornerShape(16.dp), color = Color.Transparent, contentColor = Tabino.Faint,
+            modifier = Modifier.heightIn(min = 32.dp).semantics { contentDescription = "$info. $action" }.testTag("bar-info")) {
+            Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(info, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
     }
 }
 
@@ -87,19 +110,19 @@ import dev.riffworkbench.ui.score.pitchName
     val counts = state.project.measures.map { m -> staff?.bars?.firstOrNull { it.measureId == m.id }?.voices?.sumOf { v -> v.beats.sumOf { it.notes.size } } ?: 0 }
     val max = (counts.maxOrNull() ?: 0).coerceAtLeast(1)
     val scroll = rememberScrollState()
-    Row(Modifier.fillMaxWidth().height(34.dp).padding(horizontal = 16.dp).horizontalScroll(scroll).clearAndSetSemantics { }, verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+    Row(Modifier.fillMaxWidth().height(24.dp).padding(horizontal = 16.dp).horizontalScroll(scroll).clearAndSetSemantics { }, verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
         state.project.measures.forEachIndexed { i, m ->
             val current = m.id == state.selection.measureId || m.id == state.selection.rangeEnd
-            val h = 8 + (16f * counts[i] / max).toInt()
+            val h = 6 + (14f * counts[i] / max).toInt()
             Box(Modifier.width(16.dp).fillMaxHeight(), contentAlignment = Alignment.BottomCenter) {
-                Surface(onClick = { vm.select(state.selection.copy(measureId = m.id, offset = Fraction.ZERO)) }, shape = RoundedCornerShape(6.dp),
+                Surface(onClick = { vm.selectMeasure(m.id) }, shape = RoundedCornerShape(6.dp),
                     color = Tabino.Accents[(i / 4) % Tabino.Accents.size].copy(alpha = if (current) 1f else 0.45f), modifier = Modifier.fillMaxWidth().height(h.dp)) {}
             }
         }
     }
 }
 
-@Composable private fun TabCard(vm: WorkspaceViewModel, state: EditorState, modifier: Modifier) {
+@Composable private fun TabCard(vm: WorkspaceViewModel, state: EditorState, modifier: Modifier, onEditSignature: (EntityId) -> Unit) {
     val layout by vm.layout.collectAsStateWithLifecycle()
     val view by vm.view.collectAsStateWithLifecycle()
     val transport by vm.transport.state.collectAsStateWithLifecycle()
@@ -109,26 +132,46 @@ import dev.riffworkbench.ui.score.pitchName
     val fretted = track.instrument.tuning.isNotEmpty()
     val measureNumber = state.project.measures.indexOfFirst { it.id == selection.measureId } + 1
     val input by vm.input.collectAsStateWithLifecycle()
-    TabinoCard(modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
-        Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    val playing = transport.status == TransportStatus.PLAYING
+    // Paddings 4/6 instead of 6/12: the canvas is the scarce part of a phone screen (Bericht 1 §9).
+    TabinoCard(modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+        Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TrackMenu(vm, state)
             InfoPill(selectionInfo(vm, state, input), if (fretted) Tabino.stringColor(selection.string, track.instrument.tuning.size) else null, Modifier.weight(1f))
         }
-        val playhead = transport.position?.takeIf { transport.status == TransportStatus.PLAYING || transport.status == TransportStatus.PAUSED }
+        val playhead = transport.position?.takeIf { playing || transport.status == TransportStatus.PAUSED }
             ?.let { it.position.measureId to it.position.offset.toDouble() }
-        ScoreCanvas(
-            layout = layout,
-            cursor = ScoreCursor(selection.measureId, selection.offset, selection.string.takeIf { fretted }, selection.rangeEnd),
-            playhead = playhead,
-            follow = view.follow && transport.status == TransportStatus.PLAYING,
-            zoom = view.zoom,
-            onZoom = vm::setZoom,
-            // While playing, a tap also moves playback there: cursor and playhead stay together instead of fighting over the view.
-            onTap = { tap -> vm.tap(tap.measureId, tap.offset, tap.string); if (transport.status == TransportStatus.PLAYING) vm.seekToCursor() },
-            onMoveNote = { from, to -> vm.moveNote(from.measureId, from.offset, from.string, to.measureId, to.offset, to.string) },
-            modifier = Modifier.weight(1f).fillMaxWidth().padding(6.dp).clip(RoundedCornerShape(20.dp)).onSizeChanged { with(density) { vm.setViewportWidth(it.width.toDp().value) } },
-            description = tr("Partitur, Takt $measureNumber, Position ${selection.offset}, Saite ${selection.string + 1}", "Score, bar $measureNumber, position ${selection.offset}, string ${selection.string + 1}"),
-        )
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            ScoreCanvas(
+                layout = layout,
+                cursor = ScoreCursor(selection.measureId, selection.offset, selection.string.takeIf { fretted }, selection.rangeEnd),
+                playhead = playhead,
+                follow = view.follow && playing,
+                followSuspended = view.followSuspended,
+                zoom = view.zoom,
+                onZoom = vm::setZoom,
+                // While playing, a tap also moves playback there: cursor and playhead stay together instead of fighting over the view.
+                // While paused, the moved cursor becomes the start of the next Play (WorkspaceViewModel.navigatedSincePause).
+                onTap = { tap -> vm.tap(tap.measureId, tap.offset, tap.string); if (transport.status == TransportStatus.PLAYING) vm.seekToCursor() },
+                onMoveNote = { from, to -> vm.moveNote(from.measureId, from.offset, from.string, to.measureId, to.offset, to.string) },
+                onSignatureLongPress = onEditSignature,
+                // A pan/zoom/drag while following: the view stays where the finger put it until the chip (or Play/seek/stop) resumes.
+                onUserScroll = vm::suspendFollow,
+                modifier = Modifier.fillMaxSize().padding(4.dp).clip(RoundedCornerShape(20.dp)).testTag("score-canvas").onSizeChanged { with(density) { vm.setViewportWidth(it.width.toDp().value) } },
+                description = tr("Partitur, Takt $measureNumber, Position ${selection.offset}, Saite ${selection.string + 1}", "Score, bar $measureNumber, position ${selection.offset}, string ${selection.string + 1}") +
+                    tr(". Lange auf die Taktart drücken, um Taktart und Tempo zu ändern", ". Long-press the time signature to change signature and tempo"),
+            )
+            if (view.followSuspended && playing) {
+                // Following is paused after a manual pan: say so, and offer the way back (Bericht 1 §4 "klar erkennbare Rückkehr").
+                Surface(onClick = vm::resumeFollow, shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 10.dp, end = 10.dp).height(36.dp).testTag("follow-resume")) {
+                    Row(Modifier.padding(start = 10.dp, end = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(TabinoIcons.Play, null, Modifier.size(16.dp))
+                        Text(stringResource(R.string.follow_resume), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -138,7 +181,7 @@ import dev.riffworkbench.ui.score.pitchName
     val i = state.project.tracks.indexOfFirst { it.id == state.selection.trackId }.coerceAtLeast(0)
     val track = state.project.tracks[i]
     Box {
-        Surface(onClick = { open = true }, shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.height(40.dp)) {
+        Surface(onClick = { open = true }, shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.heightIn(min = 36.dp)) {
             Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ColorDot(Tabino.Accents[i % Tabino.Accents.size])
                 Text(track.name.substringBefore(" · ").take(14), style = MaterialTheme.typography.labelLarge, maxLines = 1)
