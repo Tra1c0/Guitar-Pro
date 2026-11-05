@@ -11,6 +11,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -73,6 +74,10 @@ class EngineTransport(
     /** Install/Reprogram commands posted so far; the poller trusts a snapshot's frame only once the engine has applied all. */
     @Volatile private var postedPrograms = 0L
     @Volatile private var postedPlays = 0L
+    /** Seek commands posted so far; until the presented block has applied all, the snapshot's frame predates the seek. */
+    @Volatile private var postedSeeks = 0L
+    /** Advanced by every caller-side state write ([place]); a poll that started before it is discarded. */
+    @Volatile private var writes = 0L
     /** Speed last requested by the caller (practice settings), as opposed to the speed the trainer has reached. */
     @Volatile private var requestedSpeed = 1.0
     /**
@@ -109,7 +114,7 @@ class EngineTransport(
             // Another project: positions (and a parked seek) of the old one mean nothing here.
             pendingSeek = null
             atEnd = false
-            mutable.value = mutable.value.copy(position = null, sample = null)
+            place(mutable.value.copy(position = null, sample = null))
         }
         this.project = project
         this.settings = effective
@@ -138,22 +143,22 @@ class EngineTransport(
         if (planProject != null && planProject != project.id) {
             // Another project: start from its top (or loop start), never from a bar of the previous one.
             val top = loop?.first ?: 0L
-            if (mutable.value.status == TransportStatus.PLAYING || starting) host.post(HostCommand.Seek(top))
-            mutable.value = mutable.value.copy(sample = SamplePosition(top, rate), position = next.positionAt(top))
+            if (mutable.value.status == TransportStatus.PLAYING || starting) postSeek(top)
+            place(mutable.value.copy(sample = SamplePosition(top, rate), position = next.positionAt(top)))
         } else if (mutable.value.sample == null) mutable.value.position?.let { pos ->
             // Only a position was published (seek parked before a plan existed): express it in the new plan.
-            next.frameFor(pos, orNearest = true)?.let { f -> mutable.value = mutable.value.copy(sample = SamplePosition(f, rate), position = next.positionAt(f)) }
+            next.frameFor(pos, orNearest = true)?.let { f -> place(mutable.value.copy(sample = SamplePosition(f, rate), position = next.positionAt(f))) }
         } else if (previous != null && installedRate == rate && mutable.value.status == TransportStatus.PLAYING) mutable.value.sample?.let { s ->
             // Playing: publish the remapped position at once (the engine remaps the same way when it applies the program).
             previous.positionAt(s.frame)?.let { pos -> next.frameFor(pos, orNearest = true) }?.let { f ->
-                mutable.value = mutable.value.copy(sample = SamplePosition(f, rate), position = next.positionAt(f))
+                place(mutable.value.copy(sample = SamplePosition(f, rate), position = next.positionAt(f)))
             }
         }
         // While not playing, the published frame belongs to the old plan (speed or tempo changes move bars): carry it over.
         if (previous != null && installedRate == rate && planProject == project.id && mutable.value.status != TransportStatus.PLAYING) mutable.value.sample?.let { s ->
             // By bar, not by route index: inserting or deleting an earlier bar must not shift the position by a bar.
             previous.positionAt(s.frame)?.let { pos -> next.frameFor(pos, orNearest = true) }?.let { f ->
-                mutable.value = mutable.value.copy(sample = SamplePosition(f, rate), position = next.positionAt(f))
+                place(mutable.value.copy(sample = SamplePosition(f, rate), position = next.positionAt(f)))
             }
         }
         planProject = project.id
@@ -162,7 +167,7 @@ class EngineTransport(
         if (applyLoopLocked(settings.loop) is Outcome.Failure) {
             // The loop no longer exists in the new score (bars deleted): drop it visibly instead of keeping a stale label.
             loopFrames = null; host.post(HostCommand.Loop(-1, -1)); settings = settings.copy(loop = null)
-            mutable.value = mutable.value.copy(loop = null, reason = "Schleife passt nicht mehr zur geänderten Partitur und wurde aufgehoben")
+            place(mutable.value.copy(loop = null, reason = "Schleife passt nicht mehr zur geänderten Partitur und wurde aufgehoben"))
         }
         if (mutable.value.status == TransportStatus.UNAVAILABLE || mutable.value.status == TransportStatus.FAILED) publish(TransportStatus.STOPPED, null)
         return Outcome.Success(Unit)
@@ -244,7 +249,7 @@ class EngineTransport(
             if (cached != null) { buffers[hash] = cached; continue }
             when (val r = withContext(Dispatchers.Default) { loader.load(hash, rate) }) {
                 is Outcome.Success -> { clipCache[key] = r.value; buffers[hash] = r.value }
-                is Outcome.Failure -> mutable.value = mutable.value.copy(reason = "Referenz-Audio: ${r.message}")
+                is Outcome.Failure -> place(mutable.value.copy(reason = "Referenz-Audio: ${r.message}"))
             }
         }
         return ClipSet.build(project, buffers, rate, settings.speed)
@@ -279,8 +284,8 @@ class EngineTransport(
             atEnd = false
             halted = null
             starting = true; startingSince = System.nanoTime()
-            val live = host.post(HostCommand.Play(from, countIn, clicks)); postedPlays++
-            mutable.value = mutable.value.copy(sample = SamplePosition(from, current.sampleRate), position = current.positionAt(from))
+            postedPlays++; val live = host.post(HostCommand.Play(from, countIn, clicks))
+            place(mutable.value.copy(sample = SamplePosition(from, current.sampleRate), position = current.positionAt(from)))
             trainerPasses = 0; lastLoops = snap.loopsCompleted
             publish(TransportStatus.PLAYING, null)
             live
@@ -299,8 +304,8 @@ class EngineTransport(
                 synchronized(haltLock) {
                     if (haltEpoch != epoch) return@withLock Outcome.Success(Unit)
                     starting = true; startingSince = System.nanoTime()
-                    host.post(HostCommand.Play(target, countIn2, clicks2)); postedPlays++
-                    mutable.value = mutable.value.copy(sample = SamplePosition(target, again.sampleRate), position = again.positionAt(target))
+                    postedPlays++; host.post(HostCommand.Play(target, countIn2, clicks2))
+                    place(mutable.value.copy(sample = SamplePosition(target, again.sampleRate), position = again.positionAt(target)))
                     publish(TransportStatus.PLAYING, null)
                 }
             } finally { restarting = false }
@@ -329,22 +334,22 @@ class EngineTransport(
         restartFromTop = true
         halted = TransportStatus.STOPPED
         host.post(HostCommand.Pause)
-        host.post(HostCommand.Seek(loopFrames?.first ?: 0L))
-        mutable.value = mutable.value.copy(status = TransportStatus.STOPPED, position = plan?.positionAt(loopFrames?.first ?: 0L), sample = SamplePosition(loopFrames?.first ?: 0L, plan?.sampleRate ?: 48_000))
+        postSeek(loopFrames?.first ?: 0L)
+        place(mutable.value.copy(status = TransportStatus.STOPPED, position = plan?.positionAt(loopFrames?.first ?: 0L), sample = SamplePosition(loopFrames?.first ?: 0L, plan?.sampleRate ?: 48_000)))
         Outcome.Success(Unit)
     }
 
     private fun frameFor(p: PlaybackPlan, position: PlaybackOccurrence): Long? = p.frameFor(position)
 
     override suspend fun seek(position: PlaybackOccurrence): Outcome<Unit> = mutex.withLock {
-        val p = plan ?: run { pendingSeek = position; atEnd = false; mutable.value = mutable.value.copy(position = position, sample = null); return@withLock Outcome.Success(Unit) }
+        val p = plan ?: run { pendingSeek = position; atEnd = false; place(mutable.value.copy(position = position, sample = null)); return@withLock Outcome.Success(Unit) }
         val wanted = frameFor(p, position) ?: return@withLock Outcome.Failure(FailureCode.VALIDATION, "Position liegt außerhalb der Route", contractId = "C-AUDIO")
         // As in play(): while a loop is set, playback stays inside it (a position outside means its start).
         val frame = loopFrames?.let { (a, b) -> if (wanted in a until b) wanted else a } ?: wanted
-        host.post(HostCommand.Seek(frame))
+        postSeek(frame)
         restartFromTop = false
         atEnd = false
-        mutable.value = mutable.value.copy(position = p.positionAt(frame), sample = SamplePosition(frame, p.sampleRate))
+        place(mutable.value.copy(position = p.positionAt(frame), sample = SamplePosition(frame, p.sampleRate)))
         Outcome.Success(Unit)
     }
 
@@ -365,17 +370,17 @@ class EngineTransport(
 
     private fun applyLoopLocked(range: LoopRange?): Outcome<Unit> {
         val p = plan
-        if (range == null || p == null) { loopFrames = null; host.post(HostCommand.Loop(-1, -1)); mutable.value = mutable.value.copy(loop = null); return Outcome.Success(Unit) }
+        if (range == null || p == null) { loopFrames = null; host.post(HostCommand.Loop(-1, -1)); place(mutable.value.copy(loop = null)); return Outcome.Success(Unit) }
         val (start, end) = loopFramesFor(p, range) ?: return Outcome.Failure(FailureCode.VALIDATION, "Loop liegt außerhalb der Route", contractId = "C-PRACTICE")
         loopFrames = start to end
         host.post(HostCommand.Loop(start, end))
-        mutable.value = mutable.value.copy(loop = range)
+        place(mutable.value.copy(loop = range))
         // A loop set (or recompiled) while the playhead is outside it engages at once instead of never (after it) or late.
         val playing = mutable.value.status == TransportStatus.PLAYING || starting
         val at = mutable.value.sample?.frame ?: host.snapshot().planFrame
         if (playing && at != null && at !in start until end) {
-            host.post(HostCommand.Seek(start))
-            mutable.value = mutable.value.copy(sample = SamplePosition(start, p.sampleRate), position = p.positionAt(start))
+            postSeek(start)
+            place(mutable.value.copy(sample = SamplePosition(start, p.sampleRate), position = p.positionAt(start)))
         }
         return Outcome.Success(Unit)
     }
@@ -485,6 +490,7 @@ class EngineTransport(
         poller = scope.launch {
             while (isActive) {
                 delay(pollMillis)
+                val seen = writes
                 val snap = host.snapshot()
                 val p = plan
                 val held = halted
@@ -505,13 +511,15 @@ class EngineTransport(
                 // The plan ran out: remember it until the next seek/stop/play so play() restarts from the top, not from the last published frame.
                 if (status == TransportStatus.STOPPED && mutable.value.status == TransportStatus.PLAYING && snap.ended && snap.running) atEnd = true
                 // A snapshot taken before the engine applied the newest program belongs to the old plan: skip it.
-                if (held == null && !starting && (snap.programs >= postedPrograms || !snap.running) && (status == TransportStatus.PLAYING || snap.countingIn)) {
+                // A snapshot taken before the engine applied the newest seek shows where the old playback was: keep the seek position.
+                val caughtUp = (snap.programs >= postedPrograms && snap.seeks >= postedSeeks) || !snap.running
+                if (held == null && !starting && caughtUp && (status == TransportStatus.PLAYING || snap.countingIn)) {
                     // The snapshot is taken at the block start plus its length; a wrap or end inside the block is folded back.
                     val frame = loopFrames?.let { (a, b) -> if (snap.planFrame >= b && b > a) a + (snap.planFrame - b) % (b - a) else snap.planFrame }
                         ?: p?.let { minOf(snap.planFrame, it.totalFrames) } ?: snap.planFrame
-                    mutable.value = mutable.value.copy(status = status, position = p?.positionAt(frame), sample = SamplePosition(frame, p?.sampleRate ?: 48_000),
-                        underruns = snap.underruns, countingIn = snap.countingIn, speed = settings.speed, latencyMs = host.format?.let { it.latencyFrames * 1000.0 / it.sampleRate })
-                } else if (status != mutable.value.status) mutable.value = mutable.value.copy(status = status, countingIn = false)
+                    poll(seen) { cur -> cur.copy(status = status, position = p?.positionAt(frame), sample = SamplePosition(frame, p?.sampleRate ?: 48_000),
+                        underruns = snap.underruns, countingIn = snap.countingIn, speed = settings.speed, latencyMs = host.format?.let { it.latencyFrames * 1000.0 / it.sampleRate }) }
+                } else if (status != mutable.value.status) poll(seen) { cur -> if (cur.status == status) cur else cur.copy(status = status, countingIn = false) }
                 if (snap.loopsCompleted != lastLoops) { val passes = snap.loopsCompleted - lastLoops; lastLoops = snap.loopsCompleted; onLoopPasses(passes) }
                 if (!snap.running && status != TransportStatus.PLAYING) { poller = null; break }
             }
@@ -528,5 +536,15 @@ class EngineTransport(
         }
     }
 
-    private fun publish(status: TransportStatus, reason: String?) { mutable.value = mutable.value.copy(status = status, reason = reason) }
+    private fun publish(status: TransportStatus, reason: String?) { place(mutable.value.copy(status = status, reason = reason)) }
+    /**
+     * Every write of the state from the callers' side (seek, play, pause, stop, install, publish) goes through here: it
+     * advances [writes], and the poller only publishes a snapshot taken at the epoch that is still current. A poller that
+     * read the engine before a seek or pause and writes after it would otherwise put the stale playhead (and status) back
+     * over the fresh one, for one poll on a device (the playhead jumps back and forth) and for good in a paused test.
+     */
+    private fun place(value: TransportState) { writes++; mutable.value = value }
+    /** The poller's write: applied atomically, and only while no caller-side write happened since the poll began ([seen]). */
+    private inline fun poll(seen: Long, change: (TransportState) -> TransportState) { mutable.update { cur -> if (writes != seen) cur else change(cur) } }
+    private fun postSeek(frame: Long) { host.post(HostCommand.Seek(frame)); postedSeeks++ }
 }

@@ -31,7 +31,7 @@ sealed interface HostCommand {
  * [programs] counts Install/Reprogram commands the render thread has applied; [planFrame] belongs to that program.
  * [plays] counts Play commands consumed: applied by the render thread, or discarded with a dead session's queue in [RealtimeHost.start].
  */
-data class HostSnapshot(val playing: Boolean, val countingIn: Boolean, val ended: Boolean, val planFrame: Long, val loopsCompleted: Long, val underruns: Long, val running: Boolean, val programs: Long = 0, val plays: Long = 0)
+data class HostSnapshot(val playing: Boolean, val countingIn: Boolean, val ended: Boolean, val planFrame: Long, val loopsCompleted: Long, val underruns: Long, val running: Boolean, val programs: Long = 0, val plays: Long = 0, val seeks: Long = 0)
 
 /**
  * Measured audio performance (diagnostics page). Render times are the DSP work per callback block, against the block
@@ -81,6 +81,8 @@ class RealtimeHost(
     private val ringSink = LongArray(ringSize)
     private val ringPlan = LongArray(ringSize)
     private val ringPrograms = LongArray(ringSize)
+    /** Seeks applied before each block: a snapshot of a block rendered before a posted Seek still shows the old position. */
+    private val ringSeeks = LongArray(ringSize)
     private val ringFlags = IntArray(ringSize)
     @Volatile private var blocks = 0L
     @Volatile private var written = 0L
@@ -91,6 +93,8 @@ class RealtimeHost(
     @Volatile private var programs = 0L
     /** Play commands consumed (applied by the render thread, or dropped by [start] with a dead session's queue). */
     @Volatile private var plays = 0L
+    /** Seek commands applied by the render thread; [snapshot] reports the count as of the presented block (see [ringSeeks]). */
+    @Volatile private var seeks = 0L
     private var idleBlocks = 0L
     /**
      * Handshake between [post] and the idle stop in [renderBlock]: the render thread decides "queue empty -> stop" and a
@@ -194,7 +198,7 @@ class RealtimeHost(
                 is HostCommand.Mix -> e.setMix(c.mix)
                 is HostCommand.Play -> { e.play(c.from, c.countInFrames, c.clickOffsets); plays++ }
                 HostCommand.Pause -> e.pause()
-                is HostCommand.Seek -> e.seek(c.frame)
+                is HostCommand.Seek -> { e.seek(c.frame); seeks++ }
                 is HostCommand.Loop -> e.setLoop(c.start, c.end)
                 is HostCommand.Preview -> {
                     e.preview(c.note)
@@ -216,7 +220,7 @@ class RealtimeHost(
         val frames = f.blockFrames
         val flags = (if (e.playing) 1 else 0) or (if (e.countingIn) 2 else 0) or (if (e.ended) 4 else 0)
         val slot = (blocks % ringSize).toInt()
-        ringSink[slot] = written; ringPlan[slot] = e.position; ringFlags[slot] = flags; ringPrograms[slot] = programs
+        ringSink[slot] = written; ringPlan[slot] = e.position; ringFlags[slot] = flags; ringPrograms[slot] = programs; ringSeeks[slot] = seeks
         val t0 = System.nanoTime()
         e.render(buffer, frames)
         val dt = System.nanoTime() - t0
@@ -258,7 +262,7 @@ class RealtimeHost(
     fun snapshot(): HostSnapshot {
         val f = format
         val count = blocks
-        if (f == null || count == 0L) return HostSnapshot(false, false, false, lastPlan, loops, 0, running, programs, plays)
+        if (f == null || count == 0L) return HostSnapshot(false, false, false, lastPlan, loops, 0, running, programs, plays, seeks)
         val presented = sink?.presentedFrame() ?: (written - f.latencyFrames).coerceAtLeast(0)
         var i = count - 1
         val oldest = maxOf(0L, count - ringSize + 8)
@@ -268,6 +272,6 @@ class RealtimeHost(
         val playing = flags and 1 != 0 && flags and 2 == 0
         val within = (presented - ringSink[slot]).coerceIn(0, f.blockFrames.toLong())
         val plan = ringPlan[slot] + if (playing) within else 0
-        return HostSnapshot(lastFlags and 1 != 0, flags and 2 != 0, lastFlags and 4 != 0, plan, loops, sink?.underruns() ?: 0, running, ringPrograms[slot], plays)
+        return HostSnapshot(lastFlags and 1 != 0, flags and 2 != 0, lastFlags and 4 != 0, plan, loops, sink?.underruns() ?: 0, running, ringPrograms[slot], plays, ringSeeks[slot])
     }
 }

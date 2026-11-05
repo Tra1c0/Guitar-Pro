@@ -73,8 +73,8 @@ class Qa18StartPositionViewModelTest {
     private fun TestScope.settle(vm: WorkspaceViewModel) { await("ViewModel idle") { vm.viewModelScope.coroutineContext.job.children.count { it.isActive } <= 1 }; advanceUntilIdle() }
 
     private class Fixture(val vm: WorkspaceViewModel, val transport: EngineTransport, val host: RealtimeHost)
-    /** Default project plus [extraBars] 4/4 bars, one note per bar. */
-    private fun harness(extraBars: Int = 2, block: TestScope.(Fixture) -> Unit) = runTest {
+    /** Default project (one 4/4 bar since W2-C) plus [extraBars] 4/4 bars = 4 bars, one note per bar; R4 moves to bar 4. */
+    private fun harness(extraBars: Int = 3, block: TestScope.(Fixture) -> Unit) = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val host = RealtimeHost({ Sink() }, threadStarter = { _, _ -> Thread {} }, idleStopSeconds = 1000.0)
         val transport = EngineTransport(host, pollMillis = 5)   // the app polls ~30×/s; the poller is what publishes STOPPED at the end
