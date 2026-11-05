@@ -387,3 +387,22 @@ Tests: `Qa15FormatFindingsTest` (13), `Qa15LayoutFindingsTest` (4), beide Kampag
 **Bekannt, nicht geändert (Standard-Ausnahmen der Layout-Kampagne):** Hit-Test ignoriert die Stimme; Notenköpfe ohne TAB können sich bei Sekund-Akkorden und extremer Kompression überdecken; Noten weit außerhalb des Systems (Klavier < m24, Gitarre > Bund 30) verlassen das Band; bei Rand 0 ragen Labels/letzte Spalte bis 2 Einheiten über den Schlussstrich; seltene Bend-Pfeile unter dem System. Formate: MusicXML erkennt tief gestimmte 4/5-Saiter ohne Namen „Bass“ als Bass; MIDI Let-Ring am Schluss/verschobene Texte erzeugen Zusatztakte; einzelne MIDI-Rundungsdifferenzen bei Bends und 7-Saiter-Stimmung in der zweiten Runde.
 
 Ergebnis Zyklus 15: **9 Defektgruppen (16 Einzelbefunde) bestätigt und behoben** → nicht defektfrei.
+
+### Zyklus 16 — Modellbasierte Zufallstests des WorkspaceViewModel und Compose-„Monkey“-Test
+
+Methoden (neu): (a) WorkspaceViewModel auf der JVM über einen Lifecycle-Shim (nur im Scratchpad, nicht im Repo) mit echtem FileProjectRepository, Asset-Store, nativer Austausch, Formatkatalog und echtem EngineTransport; 59 Operationen/40 Befehlsvarianten, 25–60 % ohne Warten (überlappend); Invarianten V1–V8 (keine Ausnahme, Autosave konsistent, Auswahl gültig, Busy-Flags fallen zurück, Transportstatus, Wiederöffnen, Layout aktuell, Hinweise) — 2 500 vollständige Folgen. (b) `Qa16MonkeyTest` (Robolectric, CI): 5 Seeds × 40 zufällige UI-Aktionen (Klicks, Doppeltipps, Lang-Drücken, Text, Scrollen, Slider, Gesten auf der Partitur, Zurück, Drehen) mit Absturz-/Leerbildschirm-Prüfung; dazu statische Absturzanalyse aller `first{}`/`!!`/Indexzugriffe der Oberfläche (alle bis auf A unerreichbar).
+
+**Bestätigt und repariert (rot → grün):**
+1. Doppeltipp auf „Zurück“ in den Einstellungen poppte auch den Eintrag darunter: aus der Bibliothek ein leerer Bildschirm, aus einem Projekt das Projekt ohne Stopp der Wiedergabe und ohne Speichern (`doubleTapOnSettingsBackKeepsTheLibrary`, auf CI 42031458704 rot, 42032537065 grün). SVG-Export ist zusätzlich gegen Layout-Ausnahmen abgesichert.
+2. Überkorrektur aus Zyklus 13 (#3): Play nach Stopp/Pause während einer fremden Neukompilierung (Bearbeitung, Tempo) wurde verschluckt; nach schnellen Play-Tipps gewann Stopp nicht. → Das gemeinsame Flag entfällt; `Transport.play(since)` erhält den Halt-Zähler vom Moment des Tipps (`togglePlay`). Tests aus Zyklus 12/13 rufen jetzt ebenfalls `play(since)` wie die App.
+3. Eingaberaster folgte Notenwert/Triole nicht (ohne gewählten Beat gar nicht, mit Beat mit altem Raster).
+4. Zoom brach umbrochene Systeme nicht neu um.
+Tests: `Qa16ViewModelFindingsTest` (7, mit Shim vorher 7/7 rot, nachher 7/7 grün; Kopie in feature/workspace für CI), `Qa16MonkeyTest`. CI 42035002847 (9dae381) grün.
+
+**Gehalten:** keine Ausnahmen/Coroutine-Fehler, Autosave stets konsistent mit dem Speicher (auch bei provoziertem CONFLICT nie fälschlich „gespeichert“), Auswahl gültig, Busy-Flags, Wiederöffnen liefert letzte gespeicherte Revision, Export-Callback genau einmal.
+
+**Hänger beim Prüfen (dokumentiert):** (i) Mein CI-Watcher wartete auf den „neuesten“ Lauf, der von einem späteren Commit überholt wurde → `scratchpad/ci-wait.sh` wartet auf den Lauf genau eines Commits mit Zeitlimit. (ii) Der Gradle-Testprozess der 1 000er-ViewModel-Kampagne hing nach Testende beim Herunterfahren (2,3 GB, starke GC) → beendet; vermutlich Speicher, der sich im Testaufbau über viele ViewModels ansammelt (nicht als App-Defekt bestätigt — Gegenstand von Zyklus 17).
+
+**Bekannt, nicht geändert:** Pinch-Zoom bei umbrochener Ansicht löst je Schritt ein (abbrechbares) Neu-Layout aus; laufende Layout-Berechnungen werden nicht unterbrochen, nur verworfen. `onCleared` stoppt den Transport nicht (das übernimmt `leave()`); nach Wiederöffnen hält der geteilte Transport bis zum nächsten Prepare alte Tempo-/Metronom-Einstellungen (ohne Wirkung, Play bereitet neu vor). Monkey-Test: Auswahl des obersten Fensters ist eine Heuristik; Datei-Auswahldialoge werden abgebrochen.
+
+Ergebnis Zyklus 16: **4 Defektgruppen bestätigt und behoben** → nicht defektfrei.
