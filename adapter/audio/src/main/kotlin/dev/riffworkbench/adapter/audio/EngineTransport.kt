@@ -49,14 +49,24 @@ class EngineTransport(
     @Volatile private var pendingSeek: PlaybackOccurrence? = null
     /** Set by pause()/stop() until the next play(): the render thread may still report the old playing state for one block. */
     @Volatile private var halted: TransportStatus? = null
+    /** Speed last requested by the caller (practice settings), as opposed to the speed the trainer has reached. */
+    @Volatile private var requestedSpeed = 1.0
 
     /**
      * Stores [project] for playback. While the output is running the new plan is compiled and swapped in at the
      * same musical position; otherwise compilation waits for the next play/preview so edits never open the device.
      */
     override suspend fun prepare(project: Project, settings: PracticeSettings): Outcome<Unit> = mutex.withLock {
+        // The speed trainer raises the speed here; a caller that re-sends its unchanged start speed (cursor move, edit)
+        // must not reset it. A different speed from the caller is a user change and wins.
+        val keepTrainer = settings.trainer.enabled && settings.trainer == this.settings.trainer && settings.speed == requestedSpeed
+        requestedSpeed = settings.speed
+        val effective = if (keepTrainer) settings.copy(speed = this.settings.speed) else settings
+        // Nothing changed (e.g. a cursor move while playing): do not recompile the whole score.
+        val same = plan != null && this.project?.id == project.id && this.project?.revision == project.revision && this.settings == effective && host.isRunning
         this.project = project
-        this.settings = settings
+        this.settings = effective
+        if (same) return@withLock Outcome.Success(Unit)
         val format = host.format
         if (!host.isRunning || format == null) { plan = null; return@withLock Outcome.Success(Unit) }
         installLocked(project, format.sampleRate, forceRack = installedRate != format.sampleRate)
@@ -85,7 +95,11 @@ class EngineTransport(
         }
         installedRate = rate
         plan = next
-        applyLoopLocked(settings.loop)
+        if (applyLoopLocked(settings.loop) is Outcome.Failure) {
+            // The loop no longer exists in the new score (bars deleted): drop it visibly instead of keeping a stale label.
+            loopFrames = null; host.post(HostCommand.Loop(-1, -1)); settings = settings.copy(loop = null)
+            mutable.value = mutable.value.copy(loop = null, reason = "Schleife passt nicht mehr zur geänderten Partitur und wurde aufgehoben")
+        }
         if (mutable.value.status == TransportStatus.UNAVAILABLE || mutable.value.status == TransportStatus.FAILED) publish(TransportStatus.STOPPED, null)
         return Outcome.Success(Unit)
     }
@@ -168,8 +182,10 @@ class EngineTransport(
 
     /** Loop frames of [range] in [p], or null when the range is not on the route. */
     private fun loopFramesFor(p: PlaybackPlan, range: LoopRange): Pair<Long, Long>? {
-        val start = p.frameOf(range.start.routeIndex, range.start.position.offset) ?: return null
-        val endSpan = p.spans.getOrNull(range.end.routeIndex)?.takeIf { it.measureId == range.end.position.measureId } ?: return null
+        // Route indices go stale when bars are inserted or deleted; the bars themselves (measure ids) are the reference.
+        val start = frameFor(p, range.start) ?: return null
+        val endSpan = p.spans.getOrNull(range.end.routeIndex)?.takeIf { it.measureId == range.end.position.measureId }
+            ?: p.spans.firstOrNull { it.measureId == range.end.position.measureId && it.endFrame > start } ?: return null
         val end = if (range.end.position.offset == Fraction.ZERO) endSpan.endFrame else kotlin.math.round(endSpan.frameAt(range.end.position.offset.toDouble())).toLong()
         return if (end > start) start to end else null
     }
@@ -177,11 +193,7 @@ class EngineTransport(
     private fun applyLoopLocked(range: LoopRange?): Outcome<Unit> {
         val p = plan
         if (range == null || p == null) { loopFrames = null; host.post(HostCommand.Loop(-1, -1)); mutable.value = mutable.value.copy(loop = null); return Outcome.Success(Unit) }
-        val start = p.frameOf(range.start.routeIndex, range.start.position.offset)
-        val endSpan = p.spans.getOrNull(range.end.routeIndex)
-        if (start == null || endSpan == null || endSpan.measureId != range.end.position.measureId) return Outcome.Failure(FailureCode.VALIDATION, "Loop liegt außerhalb der Route", contractId = "C-PRACTICE")
-        val end = if (range.end.position.offset == Fraction.ZERO) endSpan.endFrame else kotlin.math.round(endSpan.frameAt(range.end.position.offset.toDouble())).toLong()
-        if (end <= start) return Outcome.Failure(FailureCode.VALIDATION, "Loop-Ende liegt vor dem Anfang", contractId = "C-PRACTICE")
+        val (start, end) = loopFramesFor(p, range) ?: return Outcome.Failure(FailureCode.VALIDATION, "Loop liegt außerhalb der Route", contractId = "C-PRACTICE")
         loopFrames = start to end
         host.post(HostCommand.Loop(start, end))
         mutable.value = mutable.value.copy(loop = range)

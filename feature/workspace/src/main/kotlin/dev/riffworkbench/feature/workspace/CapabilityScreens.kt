@@ -50,22 +50,26 @@ import kotlin.math.roundToLong
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Row {
-                    Text("${(practice.speed * 100).toInt()}%", fontFamily = Tabino.Display, fontWeight = FontWeight.Bold, fontSize = 26.sp, color = Tabino.Lime)
+                    // While the speed trainer runs, the transport's speed is the one that plays.
+                    val speed = if (practice.trainer.enabled && playing) transport.speed else practice.speed
+                    Text("${(speed * 100).toInt()}%", fontFamily = Tabino.Display, fontWeight = FontWeight.Bold, fontSize = 26.sp, color = Tabino.Lime)
                     Text(" Tempo", fontFamily = Tabino.Display, fontWeight = FontWeight.Bold, fontSize = 26.sp)
                 }
-                Text(baseBpm?.let { "${(it * practice.speed).toInt()} ${tr("von", "of")} ${it.toInt()} BPM" } ?: project?.metadata?.title.orEmpty(),
+                Text(baseBpm?.let { "${(it * (if (practice.trainer.enabled && playing) transport.speed else practice.speed)).toInt()} ${tr("von", "of")} ${it.toInt()} BPM" } ?: project?.metadata?.title.orEmpty(),
                     fontFamily = Tabino.Display, fontWeight = FontWeight.Bold, fontSize = 26.sp, color = Tabino.Faint, maxLines = 1)
             }
             transport.position?.let { pos -> project?.measures?.firstOrNull { it.id == pos.position.measureId }?.let { m -> if (playing && practice.visualMetronome) BeatDots(m.signature, pos.position.offset) } }
         }
         if (transport.status == TransportStatus.UNAVAILABLE || transport.status == TransportStatus.FAILED) NoticeCard(transport.reason ?: stringResource(R.string.transport_unavailable), true)
         TabinoCard(Modifier.fillMaxWidth().height(250.dp)) {
-            practice.loop?.let { l -> Surface(shape = RoundedCornerShape(8.dp), color = Tabino.Lavender.copy(alpha = 0.16f), modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 12.dp).fillMaxWidth().height(24.dp)) {
-                Box(contentAlignment = Alignment.Center) { Text("${tr("Schleife", "Loop")} · ${tr("Takt", "bar")} ${l.start.routeIndex + 1}–${l.end.routeIndex + 1}", style = MaterialTheme.typography.labelMedium, color = Tabino.Lavender) }
+            practice.loop?.takeIf { !playing || transport.loop != null }?.let { l -> Surface(shape = RoundedCornerShape(8.dp), color = Tabino.Lavender.copy(alpha = 0.16f), modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 12.dp).fillMaxWidth().height(24.dp)) {
+                // Written bar numbers (the route index counts repeats and was off behind a repeat).
+                val bar = { id: EntityId -> (project?.measures?.indexOfFirst { it.id == id } ?: -1) + 1 }
+                Box(contentAlignment = Alignment.Center) { Text("${tr("Schleife", "Loop")} · ${tr("Takt", "bar")} ${bar(l.start.position.measureId)}–${bar(l.end.position.measureId)}", style = MaterialTheme.typography.labelMedium, color = Tabino.Lavender) }
             } }
             val playhead = transport.position?.takeIf { playing || transport.status == TransportStatus.PAUSED }?.let { it.position.measureId to it.position.offset.toDouble() }
             ws.editor?.let { e -> dev.riffworkbench.ui.score.ScoreCanvas(layout = layout, cursor = dev.riffworkbench.ui.score.ScoreCursor(e.selection.measureId, e.selection.offset, null, e.selection.rangeEnd),
-                playhead = playhead, follow = true, zoom = view.zoom, onZoom = vm::setZoom, onTap = { tap -> vm.tap(tap.measureId, tap.offset, tap.string); vm.seekToCursor() },
+                playhead = playhead, follow = view.follow, zoom = view.zoom, onZoom = vm::setZoom, onTap = { tap -> vm.tap(tap.measureId, tap.offset, tap.string); vm.seekToCursor() },
                 modifier = Modifier.weight(1f).fillMaxWidth().padding(6.dp), description = tr("Partitur mit Wiedergabeposition", "Score with playback position")) }
         }
         Row(Modifier.fillMaxWidth().height(84.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
