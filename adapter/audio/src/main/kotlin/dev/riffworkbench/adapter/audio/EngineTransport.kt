@@ -120,7 +120,11 @@ class EngineTransport(
         if (planProject != null && planProject != project.id) {
             // Another project: start from its top (or loop start), never from a bar of the previous one.
             val top = loop?.first ?: 0L
+            if (mutable.value.status == TransportStatus.PLAYING || starting) host.post(HostCommand.Seek(top))
             mutable.value = mutable.value.copy(sample = SamplePosition(top, rate), position = next.positionAt(top))
+        } else if (mutable.value.sample == null) mutable.value.position?.let { pos ->
+            // Only a position was published (seek parked before a plan existed): express it in the new plan.
+            next.frameFor(pos, orNearest = true)?.let { f -> mutable.value = mutable.value.copy(sample = SamplePosition(f, rate), position = next.positionAt(f)) }
         } else if (previous != null && installedRate == rate && mutable.value.status == TransportStatus.PLAYING) mutable.value.sample?.let { s ->
             // Playing: publish the remapped position at once (the engine remaps the same way when it applies the program).
             previous.positionAt(s.frame)?.let { pos -> next.frameFor(pos, orNearest = true) }?.let { f ->
