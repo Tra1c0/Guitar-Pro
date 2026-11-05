@@ -593,7 +593,8 @@ object ScoreLayouter {
                     for (b in beats) {
                         val has = b.notes.any { Articulation.Mark(mark) in it.articulations }
                         val x = xFor(s, b.offset)
-                        if (has) { if (start == null) start = x - 6f; end = xFor(s, b.offset + b.duration.length()) - 4f } else flush()
+                        // Clamped to the barline: at the bar end xFor lies a column width past the last note.
+                        if (has) { if (start == null) start = x - 6f; end = min(xFor(s, b.offset + b.duration.length()) - 4f, s.x + s.width - 4f) } else flush()
                     }
                     flush()
                 }

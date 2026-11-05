@@ -325,7 +325,8 @@ internal class Limiter(sr: Int, private val ceiling: Float = 0.94f) : Effect {
     override fun process(left: FloatArray, right: FloatArray?, n: Int) {
         for (i in 0 until n) {
             val peak = if (right != null) max(abs(left[i]), abs(right[i])) else abs(left[i])
-            // The gain computer allows the knee's input up to 1.2 x ceiling, where the knee output is ~0.99 x ceiling.
+            // The gain computer holds the knee's input at the ceiling (knee output ~0.95 x ceiling): a higher target let 10 % of
+            // a dense mix run deep into the knee and distorted more than before under sustained overload.
             val needed = if (peak * gain > target) target / peak else 1f
             gain = if (needed < gain) needed else needed + (gain - needed) * release
             left[i] = knee(left[i] * gain)
@@ -336,7 +337,7 @@ internal class Limiter(sr: Int, private val ceiling: Float = 0.94f) : Effect {
     // Transparent below 80 % of the ceiling, then a smooth knee that approaches the ceiling (it used to saturate every sample
     // and top out at 0.73 instead of the documented 0.94).
     private val kneeStart = ceiling * 0.8f
-    private val target = ceiling * 1.2f
+    private val target = ceiling
     private fun knee(y: Float): Float {
         val a = abs(y)
         if (a <= kneeStart) return y

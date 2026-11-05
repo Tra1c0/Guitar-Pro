@@ -65,7 +65,10 @@ class EffectsRegressionTest {
         assertTrue((q.indices).all { abs(q[it] - quiet[it]) < 1e-6f })
         val l = loud.copyOf(); Limiter(sr).process(l, null, l.size)
         val peak = l.maxOf { abs(it) }
-        assertTrue("peak $peak", peak > 0.9f && peak <= 0.94f)
+        assertTrue("peak $peak", peak > 0.88f && peak <= 0.94f)
+        // Sustained overload: the third harmonic must stay well below the old limiter's -24 dB.
+        val h3 = tone(l.copyOfRange(sr / 2, sr / 2 + sr / 2).copyOf(sr), 3 * 997.0) / tone(l.copyOfRange(sr / 2, sr / 2 + sr / 2).copyOf(sr), 997.0)
+        assertTrue("3rd harmonic ${10 * log10(h3)} dB", 10 * log10(h3) < -30)
     }
 
     @Test fun overdriveDoesNotFoldHarmonicsBackIntoTheBand() {
