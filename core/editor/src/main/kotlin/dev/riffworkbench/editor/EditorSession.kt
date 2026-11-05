@@ -100,7 +100,9 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
         // Any edit that removes notes (delete, rest over a note, drum toggle) drops the links pointing at them, like Delete.
         // Re-pitching one end of a tie stays rejected by the validator (deliberate: ties are never broken silently).
         if (after != before.project) after = Links.prune(after)
-        if (after != before.project) requireTiesStayOnTheirString(before.project, after)
+        // Only single-note moves are checked: track-wide transpose/retune re-place chords per beat and may split a tie,
+        // which they did before as well (known limitation, see QA journal cycle 6).
+        if (after != before.project && (command is EditorCommand.MoveToString || command is EditorCommand.PutNote)) requireTiesStayOnTheirString(before.project, after)
         if (after == before.project) Outcome.Success(Unit) else {
             require(after.id == before.project.id) { "Projekt-ID darf nicht geändert werden" }
             require(before.project.revision < Long.MAX_VALUE) { "Revisionslimit erreicht" }

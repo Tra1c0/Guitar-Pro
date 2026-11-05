@@ -37,7 +37,8 @@ class ScorePlaybackCompiler(private val repeats: RepeatCompiler = UnfoldingRepea
             val beat = metronomeBeat(signature)
             // A pickup is the end of a full bar: its clicks fall on the bar's last beats and none of them is beat 1.
             val full = signature.length()
-            val shift = if (span.length < full) full + span.length * Fraction.of(-1) else Fraction.ZERO
+            // Only an opening short bar is a pickup; short bars later in the score (importers mark irregular bars) start on beat 1.
+            val shift = if (span.measureIndex == 0 && span.length < full) full + span.length * Fraction.of(-1) else Fraction.ZERO
             var offset = beat * Fraction.of(kotlin.math.ceil(shift.toDouble() / beat.toDouble() - 1e-9).toLong()) + shift * Fraction.of(-1)
             var k = 0
             while (offset < span.length && k < 256) {
@@ -225,9 +226,10 @@ class ScorePlaybackCompiler(private val repeats: RepeatCompiler = UnfoldingRepea
                         if (e.legatoOut && touching) n.attack = AttackKind.LEGATO
                         if (e.links.any { it.kind == LinkKind.LEGATO_SLIDE && it.target == n.noteId } && touching) n.attack = AttackKind.LEGATO
                     }
+                    // The next note on the string cuts the picked part too; only let ring extends the sound past it.
+                    if (!e.letRing && n != null && n.frame < e.end) e.end = max(e.frame + 1, n.frame)
                     e.pickEnd = e.end
                     if (e.letRing) e.end = max(e.end, min(n?.frame ?: (e.frame + maxRing), e.frame + maxRing))
-                    else if (n != null && n.frame < e.end) e.end = max(e.frame + 1, n.frame)
                 }
             }
             val expanded = ArrayList<Ev>(events.size)

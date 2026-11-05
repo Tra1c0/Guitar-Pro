@@ -59,7 +59,8 @@ class EngineTransport(
     override suspend fun prepare(project: Project, settings: PracticeSettings): Outcome<Unit> = mutex.withLock {
         // The speed trainer raises the speed here; a caller that re-sends its unchanged start speed (cursor move, edit)
         // must not reset it. A different speed from the caller is a user change and wins.
-        val keepTrainer = settings.trainer.enabled && settings.trainer == this.settings.trainer && settings.speed == requestedSpeed
+        val running = mutable.value.status == TransportStatus.PLAYING || mutable.value.status == TransportStatus.PAUSED
+        val keepTrainer = running && settings.trainer.enabled && settings.trainer == this.settings.trainer && settings.speed == requestedSpeed
         requestedSpeed = settings.speed
         val effective = if (keepTrainer) settings.copy(speed = this.settings.speed) else settings
         // Nothing changed (e.g. a cursor move while playing): do not recompile the whole score.

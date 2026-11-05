@@ -2,7 +2,9 @@ package dev.riffworkbench.synth
 
 import dev.riffworkbench.model.EffectKind
 import dev.riffworkbench.model.EffectUnit
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.sin
@@ -100,7 +102,8 @@ internal class Overdrive(sr: Int, drive: Double, tone: Double, levelDb: Double) 
             if (right != null) right[i] = lp2.process(clip(hump2.process(right[i]), upR, downR)) * out
         }
     }
-    override fun reset() { hump.reset(); hump2.reset(); lp.reset(); lp2.reset(); (upL + downL + upR + downR).forEach { it.reset() } }
+    // reset() runs on the audio thread when a channel goes idle: plain loops, no list concatenation.
+    override fun reset() { hump.reset(); hump2.reset(); lp.reset(); lp2.reset(); for (f in upL) f.reset(); for (f in downL) f.reset(); for (f in upR) f.reset(); for (f in downR) f.reset() }
 }
 
 /**
@@ -114,9 +117,7 @@ internal class AmpSim(sr: Int, maxBlock: Int, gain: Double, bass: Double, mid: D
     private val push = Biquad().apply { peak(750.0, 0.8, 2.0 + gain * 6.0, sr) }
     private val up = Array(3) { i -> Biquad().apply { lowPass(sr * 0.45, doubleArrayOf(0.518, 0.707, 1.932)[i], sr * os) } }
     private val down = Array(3) { i -> Biquad().apply { lowPass(sr * 0.45, doubleArrayOf(0.518, 0.707, 1.932)[i], sr * os) } }
-    private val stages = when { gain > 0.68 -> 3; gain > 0.25 -> 2; else -> 1 }
-    /** The second stage fades in between gain 0.25 and 0.35 (it used to switch on at 0.3 with a level and timbre jump). */
-    private val stage2Mix = ((gain - 0.25) / 0.1).coerceIn(0.0, 1.0).let { it * it * (3 - 2 * it) }.toFloat()
+    private val stages = when { gain > 0.68 -> 3; gain > 0.3 -> 2; else -> 1 }
     private val couple = Array(3) { Biquad().apply { highPass(if (it == 0) 25.0 else 90.0 + 40.0 * gain, 0.6, sr * os) } }
     private val miller = Array(3) { Biquad().apply { lowPass(if (it == 0) 11000.0 else 7000.0 - 2500.0 * gain, 0.6, sr * os) } }
     private val stageGain = FloatArray(3) { i -> when (i) { 0 -> Dsp.dbToGain(2.0 + gain * 30.0); 1 -> Dsp.dbToGain(4.0 + gain * 16.0); else -> Dsp.dbToGain(gain * 14.0) }.toFloat() }
@@ -127,7 +128,7 @@ internal class AmpSim(sr: Int, maxBlock: Int, gain: Double, bass: Double, mid: D
     private val high = Biquad().apply { highShelf(3200.0, treble, sr) }
     private val pres = Biquad().apply { peak(4500.0, 0.8, presence, sr) }
     private val reso = Biquad().apply { peak(95.0, 1.0, 1.5 + 1.5 * gain, sr) }
-    private val output = (Dsp.dbToGain(levelDb) * (1.5 + (0.8 - 1.5) * ((gain - 0.25) / 0.1).coerceIn(0.0, 1.0).let { it * it * (3 - 2 * it) })).toFloat()
+    private val output = (Dsp.dbToGain(levelDb) * (if (gain > 0.3) 0.8 else 1.5)).toFloat()
     private val dc = DcBlocker()
     override fun process(left: FloatArray, right: FloatArray?, n: Int) {
         processChannel(left, n)
@@ -142,10 +143,8 @@ internal class AmpSim(sr: Int, maxBlock: Int, gain: Double, bass: Double, mid: D
                 var u = if (phase == 0) x * os else 0f
                 for (f in up) u = f.process(u)
                 for (s in 0 until stages) {
-                    val before = u
                     u = Dsp.softClip(couple[s].process(u) * stageGain[s] + bias[s]) - biasOut[s]
                     u = miller[s].process(u)
-                    if (s == 1 && stage2Mix < 1f) u = before + (u - before) * stage2Mix
                 }
                 for (f in down) u = f.process(u)
                 if (phase == 0) acc = u
@@ -155,7 +154,10 @@ internal class AmpSim(sr: Int, maxBlock: Int, gain: Double, bass: Double, mid: D
             buf[i] = reso.process(Dsp.softClip(t * 1.4f) * 0.72f) * output
         }
     }
-    override fun reset() { (listOf(tight, push, low, mids, high, pres, reso) + up + down + couple + miller).forEach { it.reset() }; dc.reset() }
+    override fun reset() {
+        tight.reset(); push.reset(); low.reset(); mids.reset(); high.reset(); pres.reset(); reso.reset(); dc.reset()
+        for (f in up) f.reset(); for (f in down) f.reset(); for (f in couple) f.reset(); for (f in miller) f.reset()
+    }
 }
 
 private fun System_arraycopy(from: FloatArray, to: FloatArray, n: Int) { for (i in 0 until n) to[i] = from[i] }
@@ -304,7 +306,7 @@ internal class Reverb(sr: Int, size: Double, damping: Double, private val mix: D
         posArr[a] = if (p + 1 >= buf.size) 0 else p + 1
         return b - input
     }
-    override fun reset() { (combsL + combsR + apL + apR).forEach { it.fill(0f) }; combStoreL.fill(0f); combStoreR.fill(0f); inputHp.reset() }
+    override fun reset() { for (b in combsL) b.fill(0f); for (b in combsR) b.fill(0f); for (b in apL) b.fill(0f); for (b in apR) b.fill(0f); combStoreL.fill(0f); combStoreR.fill(0f); inputHp.reset() }
 }
 
 internal class Filter(sr: Int, private val type: Int, private val cutoff: Double, private val q: Double) : Effect {

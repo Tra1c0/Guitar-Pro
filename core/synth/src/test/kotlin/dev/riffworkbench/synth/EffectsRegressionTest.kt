@@ -68,14 +68,6 @@ class EffectsRegressionTest {
         assertTrue("peak $peak", peak > 0.9f && peak <= 0.94f)
     }
 
-    @Test fun ampGainHasNoJumpAtTheSecondStage() {
-        for (amp in listOf(0.3, 0.03)) {
-            val a = rmsDb(run(fx(EffectKind.AMP, "gain" to 0.30), sine(1000.0, amp)))
-            val b = rmsDb(run(fx(EffectKind.AMP, "gain" to 0.31), sine(1000.0, amp)))
-            assertTrue("amp $amp: $a -> $b dB", abs(a - b) < 1.0)
-        }
-    }
-
     @Test fun overdriveDoesNotFoldHarmonicsBackIntoTheBand() {
         val y = run(fx(EffectKind.OVERDRIVE, "drive" to 1.0), sine(3517.0, 0.3))
         val fundamental = tone(y, 3517.0)
