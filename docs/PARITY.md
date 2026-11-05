@@ -106,7 +106,7 @@ GP3/4/5, GPX und GP7/8 werden gelesen, GP7 wird geschrieben. Geprüft ist das ge
 | sound.gm | General MIDI / SoundFont | IMPLEMENTED | NOT_APPLICABLE | IMPLEMENTED | EXPERIMENTAL | IMPLEMENTED | D | [C-AUDIO](CONTRACTS.md#c-audio) | AUTOMATED |
 | sound.rse_mapping | RSE-Originaldaten und eigenes Klangmapping | EXPERIMENTAL | NOT_APPLICABLE | SCAFFOLDED | EXPERIMENTAL | NOT_APPLICABLE | D | [C-AUDIO](CONTRACTS.md#c-audio) | CONTRACT_ONLY |
 | sound.banks | Eigene SF2-/Preset-Banks | SCAFFOLDED | SCAFFOLDED | SCAFFOLDED | SCAFFOLDED | SCAFFOLDED | D | [C-SOUNDBANK](CONTRACTS.md#c-soundbank) | CONTRACT_ONLY |
-| sound.sampler | Artikulationsbewusster Gitarrensampler | SCAFFOLDED | SCAFFOLDED | SCAFFOLDED | SCAFFOLDED | SCAFFOLDED | D | [C-AUDIO](CONTRACTS.md#c-audio) | CONTRACT_ONLY |
+| sound.sampler | Artikulationsbewusster Gitarrensampler | IMPLEMENTED | NOT_APPLICABLE | NOT_APPLICABLE | EXPERIMENTAL | EXPERIMENTAL | D | [C-AUDIO](CONTRACTS.md#c-audio) | AUTOMATED |
 | sound.layers | Velocity-Layer, Round Robins und Releases | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | EXPERIMENTAL | NOT_APPLICABLE | D | [C-AUDIO](CONTRACTS.md#c-audio) | AUTOMATED |
 | sound.transitions | Slides, Legato und Saiten-Choke | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | D | [C-AUDIO](CONTRACTS.md#c-audio) | AUTOMATED |
 | sound.independent_bends | Unabhängige Bends pro Saite | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | D | [C-AUDIO](CONTRACTS.md#c-audio) | AUTOMATED |
@@ -121,7 +121,7 @@ GP3/4/5, GPX und GP7/8 werden gelesen, GP7 wird geschrieben. Geprüft ist das ge
 | audio.clock | Native Sample-Clock und Ausgabezeitstempel | NOT_APPLICABLE | IMPLEMENTED | NOT_APPLICABLE | IMPLEMENTED | NOT_APPLICABLE | D | [C-AUDIO](CONTRACTS.md#c-audio) | DEVICE_PENDING |
 | audio.seek | Seek und Instrumentzustand | NOT_APPLICABLE | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | NOT_APPLICABLE | D | [C-AUDIO](CONTRACTS.md#c-audio) | DEVICE_PENDING |
 | audio.lifecycle | Audio-Fokus, Unterbrechung und Route-Wechsel | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | IMPLEMENTED | NOT_APPLICABLE | D | [C-AUDIO](CONTRACTS.md#c-audio) | DEVICE_PENDING |
-| audio.latency | Latenz, Underruns und Thermik | NOT_APPLICABLE | EXPERIMENTAL | NOT_APPLICABLE | EXPERIMENTAL | NOT_APPLICABLE | D | [C-AUDIO](CONTRACTS.md#c-audio) | DEVICE_PENDING |
+| audio.latency | Latenz, Underruns und Thermik | NOT_APPLICABLE | IMPLEMENTED | NOT_APPLICABLE | EXPERIMENTAL | NOT_APPLICABLE | D | [C-AUDIO](CONTRACTS.md#c-audio) | DEVICE_PENDING |
 | audio.reference | Referenzaufnahme / GP8-Audio | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | C | [C-PRACTICE](CONTRACTS.md#c-practice) | AUTOMATED |
 | audio.multiple_stems | Mehrere Audio-Stems | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | IMPLEMENTED | C | [C-PRACTICE](CONTRACTS.md#c-practice) | AUTOMATED |
 | audio.waveform | Mehrstufige Wellenform | NOT_APPLICABLE | IMPLEMENTED | IMPLEMENTED | NOT_APPLICABLE | NOT_APPLICABLE | C | [C-WAVEFORM](CONTRACTS.md#c-waveform) | AUTOMATED |

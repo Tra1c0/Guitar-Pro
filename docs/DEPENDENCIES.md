@@ -33,6 +33,14 @@ Maven-Publikation wurde gegen Google Maven/Maven Central geprüft. Ein gemeinsam
 
 Die Schriften werden unverändert gebündelt, damit das Design nicht von Gerätefonts oder Play-Diensten abhängt. Notensatz-Export (SVG/PDF) nutzt weiterhin Systemschriften.
 
+## Mitgelieferte Klänge
+
+| Asset | Quelle | Lizenz / Verwendung |
+|---|---|---|
+| `assets/banks/guitar-emily-di.rwsb` (29,2 MB, 208 Regionen, 44,1 kHz/16 Bit mono), SHA-256 `4f7587c5…e9f2d` | [Karoryfer Emilyguitar](https://github.com/sfzinstruments/karoryfer.emilyguitar), Commit `b4920dc662fd9cad6dcaccdeecffdd91c8725d8c`: DI-Aufnahmen einer E-Gitarre, Töne im Kleinterzabstand Db2–D6, 4 Velocity-Stufen × 3 Round Robins, Releases und gedämpfte Anschläge | CC0-1.0 (laut Repository-Lizenz und Karoryfer-Angaben). Umgewandelt mit `tools/make_guitar_bank.py`: 3 Layer, auf 2 s gekürzt, Schleife über ganze Perioden mit 40 ms Überblendung, Abklingrate gemessen. Keine Pflicht zur Namensnennung, wird trotzdem genannt. |
+
+Die Cabinet-Impulsantworten sind eigene, berechnete Entwürfe. Frei auffindbare IR-Pakete hatten ungeklärte oder nicht weitergebbare Lizenzen und wurden deshalb nicht gebündelt.
+
 ## Werkzeuge außerhalb der App
 
 | Werkzeug | Version | Lizenz / Verwendung |
@@ -49,6 +57,8 @@ Die Schriften werden unverändert gebündelt, damit das Design nicht von Geräte
 - [TuxGuitar](https://github.com/helge17/tuxguitar), Commit `9f2647dfc216401cc70569f1ab25ad03e18cab5b`: Haupt-README benennt LGPL. Android-/Java-Editorreferenz. Konkrete Modullizenzen müssten vor Wiederverwendung geprüft werden; keine Wiederverwendung erfolgt.
 - Entscheidung alphaTab: nicht eingebaut. 1.9.0 verlangt SDK 37 und Kotlin-stdlib 2.4 (gepinnt sind SDK 36 und Kotlin 2.2.21), und Bearbeitung müsste über Bounds auf eigene IDs zurückübersetzt werden. Der eigene Notensatz in `core:notation` ersetzt ihn; `adapter:alphatab` bleibt eine erklärte UNAVAILABLE-Grenze.
 - Entscheidung Audio: Oboe, TinySoundFont und FluidSynth sind nicht eingebaut. Die eigene Kotlin-Engine auf AudioTrack ist auf der JVM vollständig testbar und braucht keine Klangbank mit ungeklärten Rechten; ein Oboe-Adapter bleibt über `AudioSink` möglich.
+- [Neural Amp Modeler](https://github.com/sdatkinson/neural-amp-modeler) (MIT): klanglich stark, Standardmodelle (WaveNet) für Echtzeit auf dem Telefon bei 8 Spuren zu teuer; nicht eingebaut. Ein leichtes LSTM-Modell pro Spur wäre ein späterer Kandidat, wenn die Gerätemessungen Luft zeigen.
+- [FreePats Clean Electric Guitar](https://freepats.zenvoid.org/) (CC0, DI): Alternative zu Emilyguitar; hier nicht erreichbar, daher nicht verglichen.
 - Oboe/TinySoundFont/FluidSynth/Signalsmith/NAM/Basic Pitch sind ausschließlich Kandidaten in den Folgeaufträgen. Ihre konkreten Versionen, Pflichten und Assetrechte werden erst vor Integration festgelegt.
 
 ## Evidenzklassen

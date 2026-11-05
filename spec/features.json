@@ -1667,13 +1667,13 @@
       "stage": "D",
       "contractId": "C-AUDIO",
       "dimensions": {
-        "READ": "SCAFFOLDED",
-        "DISPLAY": "SCAFFOLDED",
-        "EDIT": "SCAFFOLDED",
-        "PLAYBACK": "SCAFFOLDED",
-        "EXPORT": "SCAFFOLDED"
+        "READ": "IMPLEMENTED",
+        "DISPLAY": "NOT_APPLICABLE",
+        "EDIT": "NOT_APPLICABLE",
+        "PLAYBACK": "EXPERIMENTAL",
+        "EXPORT": "EXPERIMENTAL"
       },
-      "verification": "CONTRACT_ONLY"
+      "verification": "AUTOMATED"
     },
     {
       "id": "sound.layers",
@@ -1933,12 +1933,12 @@
       "labelEn": "Latency, underruns and thermal behavior",
       "group": "sound",
       "groupDe": "Sound und Mix",
-      "route": "mixer",
+      "route": "diagnostics",
       "stage": "D",
       "contractId": "C-AUDIO",
       "dimensions": {
         "READ": "NOT_APPLICABLE",
-        "DISPLAY": "EXPERIMENTAL",
+        "DISPLAY": "IMPLEMENTED",
         "EDIT": "NOT_APPLICABLE",
         "PLAYBACK": "EXPERIMENTAL",
         "EXPORT": "NOT_APPLICABLE"

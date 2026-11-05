@@ -167,6 +167,9 @@ Aktuelle native Speicherung garantiert atomare Sichtbarkeit eines vollständig g
 - Ein-/Ausgabe: Prepare/Play/Pause/Seek/Loop/Stop, Geschwindigkeit, Metronom, Count-in. Position aus der Hardware-Sample-Clock (AudioTrack-Timestamps), nie aus einem UI-Timer.
 - Ausführung und Fehler: Eigener Render-Thread mit Audio-Priorität, Float-PCM, Low-Latency-Modus, native Rate/Burst. Befehle über lock-freie Queue, Pläne werden blockgenau getauscht. Render-Pfad ohne Allokation, I/O oder Locks; Flush-to-Zero gegen Subnormal-Einbrüche. Audio-Fokus und Kopfhörer-Abziehen pausieren. Nach 20 s Leerlauf wird das Gerät freigegeben. Entscheidung: Kotlin statt Oboe/NDK, weil die Engine dadurch auf der JVM testbar bleibt; Umstieg bleibt über AudioSink möglich.
 - Abnahme: Automatisiert mit virtueller Senke (AudioAdapterTest, SynthEngineTest). Latenz, Underruns, 30-min-Stresstest und Route-Wechsel auf Xiaomi 15 offen.
+- Klangkette E-Gitarre: DI-Samples (C-SOUNDBANK) oder modellierte Saite → AmpSim (1–3 asymmetrische Soft-Clip-Stufen je nach Gain, Koppel-Hochpass, Miller-Tiefpass, 4× Oversampling, Tonestack, Endstufensättigung) → Cabinet als partitionierte FFT-Faltung (Block 64, 1024 Taps bei 48 kHz). Die Box-IRs sind eigene Entwürfe (minimalphasig), keine Messungen.
+- Messung: `RealtimeHost.stats()` liefert Median/P99/Max der Renderzeit pro Block (Ring über 8192 Blöcke), Überläufe gegen das Blockbudget, Underruns, Ausgabelatenz aus Timestamps und Note-on→Ausgang. Die Seite „Audio-Diagnose“ (`AudioLab`) zeigt das live, fährt einen 1-/10-min-Stresstest mit 8 Gitarrenspuren (Palm Mutes, Akkorde, 32tel, Bends, Slides) inkl. PSS-Speicher, Thermalstatus und CPU-Takt und bietet einen RMS-angeglichenen Blindvergleich modelliert vs. gesampelt für Clean/Crunch/High Gain.
+- JVM-Bench (Desktop, nicht Telefon): 8 Spuren gesampelt Median ≈ 0,5 ms, P99 ≈ 0,75 ms bei 4 ms Budget (192 Frames). Gerätewerte stehen aus.
 
 ## C-PREVIEW
 
@@ -179,12 +182,12 @@ Aktuelle native Speicherung garantiert atomare Sichtbarkeit eines vollständig g
 
 ## C-SOUNDBANK
 
-**Soundbanks und Sampler · Scaffold / D**
+**Soundbanks und Sampler · E-Gitarre implementiert (eigenes RWSB-Format) / D; SF2 offen**
 
-- Grenze: SoundBankRepository, SoundBank/Preset/SampleRegion.
-- Ein-/Ausgabe: Eigene/lizenzierte SF2/SF3/Artikulationsbank → validiertes Inventar; Mapping von GM-Programmen und Artikulationen ausdrücklich ausweisen.
-- Ausführung und Fehler: Off-thread lesen und vorbereiten. Rechte pro SF2, DI-Sample, Release, IR, Amp-Modell und Preset dokumentieren. Keine Arobas-RSE-Inhalte übernehmen.
-- Abnahme: Velocity-Layer, Round Robins, Releases, Palm-Mute-Aufnahmen und separate Dead-Note-Samples. CPU/Polyphonie/Hörvergleich mit GM und DI+Amp. Aktuell UNAVAILABLE.
+- Grenze: `SampleBank` (core:synth, reines Kotlin) mit `SampleVoice`; SoundBankRepository/SF2 weiterhin UNAVAILABLE.
+- Ein-/Ausgabe: `assets/banks/guitar-emily-di.rwsb` (aus `tools/make_guitar_bank.py`) → Regionen mit Grundton, Tastenbereich, Velocity-Layer (3), Round Robin (3), gemessenem Abklingen und nahtloser Schleife; Release-Geräusche und gedämpfte Anschläge als eigene Regionen. Rechte siehe DEPENDENCIES.md.
+- Ausführung und Fehler: Laden im IO-Dispatcher beim App-Start, Streaming-Parser mit Größengrenzen; fehlt oder bricht die Bank, bleibt die modellierte Saite aktiv (kein stummer Ausfall). Render: kubische Interpolation, Legato/Hammer/Pull/Slide als Überblendung ohne neuen Anschlag, Retrigger blendet die alte Stimme schnell aus, Bends/Vibrato über Pitch-Ratio. Palm Mute ist emuliert (Tiefpass + schnelles Abklingen), weil die Quelle keine PM-Aufnahmen hat; Dead Notes nutzen die gedämpften Aufnahmen; Flageoletts bleiben auf der modellierten Saite. Bass, Akustik und Drums bleiben synthetisch.
+- Abnahme: SampleBankTest/AudioBenchTest (JVM), Hörvergleich und Gerätelast über die Diagnose-Seite offen.
 
 ## C-DECODE
 
