@@ -114,6 +114,8 @@ private class AsciiWriter(private val project: Project, private val losses: Loss
         "drums" -> {
             val used = sortedSetOf<Int>()
             for (staff in track.staves) for (bar in staff.bars) for (voice in bar.voices) for (beat in voice.beats) for (note in beat.notes) used += drumNote(note)
+            // An empty drum track still gets one (snare) line so the block layout has a row to draw.
+            if (used.isEmpty()) used += 38
             used.sortedWith(compareBy({ drumOrder(it) }, { it })).map { it to drumLabel(it) }
         }
         else -> listOf(0 to "Noten")

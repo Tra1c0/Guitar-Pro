@@ -57,6 +57,11 @@ object ScoreValidator {
         }
         project.sections.forEach { id(it.id); if (it.measureId !in measureMap) diagnostics += Diagnostic("section_position", "Abschnitt ohne Takt", it.id, Severity.ERROR) }
         project.tempo.forEach { if (it.position.measureId !in measureMap || !it.quarterNotesPerMinute.isFinite() || it.quarterNotesPerMinute !in 10.0..1000.0) diagnostics += Diagnostic("tempo", "Ungültige Tempoänderung", severity = Severity.ERROR) }
+        // Jump marks that playback cannot follow: warned here so the score view explains why playback/MIDI export will refuse.
+        val marks = project.measures.flatMap { m -> m.navigation.map { m to it } }
+        val kinds = marks.map { it.second.kind }.toSet()
+        if (NavigationKind.DAL_SEGNO in kinds && NavigationKind.SEGNO !in kinds) diagnostics += Diagnostic("navigation_segno", "Dal Segno ohne Segno kann nicht abgespielt werden", marks.first { it.second.kind == NavigationKind.DAL_SEGNO }.first.id, Severity.WARNING)
+        marks.forEach { (m, mark) -> if (mark.target != null && mark.target !in measureMap) diagnostics += Diagnostic("navigation_target", "Sprungziel existiert nicht", m.id, Severity.WARNING) }
         return diagnostics
     }
 }

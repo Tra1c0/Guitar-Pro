@@ -100,6 +100,7 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
         // Any edit that removes notes (delete, rest over a note, drum toggle) drops the links pointing at them, like Delete.
         // Re-pitching one end of a tie stays rejected by the validator (deliberate: ties are never broken silently).
         if (after != before.project) after = Links.prune(after)
+        if (after != before.project) requireTiesStayOnTheirString(before.project, after)
         if (after == before.project) Outcome.Success(Unit) else {
             require(after.id == before.project.id) { "Projekt-ID darf nicht geändert werden" }
             require(before.project.revision < Long.MAX_VALUE) { "Revisionslimit erreicht" }
@@ -159,14 +160,20 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
             p.copy(tracks = p.tracks.map { if (it.id == c.trackId) it.copy(mix = c.mix) else it })
         }
         is EditorCommand.Replace -> { require(c.expectedRevision == null || c.expectedRevision == p.revision) { "Partitur wurde seit der Vorschau geändert" }; c.project.copy(id = p.id) }
-        is EditorCommand.ApplyArticulation -> NoteEdits.applyArticulation(p, s, c.articulation, c.toggle)
+        is EditorCommand.ApplyArticulation -> {
+            (c.articulation as? Articulation.Vibrato)?.let { require(it.rateHz.isFinite() && it.rateHz in 0.1..20.0 && it.depthCents in 0..1200) { "Vibrato-Werte ungültig" } }
+            NoteEdits.applyArticulation(p, s, c.articulation, c.toggle)
+        }
         is EditorCommand.ClearArticulation -> NoteEdits.clearArticulation(p, s, c.slot)
         EditorCommand.ToggleTie -> NoteEdits.toggleTie(p, s, ids)
         is EditorCommand.SetVelocity -> NoteEdits.setVelocity(p, s, c.velocity)
         is EditorCommand.MoveToString -> NoteEdits.moveToString(p, s, c.string)
         is EditorCommand.Transpose -> NoteEdits.transpose(p, s, c.semitones, c.scope)
         is EditorCommand.SetTuplet -> NoteEdits.setDurationRipple(p, s) { it.copy(tuplets = listOfNotNull(c.ratio)) }
-        is EditorCommand.SetFermata -> NoteEdits.updateSelectedBeat(p, s) { it.copy(fermata = c.fermata) }
+        is EditorCommand.SetFermata -> {
+            c.fermata?.let { require(it.multiplier.isFinite() && it.multiplier in 0.1..8.0) { "Fermatendauer ungültig" } }
+            NoteEdits.updateSelectedBeat(p, s) { it.copy(fermata = c.fermata) }
+        }
         is EditorCommand.SetStrum -> NoteEdits.updateSelectedBeat(p, s) { it.copy(strum = c.strum) }
         EditorCommand.DeleteBeat -> NoteEdits.deleteBeat(p, s)
         is EditorCommand.InsertBeat -> NoteEdits.insertBeat(p, s, c.duration, ids)
@@ -177,14 +184,22 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
         is EditorCommand.PasteBars -> StructureEdits.paste(p, c.content, c.targetMeasure, c.targetTrack, ids)
         is EditorCommand.ClearBars -> StructureEdits.clear(p, c.ids, c.trackId)
         is EditorCommand.SetRepeat -> StructureEdits.setRepeat(p, c.measureId, c.repeat)
-        is EditorCommand.SetNavigation -> StructureEdits.updateMeasure(p, c.measureId) { it.copy(navigation = c.marks.distinctBy { m -> m.kind }) }
+        is EditorCommand.SetNavigation -> {
+            require(c.marks.mapNotNull { it.target }.all { t -> p.measures.any { it.id == t } }) { "Sprungziel existiert nicht" }
+            StructureEdits.updateMeasure(p, c.measureId) { it.copy(navigation = c.marks.distinctBy { m -> m.kind }) }
+        }
         is EditorCommand.SetKey -> { require(c.key.fifths in -7..7) { "Tonart außerhalb von 7 Vorzeichen" }; StructureEdits.updateMeasure(p, c.measureId) { it.copy(key = c.key) } }
         is EditorCommand.SetFeel -> StructureEdits.updateMeasure(p, c.measureId) { it.copy(feel = c.feel) }
         is EditorCommand.SetTempoAt -> StructureEdits.setTempoAt(p, c.measureId, c.bpm)
         is EditorCommand.SetSection -> StructureEdits.setSection(p, c.measureId, c.label, ids)
         is EditorCommand.DuplicateTrack -> TrackEdits.duplicate(p, c.id, ids)
         is EditorCommand.RenameTrack -> { require(c.name.isNotBlank() && c.name.length <= 120) { "Spurname ungültig" }; TrackEdits.update(p, c.id) { it.copy(name = c.name.trim()) } }
-        is EditorCommand.SetInstrument -> TrackEdits.setInstrument(p, c.id, c.instrument, c.policy)
+        is EditorCommand.SetInstrument -> {
+            // Non-finite numbers cannot be saved (JSON) and would make every sounding pitch NaN.
+            require(c.instrument.fineTuneCents.isFinite() && kotlin.math.abs(c.instrument.fineTuneCents) <= 1200.0) { "Feinstimmung ungültig" }
+            require(c.instrument.drumKit.all { it.volume.isFinite() && it.pan.isFinite() }) { "Schlagzeug-Werte ungültig" }
+            TrackEdits.setInstrument(p, c.id, c.instrument, c.policy)
+        }
         is EditorCommand.SetSound -> TrackEdits.update(p, c.id) { it.copy(sound = c.sound) }
         is EditorCommand.SetMetadata -> { require(c.metadata.title.isNotBlank() && c.metadata.title.length <= 200) { "Titel ungültig" }; p.copy(metadata = c.metadata) }
         is EditorCommand.SetMasterMix -> { require(c.mix.volume.isFinite() && c.mix.volume in 0.0..1.0) { "Master-Lautstärke ungültig" }; p.copy(mix = p.mix.copy(master = c.mix)) }
@@ -192,6 +207,7 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
         is EditorCommand.AddAudioClip -> {
             require(c.clip.asset == c.asset.hash) { "Clip und Asset passen nicht zusammen" }
             require(p.audio.clips.size < 16) { "Höchstens 16 Audioclips" }
+            require(c.clip.gain.isFinite() && c.clip.gain in 0.0..2.0 && c.clip.pan in -1.0..1.0 && kotlin.math.abs(c.clip.offsetMicros) <= 600_000_000L) { "Clip-Werte ungültig" }
             p.copy(audio = p.audio.copy(assets = (p.audio.assets + c.asset).distinctBy { it.hash }, clips = p.audio.clips + c.clip))
         }
         is EditorCommand.UpdateAudioClip -> {
@@ -273,4 +289,15 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
                 string = s.string.coerceIn(0, maxOf(0, track.instrument.tuning.lastIndex)), rangeEnd = s.rangeEnd?.takeIf { end -> p.measures.any { it.id == end } })
         }
     }
+
+    /** A tie that joined two notes on one string must not end up spanning two strings (playback groups ties per string). */
+    private fun requireTiesStayOnTheirString(before: Project, after: Project) {
+        fun strings(p: Project): Map<EntityId, Int?> = p.tracks.flatMap { it.staves }.flatMap { it.bars }.flatMap { it.voices }.flatMap { it.beats }.flatMap { it.notes }.associate { it.id to it.string }
+        val old = strings(before); val now = strings(after)
+        for (t in after.tracks) for (st in t.staves) for (bar in st.bars) for (v in bar.voices) for (b in v.beats) for (n in b.notes) for (l in n.links) if (l.kind == LinkKind.TIE) {
+            val a = now[n.id]; val z = now[l.target]
+            if (a != null && z != null && a != z && (old[n.id] != a || old[l.target] != z)) throw IllegalArgumentException("Gebundene Noten müssen auf derselben Saite bleiben")
+        }
+    }
+
 }

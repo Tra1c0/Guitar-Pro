@@ -171,7 +171,7 @@ internal object GpifDecoder {
         val offset = runCatching { Fraction.of(parts!![0].trim().toLong(), parts[1].trim().toLong() * 4) }.getOrNull()
             ?: run { losses.add("rhythm.fermata", "Fermate ohne gültige Position wird verworfen"); return null }
         if (offset < Fraction.ZERO) return null
-        val length = GpifNumbers.parseDoubleOrNull(el.textOf("Length"))?.takeIf { it > 0.0 && it <= 7.0 }
+        val length = GpifNumbers.parseDoubleOrNull(el.textOf("Length"))?.takeIf { it >= 0.0 && it <= 7.0 }
         return offset to Fermata(kind, if (length != null) 1.0 + length else 1.5)
     }
 

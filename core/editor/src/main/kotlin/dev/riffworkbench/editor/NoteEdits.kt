@@ -167,12 +167,13 @@ internal object NoteEdits {
         // Previous note on the same string (or same pitch for unfretted) in this voice, searching back over barlines.
         var origin: Note? = null
         var originBeat: Beat? = null
+        var originMeasure = -1
         loop@ for (mi in measureIndex downTo 0) {
             val beats = staff.bars.firstOrNull { it.measureId == p.measures[mi].id }?.voices?.firstOrNull { it.index == s.voice }?.beats.orEmpty()
             for (b in beats.sortedByDescending { it.offset }) {
                 if (mi == measureIndex && b.offset >= s.offset) continue
                 val n = b.notes.firstOrNull { if (fretted(t)) it.string == s.string else current == null || it.pitch.midiNumber == current.pitch.midiNumber }
-                if (n != null) { origin = n; originBeat = b; break@loop }
+                if (n != null) { origin = n; originBeat = b; originMeasure = mi; break@loop }
                 if (b.notes.isNotEmpty() || b.explicitRest) break@loop
             }
         }
@@ -180,6 +181,12 @@ internal object NoteEdits {
         if (current != null && from.links.any { it.kind == LinkKind.TIE && it.target == current.id }) {
             return updateNote(p, from.id) { it.copy(links = it.links.filterNot { l -> l.kind == LinkKind.TIE && l.target == current.id }) }
         }
+        // A tie continues a note without a gap: the origin must end exactly where the selection starts (same bar, or at the
+        // end of the previous bar with the selection at the downbeat). Playback cannot sound a tie across silence.
+        val originEnd = (originBeat ?: throw IllegalArgumentException("Keine vorherige Note")).offset + originBeat.duration.length()
+        val adjacent = if (originMeasure == measureIndex) originEnd == s.offset
+            else originMeasure == measureIndex - 1 && s.offset == Fraction.ZERO && p.measures[originMeasure].let { m -> originEnd == (m.pickupLength ?: m.signature.length()) }
+        require(adjacent) { "Haltebogen nur zur unmittelbar vorherigen Note ohne Pause" }
         var edited = p
         val targetId: EntityId
         if (current == null) {

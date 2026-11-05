@@ -171,6 +171,7 @@ internal class GpifEncoder(private val project: Project, private val losses: Los
             if (existing == null) fermatas[beat.offset] = f else if (existing != f) losses.add("rhythm.fermata", "Abweichende Fermaten an derselben Position werden vereinheitlicht", beat.id)
         }
         if (fermatas.isNotEmpty()) {
+            if (fermatas.values.any { it.multiplier < 1.0 }) losses.add("rhythm.fermata", "Fermaten kürzer als der Grundwert werden ohne Dehnung exportiert", measure.id)
             w.start("Fermatas")
             for ((offset, f) in fermatas.entries.sortedBy { it.key }) {
                 val quarters = offset * Fraction.of(4)

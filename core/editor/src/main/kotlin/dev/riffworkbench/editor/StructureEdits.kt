@@ -55,7 +55,10 @@ internal object StructureEdits {
         val added = List(count) { Measure(ids.next(), template, key = (p.measures.getOrNull(at - 1) ?: p.measures.getOrNull(at))?.key ?: KeySignature()) }
         val factory = ProjectFactory(ids)
         val measures = p.measures.toMutableList().apply { addAll(at, added) }
-        return p.copy(measures = measures, tracks = p.tracks.map { t -> t.copy(staves = t.staves.map { st ->
+        // Inserting before the first bar: the start tempo moves to the new first bar (a project always has a tempo at bar 1).
+        val oldFirst = p.measures.firstOrNull()?.id
+        val tempo = if (at == 0 && oldFirst != null) p.tempo.map { if (it.position.measureId == oldFirst && it.position.offset == Fraction.ZERO) it.copy(position = ScorePosition(added[0].id)) else it } else p.tempo
+        return p.copy(measures = measures, tempo = tempo, tracks = p.tracks.map { t -> t.copy(staves = t.staves.map { st ->
             st.copy(bars = st.bars.toMutableList().apply { addAll(at, added.map { factory.bar(it.id) }) })
         }) })
     }
