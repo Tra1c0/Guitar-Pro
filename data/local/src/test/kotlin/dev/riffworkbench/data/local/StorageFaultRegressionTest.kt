@@ -94,7 +94,7 @@ class StorageFaultRegressionTest {
     @Test fun saveDoesNotRescanTheLibrary() = runBlocking {
         val root = temp.newFolder(); val repo = FileProjectRepository(root)
         val a = ProjectFactory(ids).create("A"); ok(repo.save(a))
-        File(root, "projects/broken-elsewhere").mkdirs()
+        File(root, "projects/broken-elsewhere").mkdirs(); File(root, "projects/broken-elsewhere/head.json").writeText("{ not json")
         ok(repo.save(a.copy(revision = 1, metadata = a.metadata.copy(title = "A2")), 0))
         assertEquals(listOf("A2"), repo.projects.value.map { it.title })
         assertTrue(repo.issues.value.isEmpty())

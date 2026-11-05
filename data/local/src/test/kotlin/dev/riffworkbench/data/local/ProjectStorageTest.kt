@@ -60,7 +60,8 @@ class ProjectStorageTest {
         assertTrue(File(dir, "head.json").readText().contains("revision-1"))
     }
     @Test fun corruptProjectsAreReportedInsteadOfSilentlyDisappearing() = runBlocking {
-        val root = temp.newFolder(); File(root, "projects/broken").mkdirs()
+        // A damaged head (an empty folder is an interrupted first create and is not listed, see Qa14StorageCrashFindingsTest).
+        val root = temp.newFolder(); File(root, "projects/broken").mkdirs(); File(root, "projects/broken/head.json").writeText("{ not json")
         val repo = FileProjectRepository(root); ok(repo.refresh())
         assertEquals(1, repo.issues.value.size)
         assertEquals("project_unreadable", repo.issues.value.single().code)

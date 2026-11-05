@@ -119,9 +119,20 @@ class FileProjectRepository(private val root: File) : ProjectRepository, Snapsho
         require(sha256(bytes) == head.sha256) { "Prüfsumme der Revision stimmt nicht" }
         return decodeProject(bytes).also { require(it.revision == head.revision); require(ScoreValidator.validate(it).none { d -> d.severity == Severity.ERROR }) { "Ungültige gespeicherte Partitur" } }
     }
+    /** No head, at most one revision file and temp files: the very first save never committed (also an empty folder). */
+    private fun interruptedFirstCreate(dir: File): Boolean {
+        if (File(dir, "head.json").exists() || File(dir, "head.previous.json").exists()) return false
+        val names = dir.list()?.toList().orEmpty()
+        // The first save may carry any revision (imports keep theirs); a head temp means the crash hit the head write itself.
+        val revisions = names.count { Regex("revision-[0-9]+\\.json").matches(it) }
+        return revisions <= 1 && names.all { Regex("revision-[0-9]+\\.json").matches(it) || (it.endsWith(".tmp") && (it.startsWith(".revision-") || it.startsWith(".head.json."))) }
+    }
     private fun refreshIndex() {
         val issues = mutableListOf<Diagnostic>()
         mutable.value = projectsDir.listFiles()?.filter { it.isDirectory }?.mapNotNull { dir ->
+            // No head at all: the first save was interrupted before its commit (PROJECT_FORMAT: a revision without a head is not
+            // a commit). Nothing was saved from the user's point of view: not listed and no permanent error. Files stay on disk.
+            if (interruptedFirstCreate(dir)) return@mapNotNull null
             try { val p = validHead(dir).project; ProjectSummary(p.id, p.metadata.title, p.revision, p.tracks.size, File(dir, "head.json").lastModified()) }
             catch (e: IOException) { issues += Diagnostic("project_unreadable", "${dir.name}: ${e.message}", severity = Severity.ERROR); null }
             catch (e: IllegalArgumentException) { issues += Diagnostic("project_unreadable", "${dir.name}: ${e.message}", severity = Severity.ERROR); null }

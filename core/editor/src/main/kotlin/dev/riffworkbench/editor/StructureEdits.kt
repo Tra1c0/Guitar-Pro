@@ -128,6 +128,7 @@ internal object StructureEdits {
             val ti = firstTrack + k
             val t = tracks.getOrNull(ti) ?: return@forEachIndexed
             val fretted = t.instrument.tuning.isNotEmpty()
+            require(clip.bars.size >= targets.size) { "Zwischenablage ist unvollständig" }
             require((clip.strings > 0) == fretted && (clip.kind == InstrumentKind.PERCUSSION) == (t.instrument.kind == InstrumentKind.PERCUSSION)) { "Inhalt passt nicht zum Instrument der Zielspur ${t.name}" }
             val shift = t.instrument.tuning.size - clip.strings
             val cloner = Cloner(ids)

@@ -94,6 +94,8 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
         val p = state.value.project
         require(p.tracks.any { it.id == selection.trackId } && p.measures.any { it.id == selection.measureId })
         require(selection.voice in 0..3 && selection.offset >= Fraction.ZERO)
+        // Positions lie inside the bar (pickups and odd meters are ≤ 64 whole notes); larger values only overflow later.
+        require(selection.offset.denominator <= 1L shl 20 && selection.offset.numerator <= 64L * selection.offset.denominator) { "Position außerhalb des Takts" }
         val track = p.tracks.first { it.id == selection.trackId }
         require(selection.string in 0 until maxOf(1, track.instrument.tuning.size))
         require(selection.rangeEnd == null || p.measures.any { it.id == selection.rangeEnd })
@@ -109,6 +111,11 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
         // Only single-note moves are checked: track-wide transpose/retune re-place chords per beat and may split a tie,
         // which they did before as well (known limitation, see QA journal cycle 6).
         if (after != before.project && (command is EditorCommand.MoveToString || command is EditorCommand.PutNote)) requireTiesStayOnTheirString(before.project, after)
+        // Content-identical (e.g. Replace with the current score, which carries its own revision): not a change.
+        if (after != before.project && after.revision != before.project.revision && after.copy(revision = before.project.revision) == before.project) after = before.project
+        // Bar insertion/duplication between tied bars keeps the tie by design (EditorExtensionsTest); beat-level edits may not open a gap.
+        if (after != before.project && command !is EditorCommand.Replace && command !is EditorCommand.InsertMeasures && command !is EditorCommand.DuplicateMeasures)
+            requireTiesStayAdjacent(before.project, after)
         if (after == before.project) Outcome.Success(Unit) else {
             require(after.id == before.project.id) { "Projekt-ID darf nicht geändert werden" }
             require(before.project.revision < Long.MAX_VALUE) { "Revisionslimit erreicht" }
@@ -116,14 +123,18 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
             val diagnostics = ScoreValidator.validate(after)
             if (diagnostics.any { it.severity == Severity.ERROR }) Outcome.Failure(FailureCode.VALIDATION, diagnostics.first { it.severity == Severity.ERROR }.message, diagnostics)
             else {
+                // Computed before the history changes: a failure here must leave undo/redo untouched.
+                val selection = validSelection(after, before.selection)
                 undo.addLast(History(before.project, before.selection, before.diagnostics))
                 while (undo.size > historyLimit) undo.removeFirst()
                 redo.clear()
-                mutable.value = EditorState(after, validSelection(after, before.selection), undo.isNotEmpty(), false, diagnostics)
+                mutable.value = EditorState(after, selection, undo.isNotEmpty(), false, diagnostics)
                 Outcome.Success(Unit)
             }
         }
     } catch (e: IllegalArgumentException) { Outcome.Failure(FailureCode.VALIDATION, e.message ?: "Ungültige Änderung") }
+    catch (e: ArithmeticException) { Outcome.Failure(FailureCode.VALIDATION, e.message ?: "Ungültige Änderung") }
+    catch (e: IndexOutOfBoundsException) { Outcome.Failure(FailureCode.VALIDATION, "Ungültige Daten: ${e.message}") }
 
     fun undo(): Outcome<Unit> = travel(undo, redo)
     fun redo(): Outcome<Unit> = travel(redo, undo)
@@ -134,12 +145,13 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
         to.addLast(History(current.project, current.selection, current.diagnostics))
         val p = next.project.copy(revision = current.project.revision + 1)
         // A history entry was valid when it was recorded; its diagnostics do not depend on the revision number.
-        mutable.value = EditorState(p, validSelection(p, next.selection), undo.isNotEmpty(), redo.isNotEmpty(), next.diagnostics)
+        val selection = try { validSelection(p, next.selection) } catch (e: RuntimeException) { initialSelection(p) }
+        mutable.value = EditorState(p, selection, undo.isNotEmpty(), redo.isNotEmpty(), next.diagnostics)
         return Outcome.Success(Unit)
     }
 
     private fun apply(p: Project, s: Selection, c: EditorCommand): Project = when (c) {
-        is EditorCommand.Rename -> { require(c.title.isNotBlank() && c.title.length <= 200); p.copy(metadata = p.metadata.copy(title = c.title.trim())) }
+        is EditorCommand.Rename -> { requireText(c.title, "Titel"); require(c.title.isNotBlank() && c.title.length <= 200); p.copy(metadata = p.metadata.copy(title = c.title.trim())) }
         is EditorCommand.SetTempo -> {
             require(c.bpm.isFinite() && c.bpm in 10.0..1000.0)
             val origin = ScorePosition(p.measures.first().id)
@@ -155,7 +167,7 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
         is EditorCommand.MoveTrack -> {
             val tracks = p.tracks.toMutableList()
             val index = tracks.indexOfFirst { it.id == c.id }; require(index >= 0)
-            val target = (index + c.delta).coerceIn(tracks.indices)
+            val target = (index.toLong() + c.delta).coerceIn(0L, tracks.lastIndex.toLong()).toInt()
             val track = tracks.removeAt(index); tracks.add(target, track)
             p.copy(tracks = tracks)
         }
@@ -166,6 +178,7 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
         is EditorCommand.SetSignature -> p.copy(measures = p.measures.map { if (it.id == c.measureId) it.copy(signature = c.signature) else it })
         is EditorCommand.SetMix -> {
             require(c.mix.volume.isFinite() && c.mix.volume in 0.0..1.0 && c.mix.pan.isFinite() && c.mix.pan in -1.0..1.0)
+            requireFiniteEffects(c.mix.effects)
             p.copy(tracks = p.tracks.map { if (it.id == c.trackId) it.copy(mix = c.mix) else it })
         }
         is EditorCommand.Replace -> { require(c.expectedRevision == null || c.expectedRevision == p.revision) { "Partitur wurde seit der Vorschau geändert" }; c.project.copy(id = p.id) }
@@ -187,7 +200,7 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
         is EditorCommand.SetStrum -> NoteEdits.updateSelectedBeat(p, s) { it.copy(strum = c.strum) }
         EditorCommand.DeleteBeat -> NoteEdits.deleteBeat(p, s)
         is EditorCommand.InsertBeat -> NoteEdits.insertBeat(p, s, c.duration, ids)
-        is EditorCommand.SetText -> NoteEdits.setText(p, s, c.text, c.kind, ids)
+        is EditorCommand.SetText -> requireText(c.text, "Text").let { NoteEdits.setText(p, s, c.text, c.kind, ids) }
         is EditorCommand.InsertMeasures -> StructureEdits.insert(p, c.index, c.count, c.signature, ids)
         is EditorCommand.DeleteMeasures -> StructureEdits.delete(p, c.ids)
         is EditorCommand.DuplicateMeasures -> StructureEdits.duplicate(p, c.ids, ids)
@@ -201,28 +214,34 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
         is EditorCommand.SetKey -> { require(c.key.fifths in -7..7) { "Tonart außerhalb von 7 Vorzeichen" }; StructureEdits.updateMeasure(p, c.measureId) { it.copy(key = c.key) } }
         is EditorCommand.SetFeel -> StructureEdits.updateMeasure(p, c.measureId) { it.copy(feel = c.feel) }
         is EditorCommand.SetTempoAt -> StructureEdits.setTempoAt(p, c.measureId, c.bpm)
-        is EditorCommand.SetSection -> StructureEdits.setSection(p, c.measureId, c.label, ids)
+        is EditorCommand.SetSection -> requireText(c.label, "Abschnitt").let { StructureEdits.setSection(p, c.measureId, c.label, ids) }
         is EditorCommand.DuplicateTrack -> TrackEdits.duplicate(p, c.id, ids)
-        is EditorCommand.RenameTrack -> { require(c.name.isNotBlank() && c.name.length <= 120) { "Spurname ungültig" }; TrackEdits.update(p, c.id) { it.copy(name = c.name.trim()) } }
+        is EditorCommand.RenameTrack -> { requireText(c.name, "Spurname"); require(c.name.isNotBlank() && c.name.length <= 120) { "Spurname ungültig" }; TrackEdits.update(p, c.id) { it.copy(name = c.name.trim()) } }
         is EditorCommand.SetInstrument -> {
             // Non-finite numbers cannot be saved (JSON) and would make every sounding pitch NaN.
             require(c.instrument.fineTuneCents.isFinite() && kotlin.math.abs(c.instrument.fineTuneCents) <= 1200.0) { "Feinstimmung ungültig" }
             require(c.instrument.drumKit.all { it.volume.isFinite() && it.pan.isFinite() }) { "Schlagzeug-Werte ungültig" }
             TrackEdits.setInstrument(p, c.id, c.instrument, c.policy)
         }
-        is EditorCommand.SetSound -> TrackEdits.update(p, c.id) { it.copy(sound = c.sound) }
-        is EditorCommand.SetMetadata -> { require(c.metadata.title.isNotBlank() && c.metadata.title.length <= 200) { "Titel ungültig" }; p.copy(metadata = c.metadata) }
-        is EditorCommand.SetMasterMix -> { require(c.mix.volume.isFinite() && c.mix.volume in 0.0..1.0) { "Master-Lautstärke ungültig" }; p.copy(mix = p.mix.copy(master = c.mix)) }
+        is EditorCommand.SetSound -> requireText(c.sound.mappingDescription, "Klang").let { TrackEdits.update(p, c.id) { it.copy(sound = c.sound) } }
+        is EditorCommand.SetMetadata -> { c.metadata.let { m -> listOf(m.title, m.artist, m.album, m.composer, m.copyright, m.notes).forEach { requireText(it, "Metadaten") } }; require(c.metadata.title.isNotBlank() && c.metadata.title.length <= 200) { "Titel ungültig" }; p.copy(metadata = c.metadata) }
+        is EditorCommand.SetMasterMix -> {
+            require(c.mix.volume.isFinite() && c.mix.volume in 0.0..1.0 && c.mix.pan.isFinite() && c.mix.pan in -1.0..1.0) { "Master-Werte ungültig" }
+            requireFiniteEffects(c.mix.effects)
+            p.copy(mix = p.mix.copy(master = c.mix))
+        }
         is EditorCommand.SetDuration -> NoteEdits.setDurationRipple(p, s) { c.duration }
         is EditorCommand.AddAudioClip -> {
             require(c.clip.asset == c.asset.hash) { "Clip und Asset passen nicht zusammen" }
             require(p.audio.clips.size < 16) { "Höchstens 16 Audioclips" }
             require(c.clip.gain.isFinite() && c.clip.gain in 0.0..2.0 && c.clip.pan in -1.0..1.0 && kotlin.math.abs(c.clip.offsetMicros) <= 600_000_000L) { "Clip-Werte ungültig" }
+            requireFiniteEffects(c.clip.filters)
             p.copy(audio = p.audio.copy(assets = (p.audio.assets + c.asset).distinctBy { it.hash }, clips = p.audio.clips + c.clip))
         }
         is EditorCommand.UpdateAudioClip -> {
             require(p.audio.clips.any { it.id == c.clip.id }) { "Clip fehlt" }
             require(c.clip.gain.isFinite() && c.clip.gain in 0.0..2.0 && c.clip.pan in -1.0..1.0 && kotlin.math.abs(c.clip.offsetMicros) <= 600_000_000L) { "Clip-Werte ungültig" }
+            requireFiniteEffects(c.clip.filters)
             p.copy(audio = p.audio.copy(clips = p.audio.clips.map { if (it.id == c.clip.id) c.clip else it }))
         }
         is EditorCommand.RemoveAudioClip -> {
@@ -272,6 +291,16 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
                 else -> beat
             }
         }
+    }
+
+    /** NaN/Infinity cannot be saved (JSON) and would poison the DSP. */
+    private fun requireFiniteEffects(effects: List<EffectUnit>) = require(effects.all { e -> e.parameters.values.all { it.isFinite() } }) { "Effektwerte ungültig" }
+    /** Unpaired UTF-16 surrogates cannot be stored as UTF-8 (they would come back as '?'). */
+    private fun requireText(text: String?, what: String) { if (text == null) return
+        var i = 0
+        while (i < text.length) { val c = text[i]
+            if (c.isHighSurrogate()) { require(i + 1 < text.length && text[i + 1].isLowSurrogate()) { "$what enthält ungültige Zeichen" }; i += 2; continue }
+            require(!c.isLowSurrogate()) { "$what enthält ungültige Zeichen" }; i++ }
     }
 
     private fun moveNote(p: Project, s: Selection, c: EditorCommand.MoveNote): Project {
@@ -329,6 +358,47 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
     }
 
     /** A tie that joined two notes on one string must not end up spanning two strings (playback groups ties per string). */
+    /**
+     * Ties are never broken silently: an edit that leaves a previously gap-free tie with a gap (beat inserted, bar inserted
+     * or duplicated between, origin shortened, bar lengthened) is rejected; the user releases the tie first.
+     */
+    private fun requireTiesStayAdjacent(before: Project, after: Project) {
+        val was = adjacentTies(before)
+        if (was.isEmpty()) return
+        val now = adjacentTies(after)
+        val broken = was.filter { it !in now && tieExists(after, it) }
+        require(broken.isEmpty()) { "Haltebogen würde unterbrochen – zuerst den Haltebogen lösen" }
+    }
+    private fun tieExists(p: Project, tie: Pair<EntityId, EntityId>): Boolean =
+        p.tracks.any { t -> t.staves.any { st -> st.bars.any { b -> b.voices.any { v -> v.beats.any { bt -> bt.notes.any { n -> n.id == tie.first && n.links.any { it.kind == LinkKind.TIE && it.target == tie.second } } } } } } }
+    /** Ties whose target starts exactly where the origin beat ends (same bar, or the next bar's downbeat). */
+    private fun adjacentTies(p: Project): Set<Pair<EntityId, EntityId>> {
+        val out = HashSet<Pair<EntityId, EntityId>>()
+        val measureIndex = p.measures.withIndex().associate { (i, m) -> m.id to i }
+        for (t in p.tracks) for (st in t.staves) {
+            // note id -> (bar index, start, end) per voice
+            val where = HashMap<EntityId, Triple<Int, Fraction, Fraction>>()
+            val voiceOf = HashMap<EntityId, Int>()
+            var anyTie = false
+            for (bar in st.bars) { val mi = measureIndex[bar.measureId] ?: continue
+                for (v in bar.voices) for (b in v.beats) for (n in b.notes) {
+                    where[n.id] = Triple(mi, b.offset, b.offset + b.duration.length()); voiceOf[n.id] = v.index
+                    if (n.links.any { it.kind == LinkKind.TIE }) anyTie = true
+                }
+            }
+            if (!anyTie) continue
+            for (bar in st.bars) for (v in bar.voices) for (b in v.beats) for (n in b.notes) for (l in n.links) {
+                if (l.kind != LinkKind.TIE) continue
+                val o = where[n.id] ?: continue; val g = where[l.target] ?: continue
+                if (voiceOf[l.target] != voiceOf[n.id]) continue
+                val adjacent = if (o.first == g.first) o.third == g.second
+                    else g.first == o.first + 1 && g.second == Fraction.ZERO && p.measures[o.first].let { m -> o.third == (m.pickupLength ?: m.signature.length()) }
+                if (adjacent) out += n.id to l.target
+            }
+        }
+        return out
+    }
+
     private fun requireTiesStayOnTheirString(before: Project, after: Project) {
         // Only bars that changed can hold notes whose string changed; unchanged bars are shared instances.
         val moved = HashSet<EntityId>()
