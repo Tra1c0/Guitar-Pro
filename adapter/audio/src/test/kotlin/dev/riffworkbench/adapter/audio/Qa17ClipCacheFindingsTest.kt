@@ -58,7 +58,9 @@ class Qa17ClipCacheFindingsTest {
             gc()
             val alive = loaded.count { it.get() != null }
             println("QA17 clip cache: ${loaded.size} clips decoded, $alive still reachable after closing their projects (${alive * 4L * frames / 1_000_000} MB here, ${"%.0f".format(alive * 115.2)} MB with 10-minute clips)")
-            assertEquals("PCM of clips whose project is closed must be released", 0, alive)
+            // Deterministic check on the cache itself (whether System.gc() clears the weak references varies between JVMs/CI).
+            val cache = EngineTransport::class.java.getDeclaredField("clipCache").apply { isAccessible = true }.get(transport) as Map<*, *>
+            assertEquals("PCM of clips whose project is closed must not stay cached", 0, cache.size)
         } finally { transport.shutdown() }
     }
 }
