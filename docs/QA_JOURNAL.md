@@ -297,3 +297,23 @@ Zyklus 12 (Regressionsprüfung der Fixes aus Zyklus 10/11; Barrierefreiheit/Loka
 Bei Wiederaufnahme zuerst offen: (1) Regressionsprüfung der Commits 69a6295, 3bfea04, 82f8a71 (Halt-Lock vs. Mutex, Knotenbudget inkl. Attribute für große GPIF, Reihenfolgepflicht project.json bei älteren Archiven, Navigationsschutz nach Import/„Weiter mit“, PendingExports-Warteschlange, `textEditing`-Fokus); (2) Barrierefreiheit (contentDescription, Touch-Ziele, Canvas-Semantik) und Lokalisierung (hartkodierte Texte, values/values-en-Abgleich, Platzhalter).
 
 **Nie geprüft (keine Hardware in dieser Umgebung):** Klang und Latenz auf Geräten, Unterläufe/Thermik unter Last, echte Audiofokus-/Kopfhörer-Ereignisse, Mikrofon/Stimmgerät mit realem Signal, SAF-Anbieter (Drive, USB), Darstellung auf echter Hardware jenseits Robolectric, Navigation-Deep-Link-Extras, Main-Thread-Blockaden (nur aus Code abgeleitet).
+
+### Zyklus 12 — Regressionsprüfung der Fixes 10/11, Barrierefreiheit/Lokalisierung, Gerätebefund (wieder aufgenommen)
+
+Methoden (neu): (a) adversariale Prüfung jedes Hunks der Fix-Commits 69a6295, 3bfea04, 82f8a71; (b) Barrierefreiheits-/Lokalisierungsaudit (Semantik, Touch-Ziele, Live-Regionen, Ressourcenabgleich values/values-en, hartkodierte Texte); (c) erster **Befund auf einem echten Gerät** durch den Nutzer.
+
+**Bestätigt und repariert:**
+1. *Gerät:* Nach Antippen einer Note und Play sprang die Partituransicht hin und her. Ursache: bis der Render-Thread den Play-Befehl verarbeitet hatte, veröffentlichte der Poller die alte Position und kippte PLAYING→PAUSED (Folgen aus/an) — jetzt `starting`-Zustand (`PlayStartRegressionTest`, rot→grün). Zusätzlich holt der Cursor-Effekt die Ansicht beim Folgen nicht mehr zurück, eigenes Wischen pausiert das Folgen 2,5 s, Antippen während der Wiedergabe springt dorthin (Compose, nur CI/Gerät).
+2. Regression 82f8a71: Pause direkt nach Play/Fortsetzen ging verloren (veralteter Status) → Pause fragt auch die Engine.
+3. Unvollständiger Fix 82f8a71: Stop/Pause während `prepare()` (dort kompiliert togglePlay bei offener Ausgabe) wurde vom folgenden `play()` überstimmt → `prepareEpoch`.
+4. Unvollständiger Fix: Stresstest hob eine Pause zwischen zwei Durchläufen auf → `halts`-Zähler.
+5. Regression 3bfea04: eigener großer GP7-Export (57 600 Noten) war nicht mehr importierbar → Knotenbudget 3 M (`Qa12XmlBudgetTest`).
+6. Regression 69a6295: Bibliotheksliste versteckte das alphabetisch erste Projekt, wenn ein anderes zuletzt gespeichert war (`Qa12LibraryListTest`, Robolectric).
+7. Barrierefreiheit: Auswahlzustand nur farblich (Akkordmodus, Palm Mute, Notenwert, Navigation) → `selected`-Semantik; Schalter ohne Namen → ganze Zeile `toggleable`; stummer Speicherstatus/Hinweise → Live-Region; „1 projects/1 tracks“ → Singular (`AccessibilityQaTest`, `LocalizationConsistencyTest`; CI 42001636029 grün).
+CI: 42001636029 (369ac0a) grün; 0e2ddda/b7041dc siehe nächster Eintrag.
+
+**Nutzerwunsch umgesetzt (Feature, kein Defekt):** Drag-and-Drop der ausgewählten Note (`EditorCommand.MoveNote`: anderer Beat und/oder Saite, Tonhöhe bleibt, Techniken/Velocity/Fingersatz wandern mit, neuer Beat erhält den gewählten Notenwert, ein Undo-Schritt; belegte Ziele und unspielbare Saiten werden abgelehnt; `MoveNoteTest`). Geste: die bereits ausgewählte Note ziehen; Ziel wird hervorgehoben; Wischen anderswo bleibt Verschieben der Ansicht. Kein Auto-Scroll am Rand; nicht für Schlagzeugspuren.
+
+**Bekannt, nicht geändert:** Einige Bedienelemente sind optisch 44–46 dp (dokumentiert 48 dp); M3 erweitert die Tippfläche vermutlich auf 48 dp, die Raster zu vergrößern würde das Design auf kleinen Displays ändern. Etwa 29 hartkodierte deutsche Meldungen in ViewModels erscheinen auch in der englischen Oberfläche (Englisch ist nicht als unterstützt dokumentiert; CONTRACTS verlangt deutsche Importfehler). `textEditing`-Flag könnte nach Verschwinden eines fokussierten Felds hängen bleiben (unbestätigt).
+
+Ergebnis Zyklus 12: **7 Defektgruppen bestätigt und behoben** → nicht defektfrei.
