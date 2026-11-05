@@ -56,7 +56,7 @@ import dev.riffworkbench.ui.components.R
                 item { Row(Modifier.fillMaxWidth().height(230.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     ContinueCard(recent, onOpen, onNew = { creating = true }, Modifier.weight(1f).fillMaxHeight())
                     Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        QuickTile("+ ${stringResource(R.string.new_project)}", if (en) "Drop A guitar, bass, drums" else "Drop-A-Gitarre, Bass, Drums", Tabino.Lime, Modifier.weight(1f).fillMaxWidth().testTag("new-project"), enabled = !busy) { creating = true }
+                        QuickTile("+ ${stringResource(R.string.new_project)}", if (en) "E standard guitar, bass, drums" else "E-Standard-Gitarre, Bass, Drums", Tabino.Lime, Modifier.weight(1f).fillMaxWidth().testTag("new-project"), enabled = !busy) { creating = true }
                         QuickTile(stringResource(R.string.open_native), "GP3–8 · MusicXML · MIDI", Tabino.Lavender, Modifier.weight(1f).fillMaxWidth(), enabled = !busy, onClick = onImport)
                     }
                 } }

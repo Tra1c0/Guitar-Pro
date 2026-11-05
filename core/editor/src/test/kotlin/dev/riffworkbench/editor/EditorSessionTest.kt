@@ -7,7 +7,7 @@ import org.junit.Test
 class EditorSessionTest {
     private var sequence = 0
     private val ids = IdSource { EntityId("id-${sequence++}") }
-    private fun session() = EditorSession(ProjectFactory(ids).create("Metal"), ids)
+    private fun session() = EditorSession(ProjectFactory(ids).demo("Metal"), ids)
     private fun notes(p: Project) = p.tracks.flatMap { it.staves }.flatMap { it.bars }.flatMap { it.voices }.flatMap { it.beats }.flatMap { it.notes }
 
     @Test fun noteEntryUndoRedoRestoresMusicWithMonotonicRevision() {
@@ -107,7 +107,7 @@ class EditorSessionTest {
         assertTrue(ScoreValidator.validate(project).isEmpty())
     }
     @Test fun initialTempoEditKeepsLaterTempoChanges() {
-        val base = ProjectFactory(ids).create("Tempo")
+        val base = ProjectFactory(ids).demo("Tempo")
         val later = TempoChange(ScorePosition(base.measures[1].id), 180.0)
         val editor = EditorSession(base.copy(tempo = base.tempo + later), ids)
         editor.dispatch(EditorCommand.SetTempo(160.0))
@@ -137,7 +137,7 @@ class EditorSessionTest {
         assertEquals(original, editor.state.value.project); assertFalse(editor.state.value.canUndo)
     }
     private fun linkedProject(kind: LinkKind): Project {
-        val base = ProjectFactory(ids).create("Links")
+        val base = ProjectFactory(ids).demo("Links")
         val target = Note(EntityId("target-note"), Pitch(33), 0, 0)
         val source = Note(EntityId("source-note"), Pitch(33), 0, 0, velocity = 71, links = listOf(NoteLink(kind, target.id)), fingering = Fingering(2, "p"))
         val track = base.tracks.first(); val staff = track.staves.first(); val bar = staff.bars.first()

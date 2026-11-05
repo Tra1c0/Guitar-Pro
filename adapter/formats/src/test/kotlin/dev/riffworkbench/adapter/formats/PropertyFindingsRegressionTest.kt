@@ -17,7 +17,7 @@ import org.junit.Test
 class PropertyFindingsRegressionTest {
     private var n = 0
     private val ids = IdSource { EntityId("r${n++}") }
-    private fun session(band: Boolean = true) = EditorSession(ProjectFactory(ids).create("QA", withBand = band), ids)
+    private fun session(band: Boolean = true) = EditorSession(ProjectFactory(ids).demo("QA", withBand = band), ids)
     private fun EditorSession.at(m: Int, off: Fraction, string: Int = 0, track: Int = 0) =
         select(Selection(state.value.project.tracks[track].id, state.value.project.measures[m].id, 0, off, string))
     private fun EditorSession.ok(c: EditorCommand) { val r = dispatch(c); assertTrue("$c -> $r", r is Outcome.Success) }

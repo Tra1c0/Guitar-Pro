@@ -71,7 +71,7 @@ class Qa16ViewModelFindingsTest {
         val host = RealtimeHost({ Sink() }, threadStarter = { _, _ -> Thread {} }, idleStopSeconds = 1000.0)
         val transport = EngineTransport(host, pollMillis = 1_000_000)
         val session = EditorSession(ProjectFactory(ids).create("QA16"), ids)
-        repeat(bars - 2) { session.dispatch(EditorCommand.AddMeasure(TimeSignature(4, 4))) }
+        repeat(bars - session.state.value.project.measures.size) { session.dispatch(EditorCommand.AddMeasure(TimeSignature(4, 4))) }
         // Notes in every bar so wrapped systems have real widths.
         session.state.value.project.measures.forEach { m ->
             session.select(session.state.value.selection.copy(measureId = m.id, offset = Fraction.ZERO, string = 0))

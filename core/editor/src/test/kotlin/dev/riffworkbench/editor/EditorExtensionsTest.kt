@@ -8,7 +8,7 @@ import org.junit.Test
 class EditorExtensionsTest {
     private var sequence = 0
     private val ids = IdSource { EntityId("x-${sequence++}") }
-    private fun session() = EditorSession(ProjectFactory(ids).create("Edit"), ids)
+    private fun session() = EditorSession(ProjectFactory(ids).demo("Edit"), ids)
     private fun EditorSession.at(offset: Fraction, string: Int = 0, measure: Int = 0) =
         select(state.value.selection.copy(measureId = state.value.project.measures[measure].id, offset = offset, string = string))
     private fun EditorSession.ok(c: EditorCommand) { val r = dispatch(c); assertTrue("$c -> $r", r is Outcome.Success) }

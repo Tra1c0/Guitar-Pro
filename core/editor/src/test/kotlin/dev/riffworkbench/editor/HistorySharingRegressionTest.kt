@@ -10,7 +10,7 @@ class HistorySharingRegressionTest {
     private val ids = IdSource { EntityId("h-${n++}") }
 
     @Test fun anEditKeepsEveryOtherBarAsTheSameInstance() {
-        val e = EditorSession(ProjectFactory(ids).create("Big"), ids)
+        val e = EditorSession(ProjectFactory(ids).demo("Big"), ids)
         assertTrue(e.dispatch(EditorCommand.InsertMeasures(2, 200)) is Outcome.Success)
         val before = e.state.value.project
         assertTrue(e.dispatch(EditorCommand.PutNote(fret = 3)) is Outcome.Success)

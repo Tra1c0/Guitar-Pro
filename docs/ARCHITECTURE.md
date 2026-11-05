@@ -49,7 +49,7 @@ Project besitzt Metadaten, globale Measures, Tracks/Staffs/Bars/Voices/Beats/Not
 - Fraction beschreibt exakte Bruchteile einer ganzen Note mit normalisierter positiver Basis und geprüfter Arithmetik. Eine punktierte Achtel ist 3/16; eine Achtel unter 3:2 und 5:4 ist 1/15.
 - ScorePosition bezeichnet Takt und Offset. PlaybackOccurrence ergänzt Durchlauf und Routenindex. Eine Takt-ID allein ist für Wiederholungs-Playback unzureichend.
 - Pixel und Samplepositionen sind abgeleitet. Floating Point wird nur für Anzeige und Audio verwendet; die Umrechnung Partitur → Frames ist eine stückweise Zeitabbildung pro Routenabschnitt.
-- Note hält Tonhöhe sowie gegebenenfalls Saite/Bund. Tuning ist tief→hoch; Drop A ist MIDI 33/40/45/50/55/59/64. Capo ist pro Saite gespeichert.
+- Note hält Tonhöhe sowie gegebenenfalls Saite/Bund. Tuning ist tief→hoch; Drop A ist MIDI 33/40/45/50/55/59/64. Neue Projekte (ProjectFactory.create) starten mit einem 4/4-Takt und einer 6-saitigen E-Standard-Gitarre 40/45/50/55/59/64; der Modell-Standardwert InstrumentDefinition() bleibt Drop A. Capo ist pro Saite gespeichert.
 - Ties/Slurs/Legato referenzieren Zielnoten-IDs. Bends/Whammy halten rationale Kurvenpunkte in Cents. Bend ist niemals eine globale Kanaländerung.
 - SyncMap verbindet konkrete Wiederholungsdurchläufe mit Audiozeit. Zeitgleiche Stems dürfen eine Map und eigene Offsets nutzen; verschiedene Aufnahmen dürfen getrennte Maps haben.
 

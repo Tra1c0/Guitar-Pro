@@ -49,7 +49,7 @@ class AutosaveTest {
     }
     private suspend fun TestScope.harness(block: suspend TestScope.(WorkspaceViewModel, Repository, Snapshots) -> Unit) {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        val repo = Repository(ProjectFactory(ids).create("Autosave")); val snapshots = Snapshots()
+        val repo = Repository(ProjectFactory(ids).demo("Autosave")); val snapshots = Snapshots()
         // Layout work runs on the injected background dispatcher; the test scheduler keeps it deterministic.
         val vm = WorkspaceViewModel(repo.stored.id, repo, snapshots, exchange, settings, PendingAudioServices(), ids, background = StandardTestDispatcher(testScheduler))
         val store = ViewModelStore(); store.put("test", vm)
@@ -117,7 +117,7 @@ class AutosaveTest {
             override suspend fun start(inputDeviceId: String?) = Outcome.Success(Unit)
             override suspend fun stop(): Outcome<Unit> { stopped.countDown(); return Outcome.Success(Unit) }
         }
-        val repo = Repository(ProjectFactory(ids).create("Tuner"))
+        val repo = Repository(ProjectFactory(ids).demo("Tuner"))
         val vm = WorkspaceViewModel(repo.stored.id, repo, Snapshots(), exchange, settings, PendingAudioServices(), ids, WorkspaceServices(tuner = tuner), background = StandardTestDispatcher(testScheduler))
         val store = ViewModelStore(); store.put("test", vm)
         try {

@@ -47,7 +47,7 @@ class Qa14ModelBasedEditorTest {
         fun build(spec: Spec, ids: IdSource): Project {
             val r = Random(spec.seed)
             val f = ProjectFactory(ids)
-            val base = f.create("QA14")
+            val base = f.demo("QA14")
             val sigs = listOf(TimeSignature(4, 4), TimeSignature(3, 4), TimeSignature(7, 8), TimeSignature(6, 8), TimeSignature(5, 16), TimeSignature(2, 2))
             val measures = List(spec.measures) { i -> if (i < 2) base.measures[i] else Measure(ids.next(), sigs[r.nextInt(sigs.size)]) }
             val tracks = base.tracks.map { t ->

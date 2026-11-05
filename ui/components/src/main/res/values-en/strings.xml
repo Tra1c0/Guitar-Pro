@@ -53,7 +53,7 @@
     <string name="add_measure">Add bar</string>
     <string name="rename">Rename</string>
     <string name="time_signature">Time signature</string>
-    <string name="guitar">Guitar · 7-string Drop A</string>
+    <string name="guitar">Guitar</string>
     <string name="bass">Bass</string>
     <string name="percussion">Drums</string>
     <string name="piano">Piano</string>

@@ -53,7 +53,7 @@
     <string name="add_measure">Takt hinzufügen</string>
     <string name="rename">Umbenennen</string>
     <string name="time_signature">Taktart</string>
-    <string name="guitar">Gitarre · 7-Saiter Drop A</string>
+    <string name="guitar">Gitarre</string>
     <string name="bass">Bass</string>
     <string name="percussion">Drums</string>
     <string name="piano">Piano</string>
