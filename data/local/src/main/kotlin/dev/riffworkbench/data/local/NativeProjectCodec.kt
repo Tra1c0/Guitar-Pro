@@ -49,21 +49,34 @@ internal object NativeProjectCodec {
         require(bytes.size <= NativeArchiveLimits.MAX_COMPRESSED) { "RESOURCE_LIMIT: Archiv zu groß" }
         val entries = mutableMapOf<String, ByteArray>()
         var total = 0L
+        var declared: BundleManifest? = null
         ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
                 require(entry.name == "manifest.json" || entry.name == "project.json" || entry.name.matches(Regex("assets/[a-f0-9]{64}"))) { "Ungültiger Archiveintrag: ${entry.name}" }
                 require(!entry.isDirectory && entry.name !in entries) { "Doppelter oder ungültiger Archiveintrag" }
                 require(entries.size < NativeArchiveLimits.MAX_ENTRIES) { "RESOURCE_LIMIT: Zu viele Archiveinträge" }
-                val payload = readLimitedStream(zip, minOf(NativeArchiveLimits.MAX_ENTRY, NativeArchiveLimits.MAX_TOTAL - total))
+                // The manifest comes first (as encode writes it), so every asset is read only up to its declared size:
+                // a small archive cannot inflate hundreds of MiB of undeclared data before it is rejected.
+                val m = declared
+                val limit = when {
+                    entry.name == "manifest.json" -> 4L * 1024 * 1024
+                    m == null -> throw IllegalArgumentException("Manifest fehlt")
+                    entry.name == "project.json" -> NativeArchiveLimits.MAX_ENTRY
+                    else -> m.assets.firstOrNull { "assets/${it.hash.value}" == entry.name }?.sizeBytes ?: throw IllegalArgumentException("Unerwartete oder fehlende Assets")
+                }
+                val payload = readLimitedStream(zip, minOf(limit, NativeArchiveLimits.MAX_ENTRY, NativeArchiveLimits.MAX_TOTAL - total))
                 total += payload.size
                 entries[entry.name] = payload
+                if (entry.name == "manifest.json") {
+                    val text = payload.toString(Charsets.UTF_8)
+                    checkJsonDepth(text)
+                    declared = projectJson.decodeFromString<BundleManifest>(text)
+                }
                 zip.closeEntry()
             }
         }
-        val manifestText = entries["manifest.json"]?.toString(Charsets.UTF_8) ?: throw IllegalArgumentException("Manifest fehlt")
-        checkJsonDepth(manifestText)
-        val manifest = projectJson.decodeFromString<BundleManifest>(manifestText)
+        val manifest = declared ?: throw IllegalArgumentException("Manifest fehlt")
         require(manifest.format == "riffworkbench-project") { "Falsches Projektformat" }
         require(manifest.schemaVersion == 1) { "INCOMPATIBLE_VERSION: Archivformat ${manifest.schemaVersion}" }
         val data = entries["project.json"] ?: throw IllegalArgumentException("Partitur fehlt")

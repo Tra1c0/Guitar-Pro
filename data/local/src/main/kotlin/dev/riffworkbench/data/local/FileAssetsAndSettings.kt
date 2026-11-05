@@ -18,8 +18,8 @@ class FileAssetStore(private val root: File) : AssetStore {
             require(bytes.size <= NativeArchiveLimits.MAX_ENTRY) { "RESOURCE_LIMIT: Asset zu groß" }
             val hash = AssetHash(sha256(bytes))
             val file = File(root, hash.value)
-            if (!file.exists()) atomicWrite(file, bytes)
-            else require(sha256(readLimited(file)) == hash.value) { "Vorhandenes Asset ist beschädigt" }
+            // A damaged copy on disk is replaced: the new bytes are proven by their hash.
+            if (!file.exists() || runCatching { sha256(readLimited(file)) != hash.value }.getOrDefault(true)) atomicWrite(file, bytes)
             AssetDescriptor(hash, name, mediaType, bytes.size.toLong(), rights)
         }
     }
@@ -28,13 +28,24 @@ class FileAssetStore(private val root: File) : AssetStore {
     }
 }
 
+/** Settings are forward compatible: keys or enum values written by a newer version are ignored, not fatal. */
+private val settingsJson = kotlinx.serialization.json.Json { encodeDefaults = true; prettyPrint = true; ignoreUnknownKeys = true; coerceInputValues = true }
+
 class FileSettingsRepository(private val file: File) : SettingsRepository {
     private val mutex = Mutex()
     private val mutable = MutableStateFlow(AppSettings())
     override val settings = mutable.asStateFlow()
     override suspend fun load(): Outcome<Unit> = withContext(Dispatchers.IO) { mutex.withLock {
         storageOutcome {
-            if (file.exists()) mutable.value = projectJson.decodeFromString<AppSettings>(readLimited(file, 1024 * 1024).toString(Charsets.UTF_8))
+            if (file.exists()) {
+                try { mutable.value = settingsJson.decodeFromString<AppSettings>(readLimited(file, 1024 * 1024).toString(Charsets.UTF_8)) }
+                catch (e: Exception) {
+                    // Keep the unreadable file instead of letting the next update() overwrite the user's settings with defaults.
+                    if (e is java.io.IOException && e !is java.io.EOFException) throw e
+                    java.nio.file.Files.move(file.toPath(), File(file.parentFile, "${file.name}.unreadable-${System.currentTimeMillis()}").toPath(), java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+                    throw e
+                }
+            }
             Unit
         }
     } }

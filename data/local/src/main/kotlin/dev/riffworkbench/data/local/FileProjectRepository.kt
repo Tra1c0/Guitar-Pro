@@ -32,8 +32,8 @@ class FileProjectRepository(private val root: File) : ProjectRepository, Snapsho
     override suspend fun open(id: EntityId): Outcome<Project> = withContext(Dispatchers.IO) { mutex.withLock {
         storageOutcome {
             val dir = File(projectsDir, id.value)
-            val (head, recovered) = validHead(dir)
-            val project = readRevision(dir, head).let { it.copy(diagnostics = it.diagnostics.filterNot { d -> d.code == RECOVERED }) }
+            val (_, recovered, read) = validHead(dir)
+            val project = read.let { it.copy(diagnostics = it.diagnostics.filterNot { d -> d.code == RECOVERED }) }
             require(project.id == id) { "Projekt-ID stimmt nicht mit dem Speicherort überein" }
             if (recovered) project.copy(diagnostics = project.diagnostics + Diagnostic(RECOVERED, "Letzte intakte Revision wiederhergestellt", severity = Severity.WARNING)) else project
         }
@@ -43,7 +43,7 @@ class FileProjectRepository(private val root: File) : ProjectRepository, Snapsho
             require(project.schemaVersion == 1 && project.revision >= 0)
             require(ScoreValidator.validate(project).none { it.severity == Severity.ERROR }) { "Ungültiges Projekt kann nicht gespeichert werden" }
             val dir = File(projectsDir, project.id.value)
-            val existing = if (File(dir, "head.json").exists() || File(dir, "head.previous.json").exists()) validHead(dir).first else null
+            val existing = if (File(dir, "head.json").exists() || File(dir, "head.previous.json").exists()) validHead(dir).head else null
             require(if (expectedRevision == null) existing == null else existing?.revision == expectedRevision) { "CONFLICT: Gespeicherte Revision hat sich geändert" }
             require(existing == null || project.revision > existing.revision) { "CONFLICT: Revision muss steigen" }
             // The recovery notice belongs to this open, not to the music: never persist it.
@@ -56,7 +56,10 @@ class FileProjectRepository(private val root: File) : ProjectRepository, Snapsho
             atomicWrite(target, bytes)
             if (existing != null) atomicWrite(File(dir, "head.previous.json"), projectJson.encodeToString(existing).toByteArray())
             atomicWrite(File(dir, "head.json"), projectJson.encodeToString(head).toByteArray())
-            refreshIndex()
+            // Only this project changed: update its summary instead of re-reading the whole library under the lock.
+            val summary = ProjectSummary(project.id, project.metadata.title, project.revision, project.tracks.size)
+            mutable.value = (mutable.value.filterNot { it.id == project.id } + summary).sortedBy { it.title.lowercase() }
+            mutableIssues.value = mutableIssues.value.filterNot { it.message.startsWith("${project.id.value}:") }
         }
     } }
     override suspend fun delete(id: EntityId): Outcome<Unit> = withContext(Dispatchers.IO) { mutex.withLock {
@@ -71,14 +74,17 @@ class FileProjectRepository(private val root: File) : ProjectRepository, Snapsho
 
     override suspend fun list(projectId: EntityId): Outcome<List<SnapshotInfo>> = withContext(Dispatchers.IO) { mutex.withLock {
         storageOutcome {
-            File(projectsDir, "${projectId.value}/snapshots").listFiles()?.filter { it.name.endsWith(".meta.json") }?.map {
-                projectJson.decodeFromString<SnapshotInfo>(readLimited(it, 1024 * 1024).toString(Charsets.UTF_8))
+            // One torn meta file (crash during create) must not hide every other snapshot.
+            File(projectsDir, "${projectId.value}/snapshots").listFiles()?.filter { it.name.endsWith(".meta.json") }?.mapNotNull {
+                runCatching { projectJson.decodeFromString<SnapshotInfo>(readLimited(it, 1024 * 1024).toString(Charsets.UTF_8)) }.getOrNull()
             }?.sortedByDescending { it.createdAtMillis } ?: emptyList()
         }
     } }
     override suspend fun create(project: Project, name: String): Outcome<SnapshotInfo> = withContext(Dispatchers.IO) { mutex.withLock {
         storageOutcome {
             require(name.isNotBlank() && name.length <= 200)
+            // A snapshot of a deleted project would recreate an unreadable project directory.
+            require(File(projectsDir, "${project.id.value}/head.json").exists() || File(projectsDir, "${project.id.value}/head.previous.json").exists()) { "Projekt existiert nicht mehr" }
             val snapshot = SnapshotInfo(UUID.randomUUID().toString(), project.id, project.revision, name.trim(), System.currentTimeMillis())
             val dir = File(projectsDir, "${project.id.value}/snapshots")
             atomicWrite(File(dir, "${snapshot.id}.json"), projectJson.encodeToString(project).toByteArray())
@@ -93,14 +99,14 @@ class FileProjectRepository(private val root: File) : ProjectRepository, Snapsho
         }
     } }
 
-    private fun validHead(dir: File): Pair<ProjectHead, Boolean> {
+    private data class ValidHead(val head: ProjectHead, val recovered: Boolean, val project: Project)
+    private fun validHead(dir: File): ValidHead {
         var last: Exception? = null
         for ((index, name) in listOf("head.json", "head.previous.json").withIndex()) {
             try {
                 val head = projectJson.decodeFromString<ProjectHead>(readLimited(File(dir, name), 4096).toString(Charsets.UTF_8))
                 require(head.file.matches(Regex("revision-[0-9]+\\.json")))
-                readRevision(dir, head)
-                return head to (index > 0)
+                return ValidHead(head, index > 0, readRevision(dir, head))
             } catch (e: IOException) { last = e } catch (e: IllegalArgumentException) {
                 if (e.message?.startsWith("INCOMPATIBLE_VERSION:") == true) throw e
                 last = e
@@ -116,7 +122,7 @@ class FileProjectRepository(private val root: File) : ProjectRepository, Snapsho
     private fun refreshIndex() {
         val issues = mutableListOf<Diagnostic>()
         mutable.value = projectsDir.listFiles()?.filter { it.isDirectory }?.mapNotNull { dir ->
-            try { val head = validHead(dir).first; val p = readRevision(dir, head); ProjectSummary(p.id, p.metadata.title, p.revision, p.tracks.size) }
+            try { val p = validHead(dir).project; ProjectSummary(p.id, p.metadata.title, p.revision, p.tracks.size) }
             catch (e: IOException) { issues += Diagnostic("project_unreadable", "${dir.name}: ${e.message}", severity = Severity.ERROR); null }
             catch (e: IllegalArgumentException) { issues += Diagnostic("project_unreadable", "${dir.name}: ${e.message}", severity = Severity.ERROR); null }
         }?.sortedBy { it.title.lowercase() } ?: emptyList()

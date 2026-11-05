@@ -71,6 +71,8 @@ internal inline fun <T> storageOutcome(block: () -> T): Outcome<T> = try {
     Outcome.Success(block())
 } catch (e: SerializationException) {
     Outcome.Failure(FailureCode.CORRUPT, e.message ?: "Ungültige Projektdaten")
+} catch (e: java.io.EOFException) {
+    Outcome.Failure(FailureCode.CORRUPT, e.message ?: "Daten sind abgeschnitten")
 } catch (e: java.util.zip.ZipException) {
     Outcome.Failure(FailureCode.CORRUPT, e.message ?: "Beschädigtes Archiv")
 } catch (e: IOException) {

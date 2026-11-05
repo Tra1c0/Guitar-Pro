@@ -63,6 +63,7 @@ class NativeArchiveTest {
     @Test fun compressedBombIsStoppedByTheUncompressedEntryBudget() {
         val output = ByteArrayOutputStream()
         ZipOutputStream(output).use { zip ->
+            zip.putNextEntry(ZipEntry("manifest.json")); zip.write("""{"projectHash":"x","assets":[]}""".toByteArray()); zip.closeEntry()
             zip.putNextEntry(ZipEntry("project.json"))
             val chunk = ByteArray(1024 * 1024)
             repeat(65) { zip.write(chunk) }
