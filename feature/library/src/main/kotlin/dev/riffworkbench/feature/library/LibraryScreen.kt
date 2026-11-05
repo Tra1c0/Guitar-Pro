@@ -53,7 +53,7 @@ import dev.riffworkbench.ui.components.R
                 items(issues) { issue -> NoticeCard(issue.message, true) }
                 if (creating) item { CreateCard(title, { title = it.take(200) }, busy, onCreate = { creating = false; vm.create(title, onOpen); title = "" }, onCancel = { creating = false }) }
                 item { Row(Modifier.fillMaxWidth().height(230.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ContinueCard(projects.firstOrNull(), onOpen, onNew = { creating = true }, Modifier.weight(1f).fillMaxHeight())
+                    ContinueCard(projects.maxByOrNull { it.modifiedMillis }, onOpen, onNew = { creating = true }, Modifier.weight(1f).fillMaxHeight())
                     Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         QuickTile("+ ${stringResource(R.string.new_project)}", if (en) "Drop A guitar, bass, drums" else "Drop-A-Gitarre, Bass, Drums", Tabino.Lime, Modifier.weight(1f).fillMaxWidth().testTag("new-project"), enabled = !busy) { creating = true }
                         QuickTile(stringResource(R.string.open_native), "GP3–8 · MusicXML · MIDI", Tabino.Lavender, Modifier.weight(1f).fillMaxWidth(), enabled = !busy, onClick = onImport)
@@ -73,7 +73,7 @@ import dev.riffworkbench.ui.components.R
                 items = listOf(
                     PillItem(TabinoIcons.Library, stringResource(R.string.library), true, {}),
                     PillItem(TabinoIcons.Open, stringResource(R.string.open_native), false, onImport),
-                    PillItem(TabinoIcons.Pen, if (en) "Open most recent project" else "Letztes Projekt öffnen", false, { projects.firstOrNull()?.let { onOpen(it.id) } }),
+                    PillItem(TabinoIcons.Pen, if (en) "Open most recent project" else "Letztes Projekt öffnen", false, { projects.maxByOrNull { it.modifiedMillis }?.let { onOpen(it.id) } }),
                     PillItem(TabinoIcons.Settings, stringResource(R.string.settings), false, onSettings, "nav-settings"),
                 ),
                 centerIcon = TabinoIcons.Plus, centerLabel = stringResource(R.string.new_project), onCenter = { creating = true }, centerTag = "nav-new",

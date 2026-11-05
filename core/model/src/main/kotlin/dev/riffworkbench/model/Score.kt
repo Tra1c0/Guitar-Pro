@@ -135,7 +135,7 @@ enum class LinkKind { TIE, SLUR, HAMMER_ON, PULL_OFF, LEGATO_SLIDE }
 @Serializable data class Diagnostic(val code: String, val message: String, val entityId: EntityId? = null, val severity: Severity = Severity.WARNING)
 enum class Severity { INFO, WARNING, ERROR }
 
-@Serializable data class ProjectSummary(val id: EntityId, val title: String, val revision: Long, val tracks: Int)
+@Serializable data class ProjectSummary(val id: EntityId, val title: String, val revision: Long, val tracks: Int, /** Last save (head file time), 0 if unknown. */ val modifiedMillis: Long = 0)
 @Serializable data class SnapshotInfo(val id: String, val projectId: EntityId, val revision: Long, val name: String, val createdAtMillis: Long)
 
 @Serializable data class ImportProvenance(val format: String, val originalAsset: AssetHash, val unknownData: List<ForeignData> = emptyList(), val losses: List<LossEntry> = emptyList())

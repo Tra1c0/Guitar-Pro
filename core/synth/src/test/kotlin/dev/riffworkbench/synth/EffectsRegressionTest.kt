@@ -84,3 +84,18 @@ class EffectsRegressionTest {
         assertEquals(unit(EffectKind.EQ).p("mid", 99.0, -18.0..18.0), 0.0, 0.0)
     }
 }
+
+/** QA cycle 10 (spec conformance): an export beyond the WAV size limit is a typed RESOURCE_LIMIT, not an exception. */
+class WavLimitRegressionTest {
+    private var n = 0
+    private fun id() = EntityId("wl${n++}")
+    @Test fun renderBeyondFourGibFailsTyped() {
+        val m = List(1500) { Measure(id()) }
+        val t = Track(id(), "G", InstrumentDefinition(), listOf(Staff(id(), bars = m.map { Bar(id(), it.id, List(4) { v -> Voice(id(), v, emptyList()) }) })))
+        val p = Project(id = id(), measures = m, tracks = listOf(t), tempo = listOf(TempoChange(ScorePosition(m[0].id), 10.0)))
+        var written = 0L
+        val r = OfflineMixdown().render(p, RenderOptions(sampleRate = 48_000, bitDepth = 32), { _, _, l -> written += l })
+        assertEquals(FailureCode.RESOURCE_LIMIT, (r as Outcome.Failure).code)
+        assertEquals(0L, written)
+    }
+}

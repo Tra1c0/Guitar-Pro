@@ -20,6 +20,8 @@ class OfflineMixdown(private val compiler: ScorePlaybackCompiler = ScorePlayback
         val plan = when (val r = compiler.compileNow(project, options.sampleRate)) { is Outcome.Failure -> return r; is Outcome.Success -> r.value }
         val total = plan.totalFrames + (options.tailSeconds.coerceIn(0.0, 30.0) * options.sampleRate).roundToLong()
         if (total <= 0) return Outcome.Failure(FailureCode.VALIDATION, "Nichts zu rendern", contractId = "C-RENDER")
+        // WAV sizes are 32-bit: a very long route must fail as a typed limit, not throw from the header writer.
+        if (Wav.dataBytes(total, 2, options.bitDepth) + 36 > 0xFFFFFFFFL) return Outcome.Failure(FailureCode.RESOURCE_LIMIT, "Audio-Export wäre größer als 4 GiB (WAV-Grenze); bitte kürzer oder mit geringerer Bittiefe exportieren", contractId = "C-RENDER")
         val block = 1024
         val engine = SynthEngine(options.sampleRate, block, bank)
         engine.installRack(ChannelRack.build(project, options.sampleRate, block, includeMasterFx = options.includeMasterFx && soloTrack == null))

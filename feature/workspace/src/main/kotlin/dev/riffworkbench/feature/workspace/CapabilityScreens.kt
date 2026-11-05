@@ -348,7 +348,7 @@ import kotlin.math.roundToLong
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionHeading(stringResource(R.string.capabilities), "${FeatureRegistry.all.size} ${stringResource(R.string.feature_count)}")
         Text(stringResource(R.string.status_hint), style = MaterialTheme.typography.bodySmall)
-        OutlinedTextField(query, { query = it }, label = { Text(stringResource(R.string.search_features)) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(query, { query = it }, label = { Text(stringResource(R.string.search_features)) }, modifier = Modifier.textEditing().fillMaxWidth(), singleLine = true)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(group.isEmpty(), { group = "" }, label = { Text(if (en) "All" else "Alle") })
             FeatureRegistry.all.distinctBy { it.group }.forEach { feature -> FilterChip(group == feature.group, { group = feature.group }, label = { Text(if (en) feature.group else feature.groupDe) }) }

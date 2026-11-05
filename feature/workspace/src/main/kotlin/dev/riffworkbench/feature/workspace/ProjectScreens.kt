@@ -48,8 +48,8 @@ import dev.riffworkbench.ui.score.pitchName
     var bpm by remember(p.tempo, measure.id) { mutableStateOf(((tempoHere ?: p.tempo.firstOrNull())?.quarterNotesPerMinute ?: 120.0).toInt().toString()) }
     var section by remember(p.sections, measure.id) { mutableStateOf(p.sections.firstOrNull { it.measureId == measure.id }?.label ?: "") }
     ScrollPage(stringResource(R.string.arrangement), stringResource(R.string.portrait_hint)) {
-        OutlinedTextField(title, { title = it.take(200) }, label = { Text(stringResource(R.string.project_title)) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(artist, { artist = it.take(200) }, label = { Text(tr("Interpret", "Artist")) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(title, { title = it.take(200) }, label = { Text(stringResource(R.string.project_title)) }, modifier = Modifier.textEditing().fillMaxWidth(), singleLine = true)
+        OutlinedTextField(artist, { artist = it.take(200) }, label = { Text(tr("Interpret", "Artist")) }, modifier = Modifier.textEditing().fillMaxWidth(), singleLine = true)
         Button(onClick = { vm.command(EditorCommand.SetMetadata(p.metadata.copy(title = title.trim().ifBlank { p.metadata.title }, artist = artist.trim()))) }, enabled = title.isNotBlank()) { Text(stringResource(R.string.rename)) }
         HorizontalDivider()
         Text("${stringResource(R.string.measure)} ${index + 1}", style = MaterialTheme.typography.titleMedium)
@@ -76,7 +76,7 @@ import dev.riffworkbench.ui.score.pitchName
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(bpm, { bpm = it.filter { c -> c.isDigit() || c == '.' }.take(6) }, label = { Text("BPM") }, modifier = Modifier.width(120.dp), singleLine = true)
+            OutlinedTextField(bpm, { bpm = it.filter { c -> c.isDigit() || c == '.' }.take(6) }, label = { Text("BPM") }, modifier = Modifier.textEditing().width(120.dp), singleLine = true)
             Button(onClick = { bpm.toDoubleOrNull()?.let { vm.command(if (index == 0) EditorCommand.SetTempo(it) else EditorCommand.SetTempoAt(measure.id, it)) } ?: vm.showNotice("Ungültiges Tempo") }) { Text(stringResource(R.string.tempo)) }
             if (tempoHere != null && index > 0) TextButton(onClick = { vm.command(EditorCommand.SetTempoAt(measure.id, null)) }) { Text(tr("Tempowechsel entfernen", "Remove tempo change")) }
         }
@@ -105,7 +105,7 @@ import dev.riffworkbench.ui.score.pitchName
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(section, { section = it.take(80) }, label = { Text(tr("Abschnitt", "Section")) }, modifier = Modifier.weight(1f), singleLine = true)
+            OutlinedTextField(section, { section = it.take(80) }, label = { Text(tr("Abschnitt", "Section")) }, modifier = Modifier.textEditing().weight(1f), singleLine = true)
             Button(onClick = { vm.command(EditorCommand.SetSection(measure.id, section.ifBlank { null })) }) { Text(tr("Setzen", "Set")) }
         }
         HorizontalDivider()
@@ -126,7 +126,7 @@ import dev.riffworkbench.ui.score.pitchName
     OutlinedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(name, { name = it.take(120) }, modifier = Modifier.weight(1f), singleLine = true, label = { Text(stringResource(R.string.track)) })
+                OutlinedTextField(name, { name = it.take(120) }, modifier = Modifier.textEditing().weight(1f), singleLine = true, label = { Text(stringResource(R.string.track)) })
                 TextButton(onClick = { vm.command(EditorCommand.RenameTrack(track.id, name)) }, enabled = name.isNotBlank() && name != track.name) { Text("✓") }
             }
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -318,7 +318,7 @@ import dev.riffworkbench.ui.score.pitchName
             HorizontalDivider()
             Text(tr("Akkordbibliothek", "Chord library"), style = MaterialTheme.typography.titleMedium)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(chordName, { chordName = it.take(12) }, label = { Text(tr("Akkord (z. B. Am, F#m7, E5)", "Chord (e.g. Am, F#m7, E5)")) }, modifier = Modifier.weight(1f), singleLine = true)
+                OutlinedTextField(chordName, { chordName = it.take(12) }, label = { Text(tr("Akkord (z. B. Am, F#m7, E5)", "Chord (e.g. Am, F#m7, E5)")) }, modifier = Modifier.textEditing().weight(1f), singleLine = true)
                 Button(onClick = { vm.searchChords(chordName) }) { Text(tr("Suchen", "Search")) }
             }
             chords.forEach { chord ->
@@ -340,7 +340,7 @@ import dev.riffworkbench.ui.score.pitchName
             OutlinedButton(vm::undo, enabled = state.editor?.canUndo == true) { Text(stringResource(R.string.undo)) }
             OutlinedButton(vm::redo, enabled = state.editor?.canRedo == true) { Text(stringResource(R.string.redo)) }
         }
-        OutlinedTextField(name, { name = it.take(200) }, label = { Text(stringResource(R.string.snapshot_name)) }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(name, { name = it.take(200) }, label = { Text(stringResource(R.string.snapshot_name)) }, modifier = Modifier.textEditing().fillMaxWidth())
         Button(onClick = { vm.createSnapshot(name); name = "" }, enabled = name.isNotBlank()) { Text(stringResource(R.string.snapshot_create)) }
         if (state.snapshots.isEmpty()) Text(stringResource(R.string.snapshots_empty))
         state.snapshots.forEach { snapshot -> OutlinedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {

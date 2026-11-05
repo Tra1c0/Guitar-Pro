@@ -16,6 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.testTag
@@ -58,11 +60,14 @@ class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget
     val keyboardFocus = remember { FocusRequester() }
     val playing = transport.status == TransportStatus.PLAYING
     LaunchedEffect(ui.editor?.project?.id) { if (ui.editor != null) runCatching { keyboardFocus.requestFocus() } }
+    val textEditing = remember { mutableStateOf(false) }
+    CompositionLocalProvider(LocalTextEditing provides textEditing) {
     BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val wide = maxWidth >= 840.dp
         Row(Modifier.fillMaxSize().safeDrawingPadding()) {
             if (wide) SideRail(page, playing, onPick = { route = it.route }, onPlay = vm::togglePlay)
-            Column(Modifier.weight(1f).fillMaxHeight().focusRequester(keyboardFocus).onPreviewKeyEvent { event -> handleKey(vm, page, event) }.focusable()) {
+            // Shortcuts act on the score, not on text being typed (Space, Ctrl+Z/C/V in a name field belong to the field).
+            Column(Modifier.weight(1f).fillMaxHeight().focusRequester(keyboardFocus).onPreviewKeyEvent { event -> !textEditing.value && handleKey(vm, page, event) }.focusable()) {
                 TopBar(vm, ui, onBack)
                 ui.notice?.let { notice -> NoticeRow(vm, ui, notice) }
                 ui.busy?.let { label -> Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)) {
@@ -109,6 +114,7 @@ class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget
                 )
             }
         }
+    }
     }
     if (moreOpen) ModalBottomSheet(onDismissRequest = { moreOpen = false }, containerColor = MaterialTheme.colorScheme.surface) {
         MorePages(page, onPick = { route = it.route; moreOpen = false }, onSettings = { moreOpen = false; onSettings() })
@@ -184,6 +190,13 @@ class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget
 }
 
 /** External keyboard: the same commands as the touch controls (CONTRACTS.md C-WORKFLOW). */
+/** Set while a text field of the workspace has focus; editor shortcuts are suspended then. */
+internal val LocalTextEditing = staticCompositionLocalOf { mutableStateOf(false) }
+internal fun Modifier.textEditing(): Modifier = composed {
+    val state = LocalTextEditing.current
+    onFocusChanged { state.value = it.isFocused }
+}
+
 private fun handleKey(vm: WorkspaceViewModel, page: WorkspacePage, event: KeyEvent): Boolean {
     if (event.type != KeyEventType.KeyDown) return false
     val ctrl = event.isCtrlPressed

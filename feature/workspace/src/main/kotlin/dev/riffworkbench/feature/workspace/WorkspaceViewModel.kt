@@ -301,7 +301,7 @@ class WorkspaceViewModel(
         val project = session?.state?.value?.project ?: return
         viewModelScope.launch { transport.prepare(project, practice.value) }
     }
-    fun setSpeed(speed: Double) = updatePractice { it.copy(speed = speed.coerceIn(0.25, 2.0)) }
+    fun setSpeed(speed: Double) = updatePractice { it.copy(speed = speed.coerceIn(0.25, 1.5)) }
     fun setMetronome(on: Boolean) = updatePractice { it.copy(metronome = on) }
     fun setCountIn(bars: Int) = updatePractice { it.copy(countInBars = bars.coerceIn(0, 4)) }
     fun setTrainer(trainer: SpeedTrainer) = updatePractice { it.copy(trainer = trainer, speed = if (trainer.enabled) trainer.startSpeed else it.speed) }

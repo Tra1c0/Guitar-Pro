@@ -118,6 +118,24 @@ class ApplicationFlowTest {
         assertEquals(5, allNotes(storedProject()).single().fret)
     }
 
+    /** QA cycle 10: editor shortcuts (Space = play/pause) must not swallow keys typed into a text field. */
+    @OptIn(ExperimentalTestApi::class)
+    @Test fun hardwareKeysInATextFieldTypeTextInsteadOfRunningShortcuts() {
+        createProject()
+        compose.onNodeWithTag("nav-more").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("page-history").performScrollTo().performClick()
+        compose.waitForIdle()
+        val field = compose.onNode(hasSetTextAction())
+        field.performClick()
+        field.performTextInput("A")
+        field.performKeyInput { pressKey(androidx.compose.ui.input.key.Key.Spacebar) }
+        field.performTextInput("B")
+        compose.waitForIdle()
+        field.assert(hasText("A B", substring = true))
+        assertNotEquals(TransportStatus.PLAYING, container.transport.state.value.status)
+    }
+
     @Test fun audioDiagnosticsPageIsReachable() {
         createProject()
         compose.onNodeWithTag("nav-more").performClick()

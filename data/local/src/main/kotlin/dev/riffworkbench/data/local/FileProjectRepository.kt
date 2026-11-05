@@ -57,7 +57,7 @@ class FileProjectRepository(private val root: File) : ProjectRepository, Snapsho
             if (existing != null) atomicWrite(File(dir, "head.previous.json"), projectJson.encodeToString(existing).toByteArray())
             atomicWrite(File(dir, "head.json"), projectJson.encodeToString(head).toByteArray())
             // Only this project changed: update its summary instead of re-reading the whole library under the lock.
-            val summary = ProjectSummary(project.id, project.metadata.title, project.revision, project.tracks.size)
+            val summary = ProjectSummary(project.id, project.metadata.title, project.revision, project.tracks.size, File(dir, "head.json").lastModified())
             mutable.value = (mutable.value.filterNot { it.id == project.id } + summary).sortedBy { it.title.lowercase() }
             mutableIssues.value = mutableIssues.value.filterNot { it.message.startsWith("${project.id.value}:") }
         }
@@ -122,7 +122,7 @@ class FileProjectRepository(private val root: File) : ProjectRepository, Snapsho
     private fun refreshIndex() {
         val issues = mutableListOf<Diagnostic>()
         mutable.value = projectsDir.listFiles()?.filter { it.isDirectory }?.mapNotNull { dir ->
-            try { val p = validHead(dir).project; ProjectSummary(p.id, p.metadata.title, p.revision, p.tracks.size) }
+            try { val p = validHead(dir).project; ProjectSummary(p.id, p.metadata.title, p.revision, p.tracks.size, File(dir, "head.json").lastModified()) }
             catch (e: IOException) { issues += Diagnostic("project_unreadable", "${dir.name}: ${e.message}", severity = Severity.ERROR); null }
             catch (e: IllegalArgumentException) { issues += Diagnostic("project_unreadable", "${dir.name}: ${e.message}", severity = Severity.ERROR); null }
         }?.sortedBy { it.title.lowercase() } ?: emptyList()

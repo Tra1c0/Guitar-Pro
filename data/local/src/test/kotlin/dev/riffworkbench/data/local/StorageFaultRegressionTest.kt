@@ -118,3 +118,21 @@ class CompactStorageRegressionTest {
         assertEquals(p, decodeProject(text.toByteArray()))
     }
 }
+
+/** QA cycle 10: "open most recent project" needs a modification time; the list itself is sorted by title. */
+class RecentProjectRegressionTest {
+    @get:Rule val temp = TemporaryFolder()
+    private var n = 0
+    private val ids = IdSource { EntityId("r-${n++}") }
+    @Test fun summariesCarryTheLastSaveTime() = runBlocking {
+        val repo = FileProjectRepository(temp.newFolder())
+        val zeta = ProjectFactory(ids).create("Zeta"); val alpha = ProjectFactory(ids).create("Alpha")
+        assertTrue(repo.save(alpha) is Outcome.Success); assertTrue(repo.save(zeta) is Outcome.Success)
+        Thread.sleep(30)
+        assertTrue(repo.save(zeta.copy(revision = 1), 0) is Outcome.Success)
+        assertEquals(listOf("Alpha", "Zeta"), repo.projects.value.map { it.title })
+        assertEquals("Zeta", repo.projects.value.maxBy { it.modifiedMillis }.title)
+        assertTrue(repo.refresh() is Outcome.Success)
+        assertEquals("Zeta", repo.projects.value.maxBy { it.modifiedMillis }.title)
+    }
+}
