@@ -298,13 +298,15 @@ private class MidiWriter(private val project: Project, private val route: List<P
     private fun fixUnisons(list: List<MidiNote>) {
         for ((_, sameKey) in list.groupBy { it.key }) {
             val sorted = sameKey.sortedWith(compareBy({ it.start }, { -it.end }))
-            for (i in 1 until sorted.size) {
-                val a = sorted[i - 1]; val b = sorted[i]
-                if (a.end <= a.start) continue
-                if (b.start < a.end) {
+            // Compare with the last note that still sounds: with three unisons the middle one is already collapsed.
+            var last: MidiNote? = null
+            for (b in sorted) {
+                val a = last
+                if (a != null && b.start < a.end) {
                     losses.add("unison", "Gleichzeitige Noten gleicher Tonhöhe auf einem MIDI-Kanal wurden zusammengefasst", project.tracks[b.trackIndex].id)
                     if (b.start == a.start) { if (b.end > a.end) a.end = b.end; b.end = b.start } else a.end = b.start
                 }
+                if (b.end > b.start) last = b
             }
         }
     }

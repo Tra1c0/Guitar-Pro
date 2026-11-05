@@ -116,6 +116,8 @@ internal class BeatWriter(
             w.start("Properties")
             if (position != null) w.prop("String", "String", position.first).prop("Fret", "Fret", position.second)
             if (!et.percussion) w.prop("Midi", "Number", midi)
+            // Like regular notes: readers take the pitch of unfretted notes from Octave/Tone (Midi alone read as pitch 0).
+            if (!et.percussion && position == null) w.prop("Octave", "Number", midi / 12).prop("Tone", "Step", midi % 12)
             w.end().end()
         }
         return id

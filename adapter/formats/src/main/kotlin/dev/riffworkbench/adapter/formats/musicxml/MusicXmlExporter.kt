@@ -94,8 +94,18 @@ private class MusicXmlWriter(private val project: Project, private val losses: L
             if (next == null || next > MusicXmlExporter.MAX_DIVISIONS) divisionsOverflow = true else lcm = next
         }
         measures.forEach { add(it.pickupLength ?: it.signature.length()) }
-        for (track in project.tracks) for (staff in track.staves) for (bar in staff.bars) for (voice in bar.voices) for (beat in voice.beats) {
-            add(beat.offset); add(beat.duration.length())
+        for (track in project.tracks) for (staff in track.staves) for ((mi, bar) in staff.bars.withIndex()) for (voice in bar.voices) {
+            for (beat in voice.beats) { add(beat.offset); add(beat.duration.length()) }
+            // Gap rests are spelled into pieces (a 1/8 gap can become 16th.. + 64th): their grid must be representable too,
+            // or a piece gets <duration>0</duration>.
+            if (voice.beats.isEmpty() || mi >= measures.size) continue
+            val length = length(mi)
+            var cursor = Fraction.ZERO
+            for (beat in voice.beats.sortedBy { it.offset }) {
+                if (beat.offset > cursor) Rhythm.spell(cursor, beat.offset, length).forEach { add(it.offset); add(it.duration.length()) }
+                cursor = maxOf(cursor, beat.offset + beat.duration.length())
+            }
+            if (cursor < length) Rhythm.spell(cursor, length, length).forEach { add(it.offset); add(it.duration.length()) }
         }
         project.tempo.forEach { add(it.position.offset) }
         project.text.forEach { add(it.position.offset) }
@@ -516,6 +526,7 @@ private class MusicXmlWriter(private val project: Project, private val losses: L
         }
         val sorted = beat.notes.sortedWith(compareBy({ it.pitch.midiNumber }, { it.pitch.cents }))
         val graces = sorted.mapNotNull { n -> n.articulations.filterIsInstance<Articulation.Grace>().firstOrNull()?.let { n to it } }
+        if (sorted.any { n -> n.articulations.count { it is Articulation.Grace } > 1 }) losses.add("grace_multiple", "Nur der erste von mehreren Vorschlägen einer Note wird exportiert", track.id)
         graces.forEachIndexed { i, (note, grace) -> graceNote(ti, track, l, voiceNumber, staffNumber, note, grace, i > 0, mi) }
         sorted.forEachIndexed { i, note -> note(ti, track, l, voiceNumber, staffNumber, beat, note, divs, i, brackets, mi) }
     }

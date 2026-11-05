@@ -90,7 +90,8 @@ internal class ExportTrack(val track: Track, index: Int, losses: LossCollector) 
     init {
         if (instrument.transposition != 0) losses.add("notes.transpose", "Instrument-Transposition wird in die Stimmung eingerechnet", track.id)
         if (instrument.fineTuneCents != 0.0) losses.add("sound.fine_tuning", "Feinstimmung in Cent wird nicht exportiert", track.id)
-        val counts = instrument.capoByString.groupingBy { it }.eachCount().entries.sortedWith(compareBy({ -it.value }, { it.key }))
+        // The main capo is the lowest one (a partial capo always sits above it); the most common value could be the higher.
+        val counts = instrument.capoByString.groupingBy { it }.eachCount().entries.sortedBy { it.key }
         capo = counts.firstOrNull()?.key ?: 0
         partialCapo = counts.getOrNull(1)?.key ?: 0
         if (counts.size > 2) losses.add("strings.capo", "Mehr als zwei Kapodaster-Positionen sind in GPIF nicht darstellbar", track.id)

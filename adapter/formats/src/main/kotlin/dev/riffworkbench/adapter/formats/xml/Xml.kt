@@ -211,7 +211,7 @@ class XmlWriter(private val indent: String = "  ") {
         return this
     }
     fun text(value: Any?): XmlWriter { if (value == null) return this; closePending(); out.append(escape(value.toString(), false)); return this }
-    fun cdata(value: String): XmlWriter { closePending(); out.append("<![CDATA[").append(value.replace("]]>", "]]]]><![CDATA[>")).append("]]>"); return this }
+    fun cdata(value: String): XmlWriter { closePending(); out.append("<![CDATA[").append(xmlSafe(value).replace("]]>", "]]]]><![CDATA[>")).append("]]>"); return this }
     fun end(): XmlWriter {
         val name = stack.removeAt(stack.lastIndex)
         val children = hadChildren.removeAt(hadChildren.lastIndex)
@@ -228,13 +228,29 @@ class XmlWriter(private val indent: String = "  ") {
     companion object {
         fun escape(value: String, attribute: Boolean): String {
             val sb = StringBuilder(value.length + 8)
-            for (c in value) when (c) {
-                '<' -> sb.append("&lt;"); '>' -> sb.append("&gt;"); '&' -> sb.append("&amp;")
-                '"' -> if (attribute) sb.append("&quot;") else sb.append(c)
-                '\n' -> if (attribute) sb.append("&#10;") else sb.append(c)
-                else -> if (c.code < 0x20 && c != '\t' && c != '\n' && c != '\r') Unit else sb.append(c)
+            var i = 0
+            while (i < value.length) {
+                val c = value[i]
+                when {
+                    c == '<' -> sb.append("&lt;"); c == '>' -> sb.append("&gt;"); c == '&' -> sb.append("&amp;")
+                    c == '"' -> if (attribute) sb.append("&quot;") else sb.append(c)
+                    c == '\n' -> if (attribute) sb.append("&#10;") else sb.append(c)
+                    else -> appendXmlChar(value, i, sb).let { i = it }
+                }
+                i++
             }
             return sb.toString()
+        }
+        /** Text XML 1.0 can hold: drops C0 controls (except tab/LF/CR), U+FFFE/U+FFFF and unpaired surrogates. */
+        fun xmlSafe(value: String): String { val sb = StringBuilder(value.length); var i = 0; while (i < value.length) { i = appendXmlChar(value, i, sb); i++ }; return sb.toString() }
+        private fun appendXmlChar(value: String, i: Int, sb: StringBuilder): Int {
+            val c = value[i]
+            return when {
+                c.isHighSurrogate() && i + 1 < value.length && value[i + 1].isLowSurrogate() -> { sb.append(c).append(value[i + 1]); i + 1 }
+                c.isSurrogate() || c == '\uFFFE' || c == '\uFFFF' -> i
+                c.code < 0x20 && c != '\t' && c != '\n' && c != '\r' -> i
+                else -> { sb.append(c); i }
+            }
         }
     }
 }
