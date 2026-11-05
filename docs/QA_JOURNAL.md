@@ -199,3 +199,17 @@ Methoden (neu): (a) unabhängiges Review aller Änderungen des QA-Zweigs auf ein
 **Unbelegt, geringes Risiko:** WAV mit zu kleinem `blockAlign` (defekte Schreiber) wird jetzt als CORRUPT abgelehnt statt dekodiert; ein Export-Hinweis nach Drehung landet im alten Compose-State und ist nicht sichtbar (die Datei wird trotzdem vollständig geschrieben).
 
 Ergebnis Zyklus 6: **6 Regressionen bestätigt und repariert** (eine davon durch Rücknahme) → nicht defektfrei. Lehre: Jede Reparatur an Klang und Timing braucht einen Vorher/Nachher-Vergleich der ausgelieferten Presets und Beispiele, nicht nur einen Test des gemeldeten Falls.
+
+### Zyklus 7 — Differentieller Golden-Output-Vergleich Ausgangsstand (23f7faa) gegen HEAD
+
+Methode (neu): identischer Dump-Test in beiden Versionen über alle Fixtures, Werksprojekte, Stress- und Demo-Projekt und je ein Projekt pro Preset: Offline-Renderings (mit/ohne Sample-Bank, mit/ohne Master-FX; RMS, Peak, Hüllkurve, Oktavbänder, Differenz), Playback-Pläne, Layouts und SVGs, alle Exporte mit Re-Import, alle Importer × alle Fixtures (156 Kombinationen), Stimmgerät, WAV-Decoder. Jede Abweichung musste einem Journal-Eintrag zugeordnet werden; zusätzlich wurde die Zuordnung im Audio per gezielter Rücknahme einzelner Änderungen bestätigt (ohne die Voice-Map-Korrektur sind alle Renderings ohne Master-FX bitidentisch).
+
+**Ergebnis: keine unbeabsichtigte Abweichung.** Identisch: alle 156 Importergebnisse inkl. Verlustlisten, 48 Playback-Pläne, alle GP7-/MusicXML-Exporte, Keys-/Drum-Renderings ohne Master-FX, WAV-Dekodierung.
+
+**Neu bestätigt und repariert (rot → grün):**
+1. Limiter aus Zyklus 5: Das Gain-Ziel lag bei 1,2 × Grenze; 10 % eines dichten Mixes liefen durch das Knie und unter Dauerübersteuerung war der Klirrfaktor 1,6 dB *höher* als vorher (−22,7 statt −24,3 dB). Ziel jetzt = Grenze: Spitzen ≈ 0,89, 3. Harmonische < −30 dB (`EffectsRegressionTest.limiterIs…`).
+2. Effekt-Linien (Let Ring, P.M.) auf dem letzten Schlag eines Takts endeten eine Spaltenbreite hinter dem Taktstrich — schon im Ausgangsstand (dort +53 Einheiten auf GP-Spur 1); durch die feste Breite der Vorspann-Elemente jetzt auch in GP5-Fixtures sichtbar (`LetRingLaneRegressionTest`).
+
+**Beabsichtigte Unterschiede, größer als zuvor beschrieben:** Die Voice-Map-Korrektur (Zyklus 1 #8) betraf nicht nur Voice-Stealing, sondern jeden Akkord, der eine gerade wiederverwendete Stimme traf: Der Schlussakkord des Vergleichsriffs ist jetzt 1–8 dB lauter (er wurde vorher teilweise abgeschnitten). Master-FX-Renderings sind durch den Limiter 0,2–2,2 dB lauter (Spitzen −2,8 → −0,6 dBFS vor der Korrektur oben). Stimmgerät: oberhalb E6 (1,7–2,1 kHz, außerhalb des Gitarrenbereichs) teils ungenauer (bis −11 Cent), im Gitarrenbereich genauer. Tabelle aller beabsichtigten Unterschiede: Swing-7/8-Takt 88 000 → 84 000 Frames (GP4-Fixture), Tremolo-Kurven, MIDI-Export (eine 1-Tick-Note weniger, neuer Verlusteintrag), Layout-Breiten/Spaltenpositionen ohne Änderung der Glyph- oder Systemzahl, ASCII-Export des Werksprojekts, kompaktes Native-JSON (27,6 → 5,1 MB, Re-Import identisch).
+
+Ergebnis Zyklus 7: **2 Defekte bestätigt und repariert** (einer aus Zyklus 5, einer vorbestehend) → nicht defektfrei.
