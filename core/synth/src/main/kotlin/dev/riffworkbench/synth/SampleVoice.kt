@@ -24,6 +24,11 @@ internal class SampleVoice(private val sampleRate: Int) {
     var endClock = Long.MAX_VALUE
     var releasing = false; private set
     val pan = 0f
+    /** Last rendered output, for the engine's de-click when the voice is stolen. */
+    var lastOut = 0f; private set
+    // Pitch ratio across the current 32-frame control tick (ticks follow the voice's age, not the render calls).
+    private var tickRatio0 = 1.0
+    private var tickRatio1 = 1.0
 
     private var bank: SampleBank? = null
     private var region: SampleBank.Region? = null
@@ -72,7 +77,7 @@ internal class SampleVoice(private val sampleRate: Int) {
         startClock = clock
         this.endClock = endClock
         active = true; releasing = false; fade = 1f; fadeStep = 0f; silentRun = 0
-        age = 0
+        age = 0; lastOut = 0f
         rr = roundRobin
         oldRegion = null; xfade = 0f; relRegion = null
         lp1 = 0f; lp2 = 0f
@@ -172,13 +177,19 @@ internal class SampleVoice(private val sampleRate: Int) {
         val data = r.data
         var i = 0
         while (i < count) {
-            val chunk = minOf(32, count - i)
-            if (!releasing && clock + i >= endClock) release(false)
-            val ratio0 = ratioAt(age)
-            val ratio1 = ratioAt(age + chunk)
+            // Control updates run every 32 frames of the voice's own age, so the result does not depend on how calls are split.
+            val phase = (age and 31).toInt()
+            if (phase == 0) {
+                if (!releasing && clock + i >= endClock) release(false)
+                tickRatio0 = ratioAt(age)
+                tickRatio1 = ratioAt(age + 32)
+            }
+            val chunk = minOf(32 - phase, count - i)
+            val ratio0 = tickRatio0
+            val ratio1 = tickRatio1
             var peak = 0f
             for (k in 0 until chunk) {
-                val ratio = ratio0 + (ratio1 - ratio0) * k / chunk
+                val ratio = ratio0 + (ratio1 - ratio0) * (phase + k) / 32
                 var s = 0f
                 if (r.loopEnd > 0 && pos >= r.loopEnd) { pos = r.loopStart + (pos - r.loopStart) % (r.loopEnd - r.loopStart); looped = true; if (loopDecay == 1f) loopDecay = exp(-ln(10.0) * r.decayDbPerSec / 20.0 / sampleRate).toFloat() }
                 if (r.loopEnd > 0) s = cubicLoop(data, pos, r.loopStart, r.loopEnd) else if (pos < r.frames - 2) s = cubic(data, pos) else fade = 0f
@@ -198,6 +209,7 @@ internal class SampleVoice(private val sampleRate: Int) {
                 if (rel != null) {
                     if (relPos < rel.frames - 2) { y += cubic(rel.data, relPos) * relGain; relPos += baseRatio } else relRegion = null
                 }
+                lastOut = y
                 out[offset + i + k] += y
                 val a = abs(y); if (a > peak) peak = a
             }

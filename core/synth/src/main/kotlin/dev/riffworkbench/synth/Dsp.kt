@@ -1,6 +1,7 @@
 package dev.riffworkbench.synth
 
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.ln
@@ -20,6 +21,8 @@ internal object Dsp {
     /** Rational tanh approximation, accurate to ~1e-3 and monotonic on the whole axis. */
     fun softClip(x: Float): Float {
         if (x > 4.97f) return 1f
+        // Below ~1e-19 the square underflows to a subnormal (very slow on x86); -360 dBFS is silence.
+        if (x > -1e-18f && x < 1e-18f) return 0f
         if (x < -4.97f) return -1f
         val x2 = x * x
         return x * (27f + x2) / (27f + 9f * x2)
@@ -61,6 +64,11 @@ internal class Biquad {
     private var b0 = 1f; private var b1 = 0f; private var b2 = 0f; private var a1 = 0f; private var a2 = 0f
     private var z1 = 0f; private var z2 = 0f
     fun reset() { z1 = 0f; z2 = 0f }
+    /**
+     * Rounding at the [ftz] quantum can hold a high-Q or oversampled section in a limit cycle around 1e-23 instead of
+     * decaying to zero; a state that small (-400 dBFS) is cleared, so silence in gives exact silence out.
+     */
+    fun flushTiny() { if (abs(z1) < 1e-20f && abs(z2) < 1e-20f) { z1 = 0f; z2 = 0f } }
     fun process(x: Float): Float {
         val y = b0 * x + z1
         z1 = ftz(b1 * x - a1 * y + z2)

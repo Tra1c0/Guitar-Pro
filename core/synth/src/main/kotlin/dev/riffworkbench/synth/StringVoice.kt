@@ -70,6 +70,11 @@ internal class StringVoice(private val sampleRate: Int) {
     private var fadeOut = 1f
     private var fadeStep = 0f
     var pan = 0f; private set
+    /** Last rendered output, for the engine's de-click when the voice is stolen. */
+    var lastOut = 0f; private set
+    // Delay interpolation across the current 16-frame control tick (ticks follow the voice's age, not the render calls).
+    private var tickD0 = 100f
+    private var tickD1 = 100f
 
     fun start(note: ScheduledNote, track: Int, tone: StringTone, clock: Long, endClock: Long, seed: Int) {
         this.tone = tone
@@ -78,7 +83,7 @@ internal class StringVoice(private val sampleRate: Int) {
         startClock = clock
         this.endClock = endClock
         active = true; releasing = false; silentRun = 0; fadeOut = 1f; fadeStep = 0f
-        age = 0
+        age = 0; lastOut = 0f
         noise.reseed(seed)
         dc.reset(); loopState = 0f
         buffer.fill(0f)
@@ -205,20 +210,26 @@ internal class StringVoice(private val sampleRate: Int) {
         if (!active) return
         var i = 0
         while (i < count) {
-            val chunk = minOf(16, count - i)
-            val now = clock + i
-            if (!releasing && now >= endClock) release(false)
-            // Smooth damping changes per chunk (release, choke) to avoid clicks.
-            brightness += (targetBrightness - brightness) * 0.25f
-            loopGain += (targetGain - loopGain) * 0.25f
-            val hz1 = Dsp.midiToHz(baseMidi + pitchCents(age + chunk) / 100.0)
-            val d0 = delay
-            val d1 = delayFor(hz1)
+            // Control updates run every 16 frames of the voice's own age, so the result does not depend on how calls are split.
+            val phase = (age and 15).toInt()
+            if (phase == 0) {
+                val now = clock + i
+                if (!releasing && now >= endClock) release(false)
+                // Smooth damping changes per tick (release, choke) to avoid clicks.
+                brightness += (targetBrightness - brightness) * 0.25f
+                loopGain += (targetGain - loopGain) * 0.25f
+                val hz1 = Dsp.midiToHz(baseMidi + pitchCents(age + 16) / 100.0)
+                tickD0 = delay
+                tickD1 = delayFor(hz1)
+            }
+            val chunk = minOf(16 - phase, count - i)
+            val d0 = tickD0
+            val d1 = tickD1
             val g = loopGain
             val a = brightness
             var peak = 0f
             for (k in 0 until chunk) {
-                val d = d0 + (d1 - d0) * (k + 1) / chunk
+                val d = d0 + (d1 - d0) * (phase + k + 1) / 16
                 val pos = write - d
                 val base = floor(pos).toInt()
                 val frac = pos - base
@@ -236,10 +247,11 @@ internal class StringVoice(private val sampleRate: Int) {
                 if (pickNoiseLeft > 0) { outSample += noise.next() * pickNoiseLevel; pickNoiseLeft-- }
                 if (fadeStep > 0f) { fadeOut -= fadeStep; if (fadeOut <= 0f) { fadeOut = 0f } }
                 val v = outSample * level * fadeOut
+                lastOut = v
                 out[offset + i + k] += v
                 val av = abs(v); if (av > peak) peak = av
             }
-            delay = d1
+            if (phase + chunk == 16) delay = d1
             age += chunk
             i += chunk
             if (releasing && (peak < 2e-5f || fadeOut <= 0f)) { silentRun += chunk; if (silentRun > 256 || fadeOut <= 0f) { active = false; return } } else silentRun = 0

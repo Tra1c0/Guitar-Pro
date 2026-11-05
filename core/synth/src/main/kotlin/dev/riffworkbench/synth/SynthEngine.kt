@@ -42,6 +42,10 @@ internal class Channel(val kind: ChannelKind, val stringTone: StringTone, val ke
     val stereo = kind == ChannelKind.DRUMS
     var idleBlocks = Int.MAX_VALUE / 2
     var lastGainL = 0f; var lastGainR = 0f
+    /** False until the first mixed block: that block starts at the target gain instead of ramping up from 0. */
+    var gainPrimed = false
+    /** De-click residual of stolen voices (their last output), decaying over a few ms in the track buffer. */
+    var residualL = 0f; var residualR = 0f
     /** Consecutive blocks whose processed output was silent; long delay/reverb tails keep the channel alive. */
     var silentBlocks = 0
     var effectsCleared = true
@@ -107,6 +111,8 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
     private val clicks = Array(6) { ClickVoice(sampleRate) }
     private val stringMap = IntArray(MAX_TRACKS * 16) { -1 }
     private val masterL = FloatArray(maxBlock)
+    /** Per-sample decay of the stolen-voice residual: 1/e after 4 ms. */
+    private val residualDecay = Dsp.timeCoefficient(0.004, sampleRate)
     private val masterR = FloatArray(maxBlock)
     private var program: EngineProgram? = null
     private var clipSet: ClipSet = ClipSet.EMPTY
@@ -153,7 +159,7 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
         for (t in next.channels.indices) {
             val a = old!!.channels[t]; val b = next.channels[t]
             for (i in b.effects.indices) if (i < a.effects.size && i < a.units.size && i < b.units.size && a.units[i] == b.units[i]) b.effects[i] = a.effects[i]
-            b.idleBlocks = a.idleBlocks; b.lastGainL = a.lastGainL; b.lastGainR = a.lastGainR; b.silentBlocks = a.silentBlocks; b.effectsCleared = a.effectsCleared
+            b.idleBlocks = a.idleBlocks; b.lastGainL = a.lastGainL; b.lastGainR = a.lastGainR; b.gainPrimed = a.gainPrimed; b.residualL = a.residualL; b.residualR = a.residualR; b.silentBlocks = a.silentBlocks; b.effectsCleared = a.effectsCleared
         }
         rack = next
     }
@@ -265,6 +271,15 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
         for (v in keys) if (v.active) { val ch = r.channels.getOrNull(v.track); if (ch == null) v.kill() else { v.render(ch.left, offset, count, now); ch.idleBlocks = 0; used++ } }
         for (v in drums) if (v.active) { val ch = r.channels.getOrNull(v.track); if (ch == null) v.kill() else { v.render(ch.left, ch.right, offset, count, now); ch.idleBlocks = 0; used++ } }
         for (v in clicks) if (v.active) v.render(masterL, masterR, offset, count, mix.metronome.coerceAtLeast(0.6f))
+        for (ch in r.channels) if (ch.residualL != 0f || ch.residualR != 0f) {
+            var rl = ch.residualL; var rr = ch.residualR
+            for (k in offset until offset + count) {
+                ch.left[k] += rl; rl *= residualDecay
+                if (ch.stereo) { ch.right[k] += rr; rr *= residualDecay }
+            }
+            ch.residualL = if (abs(rl) < 1e-7f) 0f else rl; ch.residualR = if (abs(rr) < 1e-7f) 0f else rr
+            ch.idleBlocks = 0
+        }
         voicesInUse = used
     }
 
@@ -291,6 +306,7 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
             for (i in 0 until frames) { val v = abs(ch.left[i]); if (v > peak) peak = v }
             if (ch.stereo) for (i in 0 until frames) { val v = abs(ch.right[i]); if (v > peak) peak = v }
             ch.silentBlocks = if (peak < 1e-5f) ch.silentBlocks + 1 else 0
+            if (!ch.gainPrimed) { ch.lastGainL = targetL; ch.lastGainR = targetR; ch.gainPrimed = true }
             val startL = ch.lastGainL; val startR = ch.lastGainR
             for (i in 0 until frames) {
                 val a = (i + 1).toFloat() / frames
@@ -348,6 +364,7 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
                         stringMap[key].let { if (ownsString(it)) strings[it].release(fast = true) }
                     }
                     val index = allocate(samples, { it.active }, { it.releasing }, { it.startClock })
+                    if (samples[index].active) stolen(r, samples[index].track, samples[index].lastOut, 0f)
                     samples[index].kill()
                     val rr = if (key >= 0) roundRobin[key]++ and 0xFFFF else seed ushr 16 and 0xFFFF
                     samples[index].start(note, t, b, now, endClock, rr, ch.sampleGain)
@@ -364,6 +381,7 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
                     }
                 }
                 val index = allocate(strings, { it.active }, { it.releasing }, { it.startClock })
+                if (strings[index].active) stolen(r, strings[index].track, strings[index].lastOut, 0f)
                 strings[index].kill()
                 strings[index].start(note, t, ch.stringTone, now, endClock, seed)
                 if (key >= 0) stringMap[key] = index
@@ -372,15 +390,24 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
                 val midi = note.soundingPitch.toInt()
                 for (v in drums) if (v.active && v.track == t && ((note.chokeGroup == 1 && v.chokeGroup == 1) || (v.midi == midi && v.isHead))) v.choke()
                 val index = allocate(drums, { it.active }, { false }, { it.startClock })
+                if (drums[index].active) stolen(r, drums[index].track, drums[index].lastL, drums[index].lastR)
                 drums[index].kill()
                 drums[index].start(note, t, now, seed)
             }
             ChannelKind.KEYS -> {
                 val index = allocate(keys, { it.active }, { false }, { it.startClock })
+                if (keys[index].active) stolen(r, keys[index].track, keys[index].lastOut, 0f)
                 keys[index].kill()
                 keys[index].start(note, t, ch.keysMode, now, endClock)
             }
         }
+    }
+
+    /** A voice taken from a full pool stops at once; its last output fades out in its track buffer instead of jumping to 0. */
+    private fun stolen(r: ChannelRack, track: Int, left: Float, right: Float) {
+        val ch = r.channels.getOrNull(track) ?: return
+        if (left.isFinite()) ch.residualL += left
+        if (right.isFinite()) ch.residualR += right
     }
 
     private inline fun <T> allocate(pool: Array<T>, active: (T) -> Boolean, releasing: (T) -> Boolean, started: (T) -> Long): Int {

@@ -101,6 +101,9 @@ internal class Overdrive(sr: Int, drive: Double, tone: Double, levelDb: Double) 
             left[i] = lp.process(clip(hump.process(left[i]), upL, downL)) * out
             if (right != null) right[i] = lp2.process(clip(hump2.process(right[i]), upR, downR)) * out
         }
+        // Once per block: end the limit cycles near the flush-to-zero quantum, so a silent drive is exactly silent (and cheap).
+        hump.flushTiny(); hump2.flushTiny(); lp.flushTiny(); lp2.flushTiny()
+        for (f in upL) f.flushTiny(); for (f in downL) f.flushTiny(); for (f in upR) f.flushTiny(); for (f in downR) f.flushTiny()
     }
     // reset() runs on the audio thread when a channel goes idle: plain loops, no list concatenation.
     override fun reset() { hump.reset(); hump2.reset(); lp.reset(); lp2.reset(); for (f in upL) f.reset(); for (f in downL) f.reset(); for (f in upR) f.reset(); for (f in downR) f.reset() }
@@ -198,22 +201,25 @@ internal class Compressor(sr: Int, thresholdDb: Double, private val ratio: Doubl
     private var env = 0f
     private var gain = 1f
     private var gainTarget = 1f
+    /** Persistent sample counter for the 8-sample gain computer, so the output does not depend on the block size. */
+    private var tick = 0
     override fun process(left: FloatArray, right: FloatArray?, n: Int) {
         val slope = (1.0 - 1.0 / ratio).toFloat()
         for (i in 0 until n) {
             val level = if (right != null) max(abs(left[i]), abs(right[i])) else abs(left[i])
             env = ftz(if (level > env) level + (env - level) * attack else level + (env - level) * release)
             // The log-domain gain computer runs every 8 samples; the gain itself is smoothed per sample.
-            if (i and 7 == 0) {
+            if (tick == 0) {
                 val db = if (env > 1e-6f) (20.0 * log10(env.toDouble())).toFloat() else -120f
                 val reduction = if (db > threshold) (db - threshold) * slope else 0f
                 gainTarget = Dsp.dbToGain(-reduction.toDouble()).toFloat() * makeup
             }
+            tick = (tick + 1) and 7
             gain += (gainTarget - gain) * 0.2f
             left[i] *= gain; if (right != null) right[i] *= gain
         }
     }
-    override fun reset() { env = 0f; gain = 1f; gainTarget = 1f }
+    override fun reset() { env = 0f; gain = 1f; gainTarget = 1f; tick = 0 }
 }
 
 internal class Delay(private val sr: Int, timeMs: Double, private val feedback: Double, private val mix: Double) : Effect {
@@ -259,7 +265,7 @@ internal class Chorus(private val sr: Int, private val rateHz: Double, depthMs: 
         val a = buf[((i % size) + size) % size]; val b = buf[(((i + 1) % size) + size) % size]
         return a + (b - a) * frac
     }
-    override fun reset() { bufL.fill(0f); bufR.fill(0f) }
+    override fun reset() { bufL.fill(0f); bufR.fill(0f); pos = 0; phase = 0.0 }
 }
 
 /** Schroeder/Moorer reverb (parallel damped combs, serial allpasses) with independent left/right tunings. */

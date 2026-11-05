@@ -102,9 +102,11 @@ class PcmBuilder(val targetRate: Int, private val maxFrames: Int, expectedFrames
  * the score without its own clock. Playback is only exact at speed 1; other speeds need time-stretch (C-STRETCH).
  */
 class ClipVoice(val clipId: EntityId, val pcm: PcmBuffer, val startFrame: Long, gain: Double, pan: Double) {
-    private val angle = (pan.coerceIn(-1.0, 1.0) + 1) * PI / 4
-    internal val gainL = (gain * cos(angle) * 1.414).toFloat()
-    internal val gainR = (gain * sin(angle) * 1.414).toFloat()
+    // coerceIn passes NaN through: a non-finite pan or gain (only reachable from a file) falls back to the default.
+    private val angle = ((if (pan.isFinite()) pan else 0.0).coerceIn(-1.0, 1.0) + 1) * PI / 4
+    private val level = if (gain.isFinite()) gain else 1.0
+    internal val gainL = (level * cos(angle) * 1.414).toFloat()
+    internal val gainR = (level * sin(angle) * 1.414).toFloat()
     internal fun mix(left: FloatArray, right: FloatArray, offset: Int, count: Int, planFrame: Long, scale: Float) {
         var src = planFrame - startFrame
         val data = pcm.data
@@ -129,7 +131,7 @@ class ClipSet(val voices: Array<ClipVoice>, val exactSpeed: Boolean) {
             val anySolo = project.audio.clips.any { it.solo } || project.tracks.any { it.mix.solo }
             val voices = project.audio.clips.filter { !it.mute && (!anySolo || it.solo) }.mapNotNull { clip ->
                 val pcm = buffers[clip.asset] ?: return@mapNotNull null
-                ClipVoice(clip.id, pcm, Math_roundToLong(clip.offsetMicros * sampleRate / 1_000_000.0), clip.gain.coerceIn(0.0, 2.0), clip.pan)
+                ClipVoice(clip.id, pcm, Math_roundToLong(clip.offsetMicros * sampleRate / 1_000_000.0), (if (clip.gain.isFinite()) clip.gain else 1.0).coerceIn(0.0, 2.0), clip.pan)
             }
             return ClipSet(voices.toTypedArray(), kotlin.math.abs(speed - 1.0) < 1e-9)
         }

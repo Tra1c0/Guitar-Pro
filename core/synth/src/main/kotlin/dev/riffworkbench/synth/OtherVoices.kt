@@ -23,6 +23,9 @@ internal class DrumVoice(private val sampleRate: Int) {
     var pan = 0f; private set
     var model = DrumModel.PERC; private set
     var midi = -1; private set
+    /** Last rendered output per side, for the engine's de-click when the voice is stolen. */
+    var lastL = 0f; private set
+    var lastR = 0f; private set
     private var t = 0
     private var gain = 0f
     private var phase = DoubleArray(6)
@@ -37,7 +40,7 @@ internal class DrumVoice(private val sampleRate: Int) {
     private var chokeAt = Long.MAX_VALUE
 
     fun start(note: ScheduledNote, track: Int, clock: Long, seed: Int) {
-        this.track = track; startClock = clock; active = true; t = 0; fade = 1f; fadeStep = 0f
+        this.track = track; startClock = clock; active = true; t = 0; fade = 1f; fadeStep = 0f; lastL = 0f; lastR = 0f
         chokeGroup = note.chokeGroup
         noise.reseed(seed)
         bp.reset(); hp.reset(); bp2.reset()
@@ -138,8 +141,9 @@ internal class DrumVoice(private val sampleRate: Int) {
             amp *= ampDecay
             if (fadeStep > 0f) { fade -= fadeStep; if (fade <= 0f) { active = false; return } }
             val out = s * fade
-            left[offset + k] += out * gl
-            right[offset + k] += out * gr
+            lastL = out * gl; lastR = out * gr
+            left[offset + k] += lastL
+            right[offset + k] += lastR
             t++
         }
         if (amp < 1e-3f && (noiseLevel == 0f || noiseEnv < 1e-3f) && clickLeft == 0) active = false
@@ -158,6 +162,8 @@ internal class KeysVoice(private val sampleRate: Int) {
     var midi = -1; private set
     var startClock = 0L; private set
     var endClock = Long.MAX_VALUE
+    /** Last rendered output, for the engine's de-click when the voice is stolen. */
+    var lastOut = 0f; private set
     private var mode = KeysMode.PIANO
     private val phase = DoubleArray(8)
     private val freq = DoubleArray(8)
@@ -177,7 +183,7 @@ internal class KeysVoice(private val sampleRate: Int) {
 
     fun start(note: ScheduledNote, track: Int, mode: KeysMode, clock: Long, endClock: Long) {
         this.track = track; this.mode = mode; startClock = clock; this.endClock = endClock
-        midi = note.soundingPitch.toInt(); active = true; releasing = false; release = 1f; t = 0
+        midi = note.soundingPitch.toInt(); active = true; releasing = false; release = 1f; t = 0; lastOut = 0f
         baseHz = Dsp.midiToHz(note.soundingPitch)
         val v = note.velocity.coerceIn(1, 127) / 127f
         gain = v * sqrt(v) * 0.32f
@@ -237,7 +243,8 @@ internal class KeysVoice(private val sampleRate: Int) {
             if (mode == KeysMode.PAD || mode == KeysMode.LEAD) v = lp.process(v)
             if (releasing) release *= releaseCoeff
             if (t < 64) v *= t / 64f
-            out[offset + k] += v * gain * env * release
+            lastOut = v * gain * env * release
+            out[offset + k] += lastOut
             t++
         }
         if (releasing && release < 1e-4f) active = false
