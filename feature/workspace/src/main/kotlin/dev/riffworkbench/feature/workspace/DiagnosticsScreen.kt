@@ -128,20 +128,22 @@ import kotlinx.coroutines.launch
                 OutlinedButton(onClick = { lab.playPcm(b, 48_000) }, shape = RoundedCornerShape(22.dp)) { Text("▶ B") }
                 TextButton(onClick = { lab.stopPcm() }) { Text("■") }
             }
+            val revealText = tr("A war ${if (aIsSampled) "gesampelt" else "modelliert"}, B war ${if (aIsSampled) "modelliert" else "gesampelt"}.",
+                "A was ${if (aIsSampled) "sampled" else "modelled"}, B was ${if (aIsSampled) "modelled" else "sampled"}.")
             if (revealed == null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(true, false).forEach { pickA ->
                     Button(onClick = {
                         val pickedSampled = pickA == aIsSampled
                         val (s, m) = tally[tone] ?: (0 to 0)
                         tally[tone] = if (pickedSampled) (s + 1) to m else s to (m + 1)
-                        revealed = tr("A war ${if (aIsSampled) "gesampelt" else "modelliert"}, B war ${if (aIsSampled) "modelliert" else "gesampelt"}.",
-                            "A was ${if (aIsSampled) "sampled" else "modelled"}, B was ${if (aIsSampled) "modelled" else "sampled"}.")
+                        revealed = revealText
                     }, shape = RoundedCornerShape(22.dp)) { Text(tr("${if (pickA) "A" else "B"} klingt echter", "${if (pickA) "A" else "B"} sounds more real")) }
                 }
             }
         }
         revealed?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-        if (tally.isNotEmpty()) Text(tally.entries.joinToString(" · ") { (t, v) -> "$t: ${tr("gesampelt", "sampled")} ${v.first} – ${tr("modelliert", "modelled")} ${v.second}" },
+        val sampledWord = tr("gesampelt", "sampled"); val modelledWord = tr("modelliert", "modelled")
+        if (tally.isNotEmpty()) Text(tally.entries.joinToString(" · ") { (t, v) -> "$t: $sampledWord ${v.first} – $modelledWord ${v.second}" },
             style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
     } }
 }
