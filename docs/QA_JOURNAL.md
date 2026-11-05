@@ -268,3 +268,24 @@ Methoden (neu): (a) ≈ 150 überprüfbare Aussagen aus CONTRACTS, PROJECT_FORMA
 **Konform (Auswahl):** alle Größen-/Tiefen-/Anzahlgrenzen (Assets, Archive, Importer, ZIP-Einträge, Routen 20 000), Fehlercodes, Undo-Tiefe genau 200, Leerlauf-Stopp 20 s, 10-Minuten-Clips, Wellenform-Cache 16, keine INTERNET-Berechtigung, keine Pfade/URIs im Modell, Stimmen-Pools, Breakpoints.
 
 Ergebnis Zyklus 10: **4 Code-Defekte + 9 Doku-Defekte bestätigt und behoben** → nicht defektfrei.
+
+### Zyklus 11 — Adversariale Sicherheitsprüfung und Zustandsmaschinen/Lebenszyklus
+
+Methoden (neu): (a) Angreifer-Sicht auf Manifest, exportierte Komponenten, SAF-Fluss, Archiv-/XML-/Binärleser und persistierte Daten, Speicherverbrauch in Kind-JVMs mit begrenztem Heap (`-Xmx320m`/`-Xmx512m`); (b) vollständige Übergangstabellen von Transport, Stimmgerät, Autosave, Navigation und Exporten, ungewöhnliche Übergänge gezielt angesteuert (blockierender Clip-Loader, Stop/Pause während laufendem `play()`, Doppel-Tap/-Zurück), Prozesstod-Analyse; WorkspaceViewModel lokal über einen Lifecycle-Shim auf der JVM ausgeführt (nur im Scratchpad).
+
+**Bestätigt und repariert (rot → grün, CI 41998323291 und 41999267771 grün):**
+1. Präpariertes `.riffproj` (252 KiB, erfundene Hashes, deklarierte 4 × 63 MiB) belegte 769 MiB und warf OutOfMemoryError → project.json muss vor den Assets stehen und wird sofort gegen das Manifest geprüft, deklarierte Größen gedeckelt, jeder Asset-Hash beim Lesen geprüft, `storageOutcome` meldet OOM als RESOURCE_LIMIT (`data/local/.../SecurityReviewRegressionTest`).
+2. 16-KB-`.mxl` mit Millionen leerer Elemente bzw. Attributen erschöpfte 512 MiB Heap → Attribute zählen zum Knotenbudget, Budget 1 000 000 (größte Korpusdatei ≈ 87 000), `guarded` fängt OOM (`adapter/formats/.../security/SecurityReviewRegressionTest`).
+3. Stop/Pause während ein `play()` noch kompilierte/Referenz-Audio dekodierte wurde überschrieben → Wiedergabe startete trotzdem (auch im Hintergrund nach ON_STOP). Jetzt Halt-Epoche unter Lock.
+4. `pause()` im Zustand STOPPED setzte PAUSED; nach jedem Hintergrundwechsel startete Play an der alten Position statt am Cursor und jede Bearbeitung kompilierte neu.
+5. Der Diagnose-Stresstest hob externe Pausen (Audiofokus, Kopfhörer gezogen, Hintergrund) binnen 1 s wieder auf → endet jetzt bei externer Pause.
+6. Abgelehnter `setLoop` überschrieb die aktive Schleife; ein vor dem Plan geparkter Seek überlebte `stop()` (beide nur API-seitig erreichbar).
+7. Doppel-Tap auf ein Projekt öffnete zwei Sitzungen (die untere konnte nie speichern oder verlassen werden); doppeltes Zurück poppte die Bibliothek (leerer Bildschirm) → Navigation nur aus der Bibliothek, `leave()` poppt nur den eigenen Eintrag (`LifecycleQaNavigationTest`, Robolectric, nur CI grün — die Rot-Probe dieses Tests wurde nicht separat auf CI ausgeführt).
+8. In-Memory-Export, der nach einer Drehung fertig wird, rief einen abgemeldeten ActivityResultLauncher auf (Absturz) → aktueller Launcher über `PendingExports.launchBytes`, sonst Warteschlange für die nächste Komposition (nur Code-Nachweis, kein Test). Verlorene Stream-/PDF-Jobs nach Prozesstod melden jetzt einen Hinweis statt still eine leere Datei zu hinterlassen.
+Tests: `adapter/audio/.../LifecycleQaTest` (7/7 rot ohne Fix), `feature/workspace/.../LifecycleQaViewModelTest`, `data/local/.../LifecycleQaStorageTest` (Autosave gegen Löschen: bestand bereits).
+
+**Ausgeschlossen:** Pfad-Traversal (alle Senken über EntityId/AssetHash/UUID/Revisionsmuster), XXE/Entity-Expansion, exportierte Komponenten (nur Launcher; kein Provider/Service; Receiver NOT_EXPORTED), Intent-Extras, Logging sensibler Daten, Überläufe in GP3-5/MIDI/WAV/ZIP-Offsets, Abbruch-Verschlucken von CancellationException, Undo über Projektwechsel, Snapshot-Revisionsschutz.
+
+**Offen/unbestätigt:** Navigation-Deep-Link-Extras könnten `project/{id}` mit ungültiger ID erreichen (Absturz, kein Datenzugriff; Bibliotheksquelle offline nicht prüfbar). Blockierende Arbeit auf Main: `InputTuner.start/stop`, `RealtimeHost.start` (bis 2 s Join). Prozesstod verliert Cursor, Eingabezustand, Übungs- und Ansichtseinstellungen, Undo und Zwischenablage (vertraglich nicht zugesagt; Musik selbst ist durch ON_STOP-Flush gesichert).
+
+Ergebnis Zyklus 11: **8 Defektgruppen bestätigt und behoben** → nicht defektfrei.
