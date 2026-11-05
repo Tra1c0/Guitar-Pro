@@ -108,10 +108,11 @@ import dev.riffworkbench.ui.score.pitchName
     val track = state.project.tracks.first { it.id == selection.trackId }
     val fretted = track.instrument.tuning.isNotEmpty()
     val measureNumber = state.project.measures.indexOfFirst { it.id == selection.measureId } + 1
+    val input by vm.input.collectAsStateWithLifecycle()
     TabinoCard(modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
         Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TrackMenu(vm, state)
-            InfoPill(selectionInfo(vm, state), if (fretted) Tabino.stringColor(selection.string, track.instrument.tuning.size) else null, Modifier.weight(1f))
+            InfoPill(selectionInfo(vm, state, input), if (fretted) Tabino.stringColor(selection.string, track.instrument.tuning.size) else null, Modifier.weight(1f))
         }
         val playhead = transport.position?.takeIf { transport.status == TransportStatus.PLAYING || transport.status == TransportStatus.PAUSED }
             ?.let { it.position.measureId to it.position.offset.toDouble() }
@@ -152,7 +153,7 @@ import dev.riffworkbench.ui.score.pitchName
     }
 }
 
-@Composable private fun selectionInfo(vm: WorkspaceViewModel, state: EditorState): String {
+@Composable private fun selectionInfo(vm: WorkspaceViewModel, state: EditorState, input: NoteInput): String {
     val track = state.project.tracks.first { it.id == state.selection.trackId }
     val tuning = track.instrument.tuning
     val note = vm.selectedNote(state)
@@ -165,7 +166,7 @@ import dev.riffworkbench.ui.score.pitchName
         note.fret != null -> "${tr("Bund", "fret")} ${note.fret}"
         else -> pitchName(note.pitch.midiNumber)
     }
-    val d = (beat?.duration ?: vm.input.value.duration)
+    val d = (beat?.duration ?: input.duration)
     val dur = when (d.denominator) { 1 -> tr("Ganze", "whole"); 2 -> tr("Halbe", "half"); 4 -> tr("Viertel", "quarter"); 8 -> tr("Achtel", "eighth"); 16 -> tr("16tel", "16th"); 32 -> tr("32tel", "32nd"); else -> "1/${d.denominator}" } +
         (if (d.dots > 0) tr(" punktiert", " dotted") else "") + (if (d.tuplets.isNotEmpty()) " ${d.tuplets.first().actual}:${d.tuplets.first().normal}" else "")
     return "$string · $what · $dur"
