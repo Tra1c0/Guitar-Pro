@@ -91,7 +91,9 @@ object GpifDetector {
         val text = String(gpif, Charsets.UTF_8)
         if (!text.contains("<GPIF")) return GpifDetection(GpifFamily.NONE, false, "Content/score.gpif ist kein GPIF")
         val version = Regex("<GPVersion>\\s*([0-9]+)").find(text)?.groupValues?.get(1)?.toIntOrNull()
-        val gp8 = (version != null && version >= 8) || listOf("<BackingTrack", "<AudioTracks", "<Assets").any { it in text } || zip.names.any { it.startsWith("Content/Assets/") }
+        // GP 7.x writes empty <AudioTracks></AudioTracks>: only non-empty audio sections or assets mark GP8.
+        val withoutEmptyPairs = Regex("<(BackingTrack|AudioTracks|Assets)>\\s*</\\1>").replace(text, "")
+        val gp8 = (version != null && version >= 8) || listOf("<BackingTrack", "<AudioTracks", "<Assets").any { it in withoutEmptyPairs } || zip.names.any { it.startsWith("Content/Assets/") }
         return if (gp8) GpifDetection(GpifFamily.GP8, true, "GP8-Merkmale gefunden") else GpifDetection(GpifFamily.GP7, true, "ZIP mit Content/score.gpif")
     }
 

@@ -117,3 +117,22 @@ class LaneLabelRegressionTest {
         }
     }
 }
+
+/** QA cycle 8 (corpus): the clef of an unfretted track was recomputed from all its notes for every bar (32 s for a 1734-bar MIDI file). */
+class UnfrettedLayoutScalingRegressionTest {
+    private var n = 0
+    private fun id() = EntityId("pl${n++}")
+    private fun piano(bars: Int): Project {
+        val m = List(bars) { Measure(id()) }
+        val ins = InstrumentDefinition(kind = InstrumentKind.PIANO, tuning = emptyList(), capoByString = emptyList())
+        val track = Track(id(), "Piano", ins, listOf(Staff(id(), setOf(NotationKind.STANDARD), m.map { mm -> Bar(id(), mm.id, List(4) { v -> Voice(id(), v,
+            if (v == 0) List(4) { k -> Beat(id(), Fraction.of(k.toLong(), 4), WrittenDuration(4), listOf(Note(id(), Pitch(72)))) } else emptyList()) }) })))
+        return Project(id = id(), measures = m, tracks = listOf(track), tempo = listOf(TempoChange(ScorePosition(m[0].id), 120.0)))
+    }
+    @Test fun pianoLayoutIsLinearInMeasures() {
+        fun time(p: Project): Long { val t0 = System.nanoTime(); ScoreLayouter.layout(LayoutRequest(p, 0, LayoutStyle.EDIT.copy(showStandard = true), 760f)); return (System.nanoTime() - t0) / 1_000_000 }
+        val small = piano(500); val big = piano(2000)
+        time(small); val ts = time(small); val tb = time(big)
+        assertTrue("500 bars $ts ms, 2000 bars $tb ms", tb < 8 * maxOf(ts, 50))
+    }
+}

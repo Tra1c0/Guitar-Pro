@@ -37,12 +37,9 @@ class DefaultFormatCatalog(private val importers: Map<String, ScoreImporter> = e
 
     private fun zipFamily(bytes: ByteArray): Outcome<FormatInfo> {
         val names = HashSet<String>()
-        try {
-            ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
-                var count = 0
-                while (count++ < 256) { val e = zip.nextEntry ?: break; names += e.name; if (e.name == "Content/score.gpif" || e.name == "manifest.json" || e.name == "META-INF/container.xml") break }
-            }
-        } catch (e: Exception) { return Outcome.Failure(FailureCode.CORRUPT, "Beschädigtes ZIP-Archiv", contractId = "C-FORMAT") }
+        // Central directory, as in the GP reader: Guitar Pro's data descriptors break sequential readers.
+        try { dev.riffworkbench.adapter.formats.gpif.GpZipReader.entries(bytes).forEach { names += it.name } }
+        catch (e: Exception) { return Outcome.Failure(FailureCode.CORRUPT, "Beschädigtes ZIP-Archiv", contractId = "C-FORMAT") }
         return when {
             "manifest.json" in names || "project.json" in names -> Outcome.Success(NATIVE)
             "Content/score.gpif" in names -> Outcome.Success(formats.first { it.id == (if (GpifDetector.classify(bytes).family == GpifFamily.GP8) "gp8" else "gp7") })
@@ -60,7 +57,8 @@ class DefaultFormatCatalog(private val importers: Map<String, ScoreImporter> = e
         val text = String(bytes, 0, minOf(bytes.size, 4096), Charsets.UTF_8)
         return when {
             text.contains("<score-partwise") || text.contains("<score-timewise") -> Outcome.Success(formats.first { it.id == "musicxml" })
-            text.contains("<GPIF") -> Outcome.Success(formats.first { it.id == "gp7" })
+            // Raw score.gpif outside its .gp archive: no importer reads it, so say so instead of promising GP7.
+            text.contains("<GPIF") -> Outcome.Failure(FailureCode.UNAVAILABLE, "Einzelne GPIF-XML-Datei: bitte die vollständige .gp-Datei öffnen", contractId = "C-FORMAT")
             else -> Outcome.Failure(FailureCode.UNAVAILABLE, "XML-Datei ohne bekanntes Notenformat", contractId = "C-FORMAT")
         }
     }

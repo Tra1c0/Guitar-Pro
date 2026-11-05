@@ -52,7 +52,7 @@ internal object Standard {
 
     /** Lowest/highest staff position (half-spaces above the bottom line) in [bars], including stems. */
     fun range(b: ScoreLayouter.Builder, bars: List<Bar>): Pair<Int, Int> {
-        val clef = clefFor(b.track)
+        val clef = b.clef
         var lo = 0; var hi = 8
         for (bar in bars) for (v in bar.voices) for (beat in v.beats) for (n in beat.notes) {
             val pos = if (clef == Clef.PERCUSSION) drumStep(n.pitch.midiNumber).first - bottomStep(clef) else spell(n.pitch.midiNumber + writtenOffset(clef), bar.let { KeySignature() }).step - bottomStep(clef)
@@ -64,7 +64,7 @@ internal object Standard {
 
     fun clef(b: ScoreLayouter.Builder, x: Float, staffTop: Float) {
         val sp = b.styleOf().staffSpace
-        val c = clefFor(b.track)
+        val c = b.clef
         when (c) {
             Clef.PERCUSSION -> { b.add(RectGlyph(x + sp * 0.6f, staffTop + sp, sp * 0.45f, sp * 2, Ink.TEXT)); b.add(RectGlyph(x + sp * 1.4f, staffTop + sp, sp * 0.45f, sp * 2, Ink.TEXT)) }
             Clef.TREBLE, Clef.TREBLE_8VB -> {
@@ -93,7 +93,7 @@ internal object Standard {
 
     fun key(b: ScoreLayouter.Builder, key: KeySignature, x: Float, staffTop: Float) {
         val sp = b.styleOf().staffSpace
-        val c = clefFor(b.track)
+        val c = b.clef
         if (c == Clef.PERCUSSION || key.fifths == 0) return
         val bottom = staffTop + sp * 4
         // Positions (half-spaces above the bottom line) of the accidental symbols for treble; bass is a third lower.
@@ -129,7 +129,7 @@ internal object Standard {
 
     fun voice(b: ScoreLayouter.Builder, sys: SystemBox, s: ScoreLayouter.MeasureSpec, v: Voice, ink: Ink, multiVoice: Boolean, xFor: (Fraction) -> Float) {
         val sp = b.styleOf().staffSpace
-        val clef = clefFor(b.track)
+        val clef = b.clef
         val bottom = sys.staffBottom
         val key = s.measure.key
         val altered = HashMap<Int, Int>() // step -> alteration in effect within the measure

@@ -12,7 +12,7 @@ internal fun XmlElement.props(): Map<String, XmlElement> {
 }
 
 internal class DrumArticulation(val midi: Int, val name: String, val technique: PercussionTechnique?)
-internal class ChordInfo(val name: String, val frets: Map<Int, Int>)
+internal class ChordInfo(val name: String, val frets: Map<Int, Int>, val firstFret: Int = 1)
 
 /** Everything about one GPIF track that the bar conversion needs. */
 internal class TrackPlan(
@@ -172,13 +172,15 @@ internal object GpifTracks {
             for (item in props[collection]?.child("Items")?.children("Item").orEmpty()) {
                 val id = item.attr("id") ?: continue
                 val name = item.attr("name")?.trim().orEmpty()
+                // Fret numbers in a diagram are relative to its baseFret (a D shape at the 5th fret is stored as 1,3,3,3,1).
+                val base = GpifNumbers.parseIntOrNull(item.child("Diagram")?.attr("baseFret"))?.takeIf { it in 0..48 } ?: 0
                 val frets = item.child("Diagram")?.children("Fret").orEmpty().mapNotNull { f ->
-                    val s = GpifNumbers.parseIntOrNull(f.attr("string")); val v = GpifNumbers.parseIntOrNull(f.attr("fret"))
+                    val s = GpifNumbers.parseIntOrNull(f.attr("string")); val v = GpifNumbers.parseIntOrNull(f.attr("fret"))?.let { if (it > 0) it + base else it }
                     if (s == null || v == null || s !in 0..15 || v !in 0..48) null else s to v
                 }.toMap()
                 val existing = out[id]
-                if (existing == null) out[id] = ChordInfo(name, frets)
-                else if (existing.frets.isEmpty() && frets.isNotEmpty()) out[id] = ChordInfo(existing.name.ifEmpty { name }, frets)
+                if (existing == null) out[id] = ChordInfo(name, frets, base + 1)
+                else if (existing.frets.isEmpty() && frets.isNotEmpty()) out[id] = ChordInfo(existing.name.ifEmpty { name }, frets, base + 1)
             }
         }
         return out

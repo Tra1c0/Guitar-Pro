@@ -115,6 +115,8 @@ object ScoreLayouter {
         fun styleOf(): LayoutStyle = style
         val p = r.project
         val track = p.tracks[r.trackIndex]
+        /** Once per layout: for unfretted tracks it averages every note (it was recomputed per measure, quadratic). */
+        val clef: Standard.Clef by lazy { Standard.clefFor(track) }
         val style = r.style
         val fretted = track.instrument.tuning.isNotEmpty()
         val percussion = track.instrument.kind == InstrumentKind.PERCUSSION

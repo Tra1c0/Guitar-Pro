@@ -55,7 +55,7 @@ internal object GpifDecoder {
                 val plan = plans[t]
                 val frets = if (plan.stringed) plan.tuning.indices.map { info.frets[it] } else emptyList()
                 val pitches = frets.mapIndexedNotNull { s, f -> f?.let { plan.pitch(s, it).takeIf { p -> p in 0..127 } } }
-                chordDefinitions += ChordDefinition(id, info.name.ifEmpty { "Akkord" }.take(80), pitches, frets)
+                chordDefinitions += ChordDefinition(id, info.name.ifEmpty { "Akkord" }.take(80), pitches, frets, firstFret = info.firstFret)
                 id
             }
         }, texts)
@@ -106,7 +106,7 @@ internal object GpifDecoder {
     private fun reportRoot(root: XmlElement, losses: LossCollector) {
         for (c in root.elements) if (c.name !in ROOT_CHILDREN) when (c.name) {
             "ScoreViews" -> losses.add("layout.multitrack", "Ansichtskonfiguration (ScoreViews) wird nicht übernommen")
-            "BackingTrack", "AudioTracks", "Assets" -> losses.add("audio.reference", "Eingebettetes Audio / Backing-Track (GP8) wird nicht übernommen")
+            "BackingTrack", "AudioTracks", "Assets" -> if (c.elements.isNotEmpty() || c.text.isNotEmpty()) losses.add("audio.reference", "Eingebettetes Audio / Backing-Track (GP8) wird nicht übernommen")
             else -> losses.add("import.unknown_fields", "GPIF-Bereich '${c.name}' wird nicht übernommen")
         }
         val rse = root.child("MasterTrack")?.child("RSE")

@@ -203,7 +203,9 @@ private class MusicXmlScoreBuilder(private val score: XmlElement, private val id
                     "forward" -> { pos += duration(child.textOf("duration"), divisions); maxPos = maxF(maxPos, pos) }
                     "direction" -> {
                         val offsetEl = child.child("offset")
-                        val offset = if (offsetEl != null && offsetEl.attr("sound") == "yes") duration(offsetEl.text, divisions).let { maxF(Fraction.ZERO, pos + it) } else pos
+                        // Offsets are signed in MusicXML (a direction may sound before its position).
+                        val offset = if (offsetEl != null && offsetEl.attr("sound") == "yes") (parseDecimal(offsetEl.text) ?: corrupt("Ungültiger Offset: ${offsetEl.text}"))
+                            .let { maxF(Fraction.ZERO, pos + it / (divisions * Fraction.of(4))) } else pos
                         p.events += XEvent(mi, offset, child)
                         child.children("direction-type").flatMap { it.children("dynamics") }.firstOrNull()?.let { d -> dynamicLevel(d)?.let { velocity = ScorePlaybackCompiler.dynamicVelocity(it) } }
                     }
@@ -745,7 +747,9 @@ private class MusicXmlScoreBuilder(private val score: XmlElement, private val id
             harmonic?.let { articulations += Articulation.Harmonic(it) }
             if (bends.isNotEmpty()) bendArticulations(bends)?.let { articulations += it }
             val fingering = if (leftHand != null || rightHand != null) Fingering(leftHand, rightHand) else null
-            return Parsed(string, fret, marks.map { Articulation.Mark(it) } + articulations, fingering)
+            // String and fret only as a pair: one alone made an invalid note and rejected the whole file; the fret assigner places it.
+            val paired = string != null && fret != null
+            return Parsed(if (paired) string else null, if (paired) fret else null, marks.map { Articulation.Mark(it) } + articulations, fingering)
         }
 
         /** MusicXML bends (bend-alter = change in semitones, pre-bend, release, with-bar) -> one bend or whammy curve. */
@@ -756,6 +760,9 @@ private class MusicXmlScoreBuilder(private val score: XmlElement, private val id
             var withBar = false
             var pre = false
             var release = false
+            // Bends without first/last-beat share the note in equal segments (they all used the same 1/4-3/4 window).
+            val moving = bends.count { it.child("pre-bend") == null }.coerceAtLeast(1)
+            var segment = 0
             for (b in bends) {
                 val alter = parseDecimal(b.textOf("bend-alter"))?.toDouble() ?: continue
                 val cents = Math.round(alter * 100).toInt()
@@ -765,9 +772,15 @@ private class MusicXmlScoreBuilder(private val score: XmlElement, private val id
                     points.clear(); points += Fraction.ZERO to value
                     continue
                 }
+                if (b.child("release") != null && value == 0 && !pre) {
+                    // A release with nothing bent before it starts bent (pre-bend) and returns to the fretted pitch.
+                    pre = true; value = Math.abs(cents); points.clear(); points += Fraction.ZERO to value
+                }
                 val delta = if (b.child("release") != null) { release = true; -Math.abs(cents) } else cents
-                val first = parseDecimal(b.attr("first-beat"))?.let { it / Fraction.of(100) } ?: Fraction.of(1, 4)
-                val last = parseDecimal(b.attr("last-beat"))?.let { it / Fraction.of(100) } ?: Fraction.of(3, 4)
+                val segStart = Fraction.of(segment.toLong(), moving.toLong()); val segLen = Fraction.of(1, moving.toLong())
+                val first = parseDecimal(b.attr("first-beat"))?.let { it / Fraction.of(100) } ?: (segStart + segLen * Fraction.of(1, 4))
+                val last = parseDecimal(b.attr("last-beat"))?.let { it / Fraction.of(100) } ?: (segStart + segLen * Fraction.of(3, 4))
+                segment++
                 val from = minF(maxF(first, points.last().first), Fraction.ONE)
                 val to = minF(maxF(last, from), Fraction.ONE)
                 if (from > points.last().first) points += from to value
