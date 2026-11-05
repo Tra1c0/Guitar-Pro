@@ -35,6 +35,8 @@ internal enum class ChannelKind { STRING, DRUMS, KEYS }
 
 internal class Channel(val kind: ChannelKind, val stringTone: StringTone, val keysMode: KeysMode, val effects: Array<Effect>, maxBlock: Int,
                        /** Electric guitar: played from the sample bank when one is installed. */ val sampled: Boolean = false, val sampleGain: Float = 1f,
+                       /** Timbre of the modelled harmonics while the samples play (level trimmed to the samples); the plain tone when no bank is installed. */
+                       val harmonicTone: StringTone = stringTone,
                        /** What the voices depend on (kind, preset, samples); equal voices can keep sounding across a rack swap. */ val voiceSignature: String = "",
                        /** The units behind [effects], to keep the state of unchanged effects across a rack swap. */ val units: List<EffectUnit> = emptyList()) {
     val left = FloatArray(maxBlock)
@@ -67,7 +69,10 @@ class ChannelRack internal constructor(internal val channels: Array<Channel>, in
                 val units = built.map { it.first }
                 val chain = built.map { it.second }.toTypedArray()
                 val sampled = kind == ChannelKind.STRING && TonePresets.isSampledGuitar(preset)
-                Channel(kind, TonePresets.stringTone(preset), TonePresets.keysMode(preset), chain, maxBlock, sampled, TonePresets.sampleGain(preset), "$kind:${preset.id}:$sampled", units)
+                // Harmonics stay modelled inside a sampled preset; their level follows the sample trim so a pinch harmonic sits just under a picked note.
+                val tone = TonePresets.stringTone(preset)
+                val harmonicTone = if (sampled) StringTone(tone.brightness, tone.sustainSeconds, tone.pickPosition, tone.excitationSoftness, tone.pickNoise, tone.level * TonePresets.harmonicGain(preset)) else tone
+                Channel(kind, tone, TonePresets.keysMode(preset), chain, maxBlock, sampled, TonePresets.sampleGain(preset), harmonicTone, "$kind:${preset.id}:$sampled", units)
             }.toTypedArray()
             val master = if (includeMasterFx) (project.mix.master.effects.mapNotNull { Effects.create(it, sampleRate, maxBlock) } + Limiter(sampleRate)).toTypedArray() else emptyArray()
             return ChannelRack(channels, master, signature(project) + includeMasterFx)
@@ -366,7 +371,8 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
                     val index = allocate(samples, { it.active }, { it.releasing }, { it.startClock })
                     if (samples[index].active) stolen(r, samples[index].track, samples[index].lastOut, 0f)
                     samples[index].kill()
-                    val rr = if (key >= 0) roundRobin[key]++ and 0xFFFF else seed ushr 16 and 0xFFFF
+                    // Seeded by string: a unison on two strings starts on different round robins instead of the identical sample.
+                    val rr = if (key >= 0) (roundRobin[key]++ + (s ?: 0)) and 0xFFFF else seed ushr 16 and 0xFFFF
                     samples[index].start(note, t, b, now, endClock, rr, ch.sampleGain)
                     if (key >= 0) sampleMap[key] = index
                     return
@@ -383,7 +389,8 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
                 val index = allocate(strings, { it.active }, { it.releasing }, { it.startClock })
                 if (strings[index].active) stolen(r, strings[index].track, strings[index].lastOut, 0f)
                 strings[index].kill()
-                strings[index].start(note, t, ch.stringTone, now, endClock, seed)
+                // With a bank the modelled string only plays harmonics next to the samples, at their trimmed level.
+                strings[index].start(note, t, if (b != null && ch.sampled) ch.harmonicTone else ch.stringTone, now, endClock, seed)
                 if (key >= 0) stringMap[key] = index
             }
             ChannelKind.DRUMS -> {

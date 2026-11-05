@@ -1,5 +1,10 @@
 package dev.riffworkbench.synth
 
+import kotlin.math.abs
+import kotlin.math.log10
+import kotlin.math.pow
+import kotlin.math.sqrt
+
 /** Reads bytes like an input stream: fills [buffer] from [offset], returns the count read or -1 at the end. */
 fun interface ByteReader { fun read(buffer: ByteArray, offset: Int, length: Int): Int }
 
@@ -7,11 +12,57 @@ fun interface ByteReader { fun read(buffer: ByteArray, offset: Int, length: Int)
  * Multisampled instrument in the RWSB format written by tools/make_guitar_bank.py: sustained notes per
  * velocity layer and round robin (with a seamless loop and their natural decay), release noises and dead notes.
  * Immutable after loading; voices only read it, so one bank serves the real-time and the offline engine.
+ *
+ * File layout (little endian). Header: "RWSB", u16 version, u32 sampleRate, u32 regionCount. Per region:
+ * - v1: u8 kind (0 note, 1 release, 2 dead), u8 rootMidi, u8 loKey, u8 hiKey, u8 layer, u8 rr, f32 decayDbPerSec,
+ *   u32 loopStart, u32 loopEnd (0 = no loop), u32 frames, then frames x i16 PCM.
+ * - v2: the v1 fields, then f32 fineTuneCents and f32 gain, then the PCM. [Region.fineTuneCents] is the measured pitch
+ *   of the sustained body relative to rootMidi (the voice plays the region that much lower, so it lands on the root);
+ *   [Region.gain] is the level normalisation measured by tools/bank_analysis.py.
+ * A v1 bank gets fineTune 0 and the same normalisation computed at load time ([Region.normalisation]), so old banks
+ * are level-matched exactly like a rebuilt v2 bank.
  */
 class SampleBank private constructor(val sampleRate: Int, internal val regions: Array<Region>) {
     internal class Region(val kind: Int, val root: Int, val loKey: Int, val hiKey: Int, val layer: Int, val rr: Int,
-                          val decayDbPerSec: Float, val loopStart: Int, val loopEnd: Int, val data: ShortArray) {
+                          val decayDbPerSec: Float, val loopStart: Int, val loopEnd: Int, val data: ShortArray,
+                          /** Measured pitch of the sustained body in cents above [root] (0 for releases and dead notes). */
+                          val fineTuneCents: Float = 0f,
+                          /** Linear level normalisation applied by the voice (see [normalisation]). */
+                          val gain: Float = 1f) {
         val frames get() = data.size
+
+        companion object {
+            /** Peak target of release noises: their natural level in the source, so note-to-release balance is unchanged. */
+            private const val RELEASE_PEAK_DB = -18.0
+            private const val DEAD_PEAK_DB = -9.0
+            private const val NOTE_RMS_DB = -23.0
+            private const val NOTE_PEAK_CAP_DB = -3.0
+
+            /**
+             * Level normalisation of a region (identical to tools/bank_analysis.py gains_rms): a note's first 400 ms (attack
+             * and early sustain) are brought to -23 dBFS RMS, so zones and velocity layers are loudness-matched, capped so
+             * its peak stays at or below -3 dBFS; dead notes peak at -9 dBFS and release noises at -18 dBFS.
+             */
+            fun normalisation(kind: Int, data: ShortArray, sampleRate: Int): Float {
+                var peak = 1
+                for (s in data) { val a = abs(s.toInt()); if (a > peak) peak = a }
+                val peakDb = 20.0 * log10(peak / 32768.0)
+                val targetPeakDb = when (kind) {
+                    KIND_DEAD -> DEAD_PEAK_DB
+                    KIND_RELEASE -> RELEASE_PEAK_DB
+                    else -> {
+                        val n = minOf(data.size, sampleRate * 2 / 5)
+                        var sum = 0.0
+                        for (i in 0 until n) { val v = data[i] / 32768.0; sum += v * v }
+                        val rms = sqrt(sum / n.coerceAtLeast(1))
+                        val rmsDb = if (rms <= 1e-12) -240.0 else 20.0 * log10(rms)
+                        // The RMS gain, expressed as the peak it would produce, limited by the cap.
+                        minOf(peakDb + (NOTE_RMS_DB - rmsDb), NOTE_PEAK_CAP_DB)
+                    }
+                }
+                return 10.0.pow((targetPeakDb - peakDb) / 20.0).toFloat()
+            }
+        }
     }
 
     /** [key][layer] -> round robins (sustained notes). */
@@ -37,19 +88,23 @@ class SampleBank private constructor(val sampleRate: Int, internal val regions: 
         const val KIND_RELEASE = 1
         const val KIND_DEAD = 2
         private const val MAX_BYTES = 256L * 1024 * 1024
+        private const val META_V1 = 22
+        private const val META_V2 = 30
 
         /** Parses a bank while streaming, so only the PCM (not a second copy of the file) is held in memory. */
         fun read(reader: ByteReader): SampleBank {
             val head = ByteArray(14).also { readFully(reader, it, 14) }
             require(String(head, 0, 4, Charsets.US_ASCII) == "RWSB") { "Keine RiffWorkbench-Sample-Bank" }
-            require(u16(head, 4) == 1) { "Unbekannte Sample-Bank-Version" }
+            val version = u16(head, 4)
+            require(version == 1 || version == 2) { "Unbekannte Sample-Bank-Version" }
             val rate = s32(head, 6); val count = s32(head, 10)
             require(rate in 8_000..192_000 && count in 1..10_000) { "Ungültiger Sample-Bank-Kopf" }
-            val meta = ByteArray(22)
+            val metaSize = if (version == 2) META_V2 else META_V1
+            val meta = ByteArray(metaSize)
             var total = 0L
             var chunk = ByteArray(0)
             val regions = Array(count) {
-                readFully(reader, meta, 22)
+                readFully(reader, meta, metaSize)
                 val frames = s32(meta, 18)
                 total += frames * 2L
                 require(frames in 1..(60 * rate) && total <= MAX_BYTES) { "Sample-Bank zu groß" }
@@ -58,8 +113,12 @@ class SampleBank private constructor(val sampleRate: Int, internal val regions: 
                 val data = ShortArray(frames) { i -> ((chunk[2 * i].toInt() and 0xFF) or (chunk[2 * i + 1].toInt() shl 8)).toShort() }
                 val loopStart = s32(meta, 10); val loopEnd = s32(meta, 14)
                 require(loopEnd == 0 || (loopStart >= 0 && loopEnd - loopStart >= 4 && loopEnd <= frames)) { "Ungültige Loop-Punkte" }
-                Region(meta[0].toInt(), meta[1].toInt() and 0xFF, meta[2].toInt() and 0xFF, meta[3].toInt() and 0xFF, meta[4].toInt(), meta[5].toInt(),
-                    Float.fromBits(s32(meta, 6)), loopStart, loopEnd, data)
+                val kind = meta[0].toInt()
+                val fineTune = if (version == 2) Float.fromBits(s32(meta, 22)) else 0f
+                val gain = if (version == 2) Float.fromBits(s32(meta, 26)) else Region.normalisation(kind, data, rate)
+                require(fineTune.isFinite() && abs(fineTune) <= 100f && gain.isFinite() && gain > 0f && gain <= 64f) { "Ungültige Region-Stimmung oder -Pegel" }
+                Region(kind, meta[1].toInt() and 0xFF, meta[2].toInt() and 0xFF, meta[3].toInt() and 0xFF, meta[4].toInt(), meta[5].toInt(),
+                    Float.fromBits(s32(meta, 6)), loopStart, loopEnd, data, fineTune, gain)
             }
             return SampleBank(rate, regions)
         }

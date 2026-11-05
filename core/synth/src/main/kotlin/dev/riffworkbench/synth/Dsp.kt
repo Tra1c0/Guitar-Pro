@@ -18,12 +18,15 @@ internal object Dsp {
     fun timeCoefficient(seconds: Double, sampleRate: Int): Float = if (seconds <= 0.0) 0f else exp(-1.0 / (seconds * sampleRate)).toFloat()
     /** Gain per period so that amplitude falls by 60 dB after [t60] seconds at [hz]. */
     fun loopGainForT60(t60: Double, hz: Double): Float = 10.0.pow(-3.0 / (t60.coerceAtLeast(0.005) * hz.coerceAtLeast(1.0))).toFloat()
-    /** Rational tanh approximation, accurate to ~1e-3 and monotonic on the whole axis. */
+    /**
+     * Rational tanh approximation, accurate to ~1e-3, bounded to [-1, 1] and monotonic on the whole axis: the rational
+     * form reaches exactly 1 with zero slope at |x| = 3 (and would overshoot to 1.03 beyond), so that is where it is clamped.
+     */
     fun softClip(x: Float): Float {
-        if (x > 4.97f) return 1f
+        if (x >= 3f) return 1f
         // Below ~1e-19 the square underflows to a subnormal (very slow on x86); -360 dBFS is silence.
         if (x > -1e-18f && x < 1e-18f) return 0f
-        if (x < -4.97f) return -1f
+        if (x <= -3f) return -1f
         val x2 = x * x
         return x * (27f + x2) / (27f + 9f * x2)
     }

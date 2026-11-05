@@ -1,25 +1,31 @@
 #!/usr/bin/env python3
-"""Builds the bundled electric-guitar sample bank (RWSB format) from Karoryfer Emilyguitar (CC0-1.0).
+"""Builds the bundled electric-guitar sample bank (RWSB v2) from Karoryfer Emilyguitar (CC0-1.0).
 
 Source: https://github.com/sfzinstruments/karoryfer.emilyguitar (Epiphone, recorded direct, both pickups,
 d'Addario flatwounds; notes every minor third Db2..D6, 4 velocity layers x 3 round robins).
-Usage: python3 -I tools/make_guitar_bank.py <emilyguitar checkout> <output.rwsb>
+Usage: python3 -I tools/make_guitar_bank.py <emilyguitar checkout> <output.rwsb> [--mode rms|peak]
 
-What the script does (deterministic, standard library only):
+What the script does (deterministic, standard library only; NumPy accelerates the analysis when installed):
 - keeps velocity layers mp/mf/f and all 3 round robins, converts 24-bit to 16-bit,
 - trims every note to KEEP seconds and prepares a loop over its last part, crossfaded so it is seamless,
 - measures the natural decay (dB/s) so the engine can keep decaying while it loops,
-- adds the release (string-damping) and muted (dead-note) samples.
+- adds the release (string-damping) and muted (dead-note) samples,
+- measures every region with tools/bank_analysis.py: the fine tune of the sustained body (cents re the root) and the
+  level normalisation gain (--mode rms, the default: first 400 ms at -23 dBFS RMS with a -3 dBFS peak cap; --mode peak:
+  notes -6 dBFS peak), and prints the per-region table.
 
-RWSB v1, little endian: "RWSB" u16 version u32 sampleRate u32 count, then per region:
+RWSB v2, little endian: "RWSB" u16 version(2) u32 sampleRate u32 count, then per region:
 u8 kind (0 note, 1 release, 2 dead), u8 rootMidi, u8 loKey, u8 hiKey, u8 layer, u8 rr, f32 decayDbPerSec,
-u32 loopStart, u32 loopEnd (0 = no loop), u32 frames, frames * i16.
+u32 loopStart, u32 loopEnd (0 = no loop), u32 frames, f32 fineTuneCents, f32 gain, frames * i16.
+An existing bank is re-measured and upgraded with tools/tune_guitar_bank.py.
 """
 import math
-import struct
 import sys
 import wave
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import bank_analysis as ba  # noqa: E402
 
 KEEP = 2.0
 LOOP_SPAN = 0.35
@@ -77,11 +83,7 @@ def note_region(samples, rate, root):
     return y[:loop_end], decay, loop_start, loop_end
 
 
-def pcm16(xs):
-    return struct.pack('<%dh' % len(xs), *(max(-32768, min(32767, int(round(v * 32767)))) for v in xs))
-
-
-def main(src, dst):
+def main(src, dst, mode='rms'):
     src = Path(src)
     regions = []
     roots = sorted({midi_of(p.name.split('_')[0]) for p in (src / 'notes').glob('*_f_rr1.wav')})
@@ -111,13 +113,18 @@ def main(src, dst):
                 regions.append((2, 52, 0, 127, k - 1, rr - 1, 0.0, 0, 0, x, rate))
     rate = regions[0][10]
     assert all(r[10] == rate for r in regions)
-    with open(dst, 'wb') as f:
-        f.write(b'RWSB' + struct.pack('<HII', 1, rate, len(regions)))
-        for kind, root, lo, hi, layer, rr, decay, ls, le, y, _ in regions:
-            f.write(struct.pack('<BBBBBBfIII', kind, root, lo, hi, layer, rr, decay, ls, le, len(y)))
-            f.write(pcm16(y))
-    print(f'{len(regions)} regions, {Path(dst).stat().st_size / 1e6:.1f} MB, {rate} Hz, roots {roots}')
+    bank = [ba.Region(kind, root, lo, hi, layer, rr, decay, ls, le, ba.pcm16(y)) for kind, root, lo, hi, layer, rr, decay, ls, le, y, _ in regions]
+    rows, _ = ba.analyse(bank, rate, mode)
+    print(ba.format_rows(bank, rows))
+    ba.apply(bank, rows)
+    ba.write_bank(dst, rate, bank, version=2)
+    print(f'{len(bank)} regions, {Path(dst).stat().st_size / 1e6:.1f} MB, {rate} Hz, roots {roots}, RWSB v2 (mode {mode})')
 
 
 if __name__ == '__main__':
-    main(sys.argv[1], sys.argv[2])
+    argv = sys.argv[1:]
+    chosen = argv[argv.index('--mode') + 1] if '--mode' in argv else 'rms'
+    positional = [a for i, a in enumerate(argv) if not a.startswith('--') and (i == 0 or argv[i - 1] != '--mode')]
+    if chosen not in ('rms', 'peak') or len(positional) != 2:
+        print(__doc__); sys.exit(2)
+    main(positional[0], positional[1], chosen)

@@ -13,32 +13,32 @@ object TonePresets {
     val all: List<TonePreset> = listOf(
         TonePreset("rw.guitar.highgain", "E-Gitarre · High Gain", "Electric · high gain", TonePreset.Family.GUITAR, listOf(
             fx(EffectKind.GATE, "thresholdDb" to -52.0, "releaseMs" to 45.0),
-            fx(EffectKind.AMP, "gain" to 0.86, "bass" to 2.0, "mid" to -1.0, "treble" to 2.0, "presence" to 3.0, "level" to 0.0),
+            fx(EffectKind.AMP, "gain" to 0.86, "bass" to 2.0, "mid" to -1.0, "treble" to 2.0, "presence" to 3.0, "level" to -5.0),
             fx(EffectKind.CABINET_IR, "model" to 0.0),
             fx(EffectKind.EQ, "low" to -1.0, "mid" to 1.0, "high" to 0.0, "midHz" to 1400.0))),
         TonePreset("rw.guitar.crunch", "E-Gitarre · Crunch", "Electric · crunch", TonePreset.Family.GUITAR, listOf(
-            fx(EffectKind.AMP, "gain" to 0.5, "bass" to 1.0, "mid" to 1.5, "treble" to 1.0, "presence" to 1.5),
+            fx(EffectKind.AMP, "gain" to 0.5, "bass" to 1.0, "mid" to 1.5, "treble" to 1.0, "presence" to 1.5, "level" to -2.0),
             fx(EffectKind.CABINET_IR, "model" to 1.0),
-            fx(EffectKind.REVERB, "size" to 0.35, "damping" to 0.5, "mix" to 0.12))),
+            fx(EffectKind.REVERB, "size" to 0.35, "damping" to 0.5, "mix" to 0.08))),
         TonePreset("rw.guitar.clean", "E-Gitarre · Clean", "Electric · clean", TonePreset.Family.GUITAR, listOf(
-            fx(EffectKind.COMPRESSOR, "thresholdDb" to -20.0, "ratio" to 2.5, "makeupDb" to 2.0),
+            fx(EffectKind.COMPRESSOR, "thresholdDb" to -30.0, "ratio" to 3.0, "makeupDb" to 6.0),
             fx(EffectKind.AMP, "gain" to 0.08, "bass" to 1.0, "treble" to 2.0, "presence" to 1.0, "level" to 3.0),
             fx(EffectKind.CABINET_IR, "model" to 2.0),
-            fx(EffectKind.CHORUS, "rateHz" to 0.7, "depthMs" to 2.5, "mix" to 0.25),
-            fx(EffectKind.REVERB, "size" to 0.5, "damping" to 0.45, "mix" to 0.2))),
+            fx(EffectKind.CHORUS, "rateHz" to 0.7, "depthMs" to 2.5, "mix" to 0.1),
+            fx(EffectKind.REVERB, "size" to 0.5, "damping" to 0.45, "mix" to 0.12))),
         TonePreset("rw.guitar.acoustic", "Akustikgitarre", "Acoustic guitar", TonePreset.Family.GUITAR, listOf(
-            fx(EffectKind.EQ, "low" to 3.0, "mid" to -2.0, "high" to 3.0, "midHz" to 500.0),
+            fx(EffectKind.EQ, "low" to 2.0, "mid" to -2.0, "high" to 2.0, "midHz" to 500.0),
             fx(EffectKind.REVERB, "size" to 0.45, "damping" to 0.4, "mix" to 0.18))),
         TonePreset("rw.bass.pick", "Bass · Plektrum", "Bass · pick", TonePreset.Family.BASS, listOf(
-            fx(EffectKind.COMPRESSOR, "thresholdDb" to -22.0, "ratio" to 4.0, "attackMs" to 5.0, "makeupDb" to 4.0),
-            fx(EffectKind.AMP, "gain" to 0.3, "bass" to 3.0, "mid" to 1.0, "treble" to 1.0, "level" to 2.0),
+            fx(EffectKind.COMPRESSOR, "thresholdDb" to -22.0, "ratio" to 4.0, "attackMs" to 5.0, "makeupDb" to 1.0),
+            fx(EffectKind.AMP, "gain" to 0.3, "bass" to 3.0, "mid" to 1.0, "treble" to 1.0, "level" to -3.0),
             fx(EffectKind.CABINET_IR, "model" to 3.0))),
         TonePreset("rw.bass.finger", "Bass · Finger", "Bass · finger", TonePreset.Family.BASS, listOf(
             fx(EffectKind.COMPRESSOR, "thresholdDb" to -20.0, "ratio" to 3.0, "makeupDb" to 3.0),
             fx(EffectKind.EQ, "low" to 3.0, "mid" to 0.0, "high" to -3.0, "midHz" to 700.0))),
         TonePreset("rw.drums.rock", "Drums · Rock/Metal", "Drums · rock/metal", TonePreset.Family.DRUMS, listOf(
-            fx(EffectKind.COMPRESSOR, "thresholdDb" to -16.0, "ratio" to 3.0, "attackMs" to 4.0, "releaseMs" to 90.0, "makeupDb" to 3.0),
-            fx(EffectKind.EQ, "low" to 2.0, "mid" to -1.5, "high" to 2.0, "midHz" to 500.0),
+            fx(EffectKind.COMPRESSOR, "thresholdDb" to -16.0, "ratio" to 3.0, "attackMs" to 4.0, "releaseMs" to 90.0, "makeupDb" to 0.0),
+            fx(EffectKind.EQ, "low" to 1.0, "mid" to -1.5, "high" to 1.0, "midHz" to 500.0),
             fx(EffectKind.REVERB, "size" to 0.3, "damping" to 0.6, "mix" to 0.1))),
         TonePreset("rw.keys.piano", "Piano", "Piano", TonePreset.Family.KEYS, listOf(fx(EffectKind.REVERB, "size" to 0.5, "damping" to 0.5, "mix" to 0.18))),
         TonePreset("rw.keys.epiano", "E-Piano", "Electric piano", TonePreset.Family.KEYS, listOf(fx(EffectKind.CHORUS, "rateHz" to 0.5, "depthMs" to 2.0, "mix" to 0.3), fx(EffectKind.REVERB, "mix" to 0.15))),
@@ -71,15 +71,21 @@ object TonePresets {
     internal fun stringTone(preset: TonePreset): StringTone = when (preset.id) {
         "rw.guitar.highgain" -> StringTone(0.16f, 7.0, 0.11, 0.12f, 0.05f, 0.55f)
         "rw.guitar.crunch" -> StringTone(0.2f, 6.0, 0.13, 0.18f, 0.04f, 0.6f)
-        "rw.guitar.acoustic" -> StringTone(0.1f, 3.6, 0.17, 0.08f, 0.05f, 0.7f)
+        "rw.guitar.acoustic" -> StringTone(0.1f, 3.6, 0.17, 0.08f, 0.05f, 0.45f)
         "rw.bass.pick" -> StringTone(0.26f, 8.0, 0.14, 0.28f, 0.05f, 0.85f)
         "rw.bass.finger" -> StringTone(0.42f, 8.0, 0.22, 0.45f, 0.02f, 0.95f)
         else -> StringTone(0.15f, 5.0, 0.14, 0.15f, 0.03f, 0.65f)
     }
     /** Electric guitar presets play the bundled DI samples (when a bank is installed); acoustic and bass stay modelled. */
     internal fun isSampledGuitar(preset: TonePreset) = preset.id == "rw.guitar.highgain" || preset.id == "rw.guitar.crunch" || preset.id == "rw.guitar.clean"
-    /** Level of the DI samples relative to the modelled string, so amp drive and mix balance stay where they were. */
-    internal fun sampleGain(preset: TonePreset): Float = when (preset.id) { "rw.guitar.highgain" -> 1.5f; "rw.guitar.crunch" -> 1.5f; else -> 1.75f }
+    /**
+     * Input trim of the normalised DI samples (SampleBank.Region.gain: -23 dBFS RMS over the first 400 ms, peaks <= -3 dBFS) per preset,
+     * measured in QA cycle 18: a v96 note reaches the Clean amp around -16 dBFS (no saturation), Crunch sits near its knee so
+     * pick dynamics survive, High Gain stays fully saturated while a single v127 note peaks below -6 dBFS before the gate.
+     */
+    internal fun sampleGain(preset: TonePreset): Float = when (preset.id) { "rw.guitar.highgain" -> 0.6f; "rw.guitar.crunch" -> 0.28f; else -> 0.3f }
+    /** Modelled harmonics inside a sampled preset follow the sample trim, so a pinch harmonic sits ~3 dB under a picked note at the amp input. */
+    internal fun harmonicGain(preset: TonePreset): Float = when (preset.id) { "rw.guitar.highgain" -> 0.45f; "rw.guitar.crunch" -> 0.2f; else -> 0.22f }
     internal fun keysMode(preset: TonePreset): KeysMode = when (preset.id) {
         "rw.keys.epiano" -> KeysMode.EPIANO; "rw.keys.organ" -> KeysMode.ORGAN; "rw.keys.pad" -> KeysMode.PAD; "rw.keys.lead" -> KeysMode.LEAD; else -> KeysMode.PIANO
     }

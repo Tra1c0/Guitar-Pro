@@ -6,6 +6,7 @@ import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.ln
+import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -44,6 +45,10 @@ internal class SampleVoice(private val sampleRate: Int) {
     private var age = 0L
     private var baseMidi = 60.0
     private var rootMidi = 60
+    /** The region's measured pitch offset (cents above its root); the ratio removes it so the note lands on its pitch. */
+    private var fineTune = 0.0
+    /** The region's level normalisation (SampleBank.Region.gain), separate from the velocity level so release noises keep their own. */
+    private var regionGain = 1f
     // Crossfade from the previous sample on legato (hammer-on, pull-off, legato slide).
     private var oldRegion: SampleBank.Region? = null
     private var oldPos = 0.0
@@ -86,8 +91,11 @@ internal class SampleVoice(private val sampleRate: Int) {
         dead = note.dead
         region = if (dead && bank.deadNotes.isNotEmpty()) bank.deadNotes[(roundRobin + key) % bank.deadNotes.size] else bank.note(key, layerFor(note.velocity, bank.layers), roundRobin)
         rootMidi = region!!.root
-        // Slight random start offset keeps fast repetitions from sounding identical (on top of round robins).
-        pos = (roundRobin % 3) * 0.0004 * bank.sampleRate
+        fineTune = region!!.fineTuneCents.toDouble()
+        regionGain = region!!.gain
+        // Slight start offset per round robin and per string keeps fast repetitions and unisons on two strings from being
+        // the identical waveform (the engine also seeds the round robin by string).
+        pos = (roundRobin % 3) * 0.0004 * bank.sampleRate + (if (string >= 0) string * 0.00015 * bank.sampleRate else 0.0)
         looped = false; loopDecay = 1f
         baseRatio = bank.sampleRate.toDouble() / sampleRate * (if (dead) Dsp_pow2((note.soundingPitch - 52.0) / 12.0 * 0.35) else 1.0)
         if (note.attack == AttackKind.TAP || note.attack == AttackKind.GRACE) { pos += 0.012 * bank.sampleRate; level *= 0.8f }
@@ -97,7 +105,7 @@ internal class SampleVoice(private val sampleRate: Int) {
     fun legato(note: ScheduledNote, clock: Long, endClock: Long, gain: Float) {
         val bank = bank ?: return
         val current = region ?: return
-        oldRegion = current; oldPos = pos; oldRatio = ratioAt(0); oldGain = level * env * fade; xfade = 1f
+        oldRegion = current; oldPos = pos; oldRatio = ratioAt(0); oldGain = level * regionGain * env * fade; xfade = 1f
         this.endClock = endClock
         releasing = false; fade = 1f; fadeStep = 0f; silentRun = 0; relRegion = null
         configure(note, gain)
@@ -105,6 +113,8 @@ internal class SampleVoice(private val sampleRate: Int) {
         val key = Math_round(note.soundingPitch)
         region = bank.note(key, layerFor(note.velocity, bank.layers), rr + 1)
         rootMidi = region!!.root
+        fineTune = region!!.fineTuneCents.toDouble()
+        regionGain = region!!.gain
         // Skip the pick transient: the string already vibrates.
         pos = 0.03 * bank.sampleRate
         looped = false; loopDecay = 1f
@@ -116,7 +126,8 @@ internal class SampleVoice(private val sampleRate: Int) {
         baseMidi = note.soundingPitch
         damp = note.palmMute || note.dead
         val v = note.velocity.coerceIn(1, 127) / 127f
-        level = gain * (0.35f + 0.65f * v)
+        // The layers are loudness-matched by the bank normalisation, so the dynamics come from this law alone (v40 = -13 dB re v127).
+        level = gain * v.pow(1.3f)
         env = 1f
         // Palm mute: the hand damps the string within ~0.25 s and takes the top end off; darker when played softer.
         val t60 = when { note.dead -> 0.09; note.palmMute -> 0.32 * (110.0 / Dsp.midiToHz(note.soundingPitch)).coerceIn(0.6, 1.6); else -> 0.0 }
@@ -144,7 +155,7 @@ internal class SampleVoice(private val sampleRate: Int) {
             val b = bank ?: return
             relRegion = b.release(Math_round(baseMidi), rr)
             relPos = 0.0
-            relGain = level * env * 0.55f
+            relGain = level * env * 0.55f * (relRegion?.gain ?: 1f)
         }
     }
 
@@ -167,7 +178,7 @@ internal class SampleVoice(private val sampleRate: Int) {
             cents += vibratoDepth * (t / 0.15).coerceAtMost(1.0) * sin(Dsp.TWO_PI * vibratoRate * t)
         }
         // Bounded step: a hostile pitch must not push the read position to magnitudes where the loop wrap stops working.
-        return (baseRatio * Dsp_pow2((baseMidi - rootMidi + cents / 100.0) / 12.0)).coerceIn(0.0, 64.0)
+        return (baseRatio * Dsp_pow2((baseMidi - rootMidi - fineTune / 100.0 + cents / 100.0) / 12.0)).coerceIn(0.0, 64.0)
     }
 
     /** Adds [count] samples into [out] from [offset]; [clock] is the engine clock of the first sample. */
@@ -196,7 +207,7 @@ internal class SampleVoice(private val sampleRate: Int) {
                 pos += ratio
                 if (looped) env *= loopDecay
                 if (damp) { env *= envDecay; lp1 = ftz(lp1 + (1f - lpA) * (s - lp1)); lp2 = ftz(lp2 + (1f - lpA) * (lp1 - lp2)); s = lp2 }
-                var y = s * level * env
+                var y = s * level * regionGain * env
                 if (xfade > 0f) {
                     val o = oldRegion
                     if (o != null && oldPos < o.frames - 2) { y += cubic(o.data, oldPos) * oldGain * xfade; oldPos += oldRatio }

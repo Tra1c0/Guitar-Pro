@@ -37,7 +37,7 @@ Die Schriften werden unverändert gebündelt, damit das Design nicht von Geräte
 
 | Asset | Quelle | Lizenz / Verwendung |
 |---|---|---|
-| `assets/banks/guitar-emily-di.rwsb` (29,2 MB, 208 Regionen, 44,1 kHz/16 Bit mono), SHA-256 `4f7587c5…e9f2d` | [Karoryfer Emilyguitar](https://github.com/sfzinstruments/karoryfer.emilyguitar), Commit `b4920dc662fd9cad6dcaccdeecffdd91c8725d8c`: DI-Aufnahmen einer E-Gitarre, Töne im Kleinterzabstand Db2–D6, 4 Velocity-Stufen × 3 Round Robins, Releases und gedämpfte Anschläge | CC0-1.0 (laut Repository-Lizenz und Karoryfer-Angaben). Umgewandelt mit `tools/make_guitar_bank.py`: 3 Layer, auf 2 s gekürzt, Schleife über ganze Perioden mit 40 ms Überblendung, Abklingrate gemessen. Keine Pflicht zur Namensnennung, wird trotzdem genannt. |
+| `assets/banks/guitar-emily-di.rwsb` (29,2 MB, 208 Regionen, 44,1 kHz/16 Bit mono), SHA-256 `f2d71f23…813af2` | [Karoryfer Emilyguitar](https://github.com/sfzinstruments/karoryfer.emilyguitar), Commit `b4920dc662fd9cad6dcaccdeecffdd91c8725d8c`: DI-Aufnahmen einer E-Gitarre, Töne im Kleinterzabstand Db2–D6, 4 Velocity-Stufen × 3 Round Robins, Releases und gedämpfte Anschläge | CC0-1.0 (laut Repository-Lizenz und Karoryfer-Angaben). Umgewandelt mit `tools/make_guitar_bank.py` (RWSB v2): 3 Layer, auf 2 s gekürzt, Schleife über ganze Perioden mit 40 ms Überblendung, Abklingrate gemessen; je Region Feinstimmung (Tonkörper, Cent) und Pegelnormierung gemessen (`tools/bank_analysis.py`, aus der v1-Bank mit `tools/tune_guitar_bank.py` erzeugt, PCM unverändert). Keine Pflicht zur Namensnennung, wird trotzdem genannt. |
 
 Die Cabinet-Impulsantworten sind eigene, berechnete Entwürfe. Frei auffindbare IR-Pakete hatten ungeklärte oder nicht weitergebbare Lizenzen und wurden deshalb nicht gebündelt.
 
