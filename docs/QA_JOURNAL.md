@@ -317,3 +317,29 @@ CI: 42001636029 (369ac0a) grün; 0e2ddda/b7041dc siehe nächster Eintrag.
 **Bekannt, nicht geändert:** Einige Bedienelemente sind optisch 44–46 dp (dokumentiert 48 dp); M3 erweitert die Tippfläche vermutlich auf 48 dp, die Raster zu vergrößern würde das Design auf kleinen Displays ändern. Etwa 29 hartkodierte deutsche Meldungen in ViewModels erscheinen auch in der englischen Oberfläche (Englisch ist nicht als unterstützt dokumentiert; CONTRACTS verlangt deutsche Importfehler). `textEditing`-Flag könnte nach Verschwinden eines fokussierten Felds hängen bleiben (unbestätigt).
 
 Ergebnis Zyklus 12: **7 Defektgruppen bestätigt und behoben** → nicht defektfrei.
+
+### Zyklus 13 — Modellbasierte Zufallstests (Transport) und Prüfung des neuesten Codes
+
+Methoden (neu): (a) modellbasierte Zufallstests von EngineTransport/RealtimeHost: geseedete Folgen aus prepare/play/pause/stop/seek/setLoop/Bearbeitung/Projektwechsel/Render/Wartezeit plus Wettläufen (Stop während blockiertem Dekodieren), Referenzmodell und Invarianten nach jedem Schritt, Schrumpfen auf Minimalfolgen (`Qa13ModelBasedTransportTest`; Standard 20 Folgen, Kampagne mit `-Dqa13.n=600`); (b) adversariale Prüfung der Commits 0e2ddda/b7041dc (Drag-and-Drop, Start-Zustand, XML-Budget, Bibliothek); (c) CI-Diagnose der Robolectric-Gestentests.
+
+**Kampagnenverlauf (600 Folgen × 40 Schritte):** 289 fehlerhafte Folgen → 29 → 3 → **0** nach den Reparaturen.
+
+**Bestätigt und repariert:**
+1. MoveNote brach Bindebögen und Legato-Verbindungen still (neue Note-ID) → Note behält Identität/Links, gebundene Noten werden abgelehnt; Strum/Fermate wandern mit der einzigen Note (`Qa13MoveNoteReviewTest`).
+2. Ein abgebrochenes Ziehen (Systemgeste) ließ die Note fallen; Ziehen pausiert jetzt das Folgen; Notenkopf in der Standardnotation ist ebenfalls greifbar.
+3. Halt während eines überlappenden zweiten `prepare()` ging verloren → Zähler laufender Prepares (`Qa13PrepareEpochReviewTest`).
+4. XML-Budget 3 M hielt 405 MiB → leere Attribut-Maps/Kindlisten geteilt, Namen interniert: 103 MiB (`Qa13XmlBudgetHeapTest`).
+5. Das zuletzt gespeicherte Projekt war nicht löschbar → Liste zeigt alle Projekte (`Qa13LibraryDeleteTest`, Robolectric).
+6. Pause direkt nach Stop machte aus STOPPED → PAUSED.
+7. Bearbeitung während der Wiedergabe rechnete den Wiedergabekopf per Routenindex statt per Takt um (früheren Takt löschen → einen Takt weiter oder über das Ende) → `PlaybackPlan.frameFor` per Takt.
+8. Projektwechsel behielt die Position des alten Projekts; nach Stop startete Play am veralteten Schleifenanfang; veröffentlichter Frame überschritt Schleifen-/Planende um bis zu einen Block.
+9. Poller veröffentlichte Frames des alten Plans gegen den neuen → Snapshot zählt angewandte Programme/Play-Befehle; Start-Zustand endet, wenn die Engine Play angewandt hat (kurze Wiedergabe blieb sonst bis 1 s PLAYING).
+10. Schleife, die während der Wiedergabe außerhalb des Kopfs gesetzt wurde, griff nie (oder erst spät) → springt an den Schleifenanfang; Suchen außerhalb einer Schleife landet am Schleifenanfang (wie `play()`).
+11. Partituransicht scrollte vor der ersten Messung (Viewport 0×0) ungewollt nach unten — Tippen/Ziehen traf dann unterhalb des Sichtbaren (gefunden durch `Qa13DragGestureTest`).
+Tests: `Qa13TransportFindingsTest` (7/9 rot vor Fix), `Qa13DragGestureTest` (Robolectric, CI). CI 42012082565 (719f7c1) grün.
+
+**Bekannt, nicht geändert:** Eine Pinch-Geste, deren erster Finger auf der ausgewählten Note schon die Touch-Schwelle überschreitet, startet ein Ziehen statt Zoomen. Kein Auto-Scroll am Rand beim Ziehen. Hit-Test ignoriert die Stimme (Ziehen einer Stimme-0-Note bei gewählter Stimme 1 scheitert mit Hinweis). Tippen im Bereichsmodus während der Wiedergabe springt zur alten Cursorposition. Slide-Ziel einer verschobenen Note zeigt weiter auf den alten Nachbarn (Wiedergabe ignoriert nicht anliegende Slides).
+
+**Nicht ausgeführt:** Fast-Forward von `ccr-0b650dff-jnhups-qa` nach `ccr-0b650dff-jnhups` (vom Nutzer gewünscht) wurde von der Berechtigungsprüfung der Umgebung als „Merge ohne Review“ blockiert; muss der Nutzer selbst ausführen oder freigeben.
+
+Ergebnis Zyklus 13: **11 Defektgruppen bestätigt und behoben** → nicht defektfrei.
