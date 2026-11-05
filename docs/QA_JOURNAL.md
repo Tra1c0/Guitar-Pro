@@ -343,3 +343,23 @@ Tests: `Qa13TransportFindingsTest` (7/9 rot vor Fix), `Qa13DragGestureTest` (Rob
 **Nicht ausgeführt:** Fast-Forward von `ccr-0b650dff-jnhups-qa` nach `ccr-0b650dff-jnhups` (vom Nutzer gewünscht) wurde von der Berechtigungsprüfung der Umgebung als „Merge ohne Review“ blockiert; muss der Nutzer selbst ausführen oder freigeben.
 
 Ergebnis Zyklus 13: **11 Defektgruppen bestätigt und behoben** → nicht defektfrei.
+
+### Zyklus 14 — Modellbasierte Zufallstests für Editor-Kern und Absturzkonsistenz des Speichers
+
+Methoden (neu für diese Bereiche): (a) `Qa14ModelBasedEditorTest`: geseedete Folgen aller EditorCommands + select/undo/redo mit Referenzmodell; Invarianten: kein Validator-ERROR nach Erfolg, Fehlschlag ändert nichts, undo/redo exakt, Revision monoton, Auswahl gültig, keine Ausnahme aus `dispatch`, Links/Bindebögen konsistent, JSON-Rundreise, Laufzeit < 200 ms bei 64 Takten — 7 500 Folgen (≈ 288 000 Schritte) vor, 1 500 nach den Reparaturen. (b) `Qa14ModelBasedStorageTest`: Folgen aus create/save (richtige/veraltete Revision)/open/delete/Snapshots/Assets/nativer Export-Import/Einstellungen/gleichzeitig speichern+löschen; **Absturz-Injektion an exakten Schreibpunkten** (SecurityManager-Hook kopiert das Verzeichnis beim k-ten Schreib-/Umbenenn-/Löschzugriff; nur JDK 17) und gezielte Korruption einzelner Dateien; 3 000 Folgen mit ≈ 26 600 Absturzabbildern und 10 450 Korruptionen.
+
+**Bestätigt und repariert (rot → grün, CI 42017063363 grün):**
+1. Bearbeitungen auf Beat-Ebene (Beat einfügen am Bindeziel, Notenwert/Triole des Bindeursprungs, Taktart verlängern) öffneten still eine Lücke in einem Haltebogen (Wiedergabe schlägt die Note neu an, GP-Export verwirft den Bogen) → abgelehnt mit „Haltebogen zuerst lösen“.
+2. NaN/Unendlich in Master-Panorama, Effektparametern (Spur/Master) und Clip-Filtern wurden angenommen → Projekt nicht mehr speicherbar (JSON).
+3. Unpaarige UTF-16-Surrogate in Titel/Metadaten/Texten/Abschnitten/Spurnamen wurden als „?“ gespeichert → abgelehnt.
+4. `Replace` mit identischem Inhalt erhöhte die Revision und erzeugte einen leeren Undo-Schritt.
+5. Riesige Auswahl-Offsets überliefen später; ein Fehlschlag danach hatte die Redo-Historie schon gelöscht; `redo()` warf. → Offsets begrenzt, Auswahl vor der Historie berechnet, undo/redo fangen ab.
+6. Inkonsistente (handgebaute) Zwischenablage und `MoveTrack(Int.MAX_VALUE)` warfen bzw. liefen über.
+7. *Speicher:* Absturz beim ersten Speichern eines neuen Projekts hinterließ dauerhaft „Projekt unlesbar“ in der Bibliothek (in 35 % der strikten Folgen) → Ordner ohne Head mit höchstens einer Revision und Temp-Dateien gilt als nie gespeichert (PROJECT_FORMAT ergänzt); Dateien bleiben liegen. Zwei bestehende Tests nutzten einen leeren Ordner als „kaputtes Projekt“ und verwenden jetzt einen beschädigten Head.
+Tests: `Qa14EditorFindingsTest` (14 Tests), `Qa14StorageCrashFindingsTest`.
+
+**Gehalten:** alle übrigen Editor-Invarianten (Validator, undo/redo exakt, Auswahl, keine hängenden Links, Laufzeit max. 177 ms bei 64 dichten Takten mit 4 parallelen Läufen); Speicher: dauerhafte Saves, CONFLICT bei veralteter Revision, kein Wiederauferstehen nach Löschen, jedes gelistete Projekt öffnet, Asset-Hashes, Export-Import-Rundreise, Speichern nach Absturz funktioniert.
+
+**Bekannt, nicht geändert:** Takte einfügen/duplizieren zwischen gebundenen Takten behält den Bogen über die neuen Takte (bewusstes Design, `EditorExtensionsTest`); Transpose/SetInstrument können Bögen über Saiten teilen. Doppelfehler: Absturz zwischen `head.previous` und `head.json` lässt beide auf Revision N zeigen — ist N danach zusätzlich beschädigt, ist N−1 nicht mehr erreichbar. Ein Projekt mit nur einer Revision, dessen beide Heads verloren gehen, ist nun ebenfalls unsichtbar statt als unlesbar gemeldet (beides ohne Zugriff; Dateien bleiben erhalten).
+
+Ergebnis Zyklus 14: **7 Defektgruppen bestätigt und behoben** → nicht defektfrei.
