@@ -289,3 +289,11 @@ Tests: `adapter/audio/.../LifecycleQaTest` (7/7 rot ohne Fix), `feature/workspac
 **Offen/unbestätigt:** Navigation-Deep-Link-Extras könnten `project/{id}` mit ungültiger ID erreichen (Absturz, kein Datenzugriff; Bibliotheksquelle offline nicht prüfbar). Blockierende Arbeit auf Main: `InputTuner.start/stop`, `RealtimeHost.start` (bis 2 s Join). Prozesstod verliert Cursor, Eingabezustand, Übungs- und Ansichtseinstellungen, Undo und Zwischenablage (vertraglich nicht zugesagt; Musik selbst ist durch ON_STOP-Flush gesichert).
 
 Ergebnis Zyklus 11: **8 Defektgruppen bestätigt und behoben** → nicht defektfrei.
+
+### Pausiert nach Zyklus 11 (auf Nutzerwunsch)
+
+Zyklus 12 (Regressionsprüfung der Fixes aus Zyklus 10/11; Barrierefreiheit/Lokalisierung) wurde begonnen und auf ausdrücklichen Wunsch des Nutzers abgebrochen, um sich auf die benutzbare App zu konzentrieren; Teilergebnisse wurden verworfen. **Abschlussbedingung nicht erfüllt:** kein Zyklus war bisher defektfrei (Zyklen 1–11 fanden jeweils Defekte). Letzter grüner CI-Lauf: 41999267771 (82f8a71).
+
+Bei Wiederaufnahme zuerst offen: (1) Regressionsprüfung der Commits 69a6295, 3bfea04, 82f8a71 (Halt-Lock vs. Mutex, Knotenbudget inkl. Attribute für große GPIF, Reihenfolgepflicht project.json bei älteren Archiven, Navigationsschutz nach Import/„Weiter mit“, PendingExports-Warteschlange, `textEditing`-Fokus); (2) Barrierefreiheit (contentDescription, Touch-Ziele, Canvas-Semantik) und Lokalisierung (hartkodierte Texte, values/values-en-Abgleich, Platzhalter).
+
+**Nie geprüft (keine Hardware in dieser Umgebung):** Klang und Latenz auf Geräten, Unterläufe/Thermik unter Last, echte Audiofokus-/Kopfhörer-Ereignisse, Mikrofon/Stimmgerät mit realem Signal, SAF-Anbieter (Drive, USB), Darstellung auf echter Hardware jenseits Robolectric, Navigation-Deep-Link-Extras, Main-Thread-Blockaden (nur aus Code abgeleitet).
