@@ -65,6 +65,8 @@ class EngineTransport(
     @Volatile private var restartFromTop = false
     /** Project whose plan is installed; a different project never inherits the old position. */
     private var planProject: EntityId? = null
+    /** Install/Reprogram commands posted so far; the poller trusts a snapshot's frame only once the engine has applied all. */
+    @Volatile private var postedPrograms = 0L
     /** Speed last requested by the caller (practice settings), as opposed to the speed the trainer has reached. */
     @Volatile private var requestedSpeed = 1.0
 
@@ -114,6 +116,17 @@ class EngineTransport(
         val loop = settings.loop?.let { loopFramesFor(next, it) }
         if (previous == null || installedRate != rate) host.post(HostCommand.Install(program))
         else host.post(HostCommand.Reprogram(program, previous, loop?.first ?: -1L, loop?.second ?: -1L))
+        postedPrograms++
+        if (planProject != null && planProject != project.id) {
+            // Another project: start from its top (or loop start), never from a bar of the previous one.
+            val top = loop?.first ?: 0L
+            mutable.value = mutable.value.copy(sample = SamplePosition(top, rate), position = next.positionAt(top))
+        } else if (previous != null && installedRate == rate && mutable.value.status == TransportStatus.PLAYING) mutable.value.sample?.let { s ->
+            // Playing: publish the remapped position at once (the engine remaps the same way when it applies the program).
+            previous.positionAt(s.frame)?.let { pos -> next.frameFor(pos, orNearest = true) }?.let { f ->
+                mutable.value = mutable.value.copy(sample = SamplePosition(f, rate), position = next.positionAt(f))
+            }
+        }
         // While not playing, the published frame belongs to the old plan (speed or tempo changes move bars): carry it over.
         if (previous != null && installedRate == rate && planProject == project.id && mutable.value.status != TransportStatus.PLAYING) mutable.value.sample?.let { s ->
             // By bar, not by route index: inserting or deleting an earlier bar must not shift the position by a bar.
@@ -223,7 +236,9 @@ class EngineTransport(
 
     override suspend fun seek(position: PlaybackOccurrence): Outcome<Unit> = mutex.withLock {
         val p = plan ?: run { pendingSeek = position; mutable.value = mutable.value.copy(position = position, sample = null); return@withLock Outcome.Success(Unit) }
-        val frame = frameFor(p, position) ?: return@withLock Outcome.Failure(FailureCode.VALIDATION, "Position liegt außerhalb der Route", contractId = "C-AUDIO")
+        val wanted = frameFor(p, position) ?: return@withLock Outcome.Failure(FailureCode.VALIDATION, "Position liegt außerhalb der Route", contractId = "C-AUDIO")
+        // As in play(): while a loop is set, playback stays inside it (a position outside means its start).
+        val frame = loopFrames?.let { (a, b) -> if (wanted in a until b) wanted else a } ?: wanted
         host.post(HostCommand.Seek(frame))
         restartFromTop = false
         mutable.value = mutable.value.copy(position = p.positionAt(frame), sample = SamplePosition(frame, p.sampleRate))
@@ -252,6 +267,13 @@ class EngineTransport(
         loopFrames = start to end
         host.post(HostCommand.Loop(start, end))
         mutable.value = mutable.value.copy(loop = range)
+        // A loop set (or recompiled) while the playhead is outside it engages at once instead of never (after it) or late.
+        val playing = mutable.value.status == TransportStatus.PLAYING || starting
+        val at = mutable.value.sample?.frame
+        if (playing && at != null && at !in start until end) {
+            host.post(HostCommand.Seek(start))
+            mutable.value = mutable.value.copy(sample = SamplePosition(start, p.sampleRate), position = p.positionAt(start))
+        }
         return Outcome.Success(Unit)
     }
 
@@ -369,7 +391,8 @@ class EngineTransport(
                     mutable.value.status == TransportStatus.PLAYING -> TransportStatus.PAUSED
                     else -> mutable.value.status
                 }
-                if (held == null && !starting && (status == TransportStatus.PLAYING || snap.countingIn)) {
+                // A snapshot taken before the engine applied the newest program belongs to the old plan: skip it.
+                if (held == null && !starting && (snap.programs >= postedPrograms || !snap.running) && (status == TransportStatus.PLAYING || snap.countingIn)) {
                     // The snapshot is taken at the block start plus its length; a wrap or end inside the block is folded back.
                     val frame = loopFrames?.let { (a, b) -> if (snap.planFrame >= b && b > a) a + (snap.planFrame - b) % (b - a) else snap.planFrame }
                         ?: p?.let { minOf(snap.planFrame, it.totalFrames) } ?: snap.planFrame

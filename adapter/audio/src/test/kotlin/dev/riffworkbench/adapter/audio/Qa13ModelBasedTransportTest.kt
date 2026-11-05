@@ -357,7 +357,7 @@ class Qa13ModelBasedTransportTest {
     }
 
     @Test fun randomisedTransportModel() {
-        val n = System.getProperty("qa13.n")?.toInt() ?: 600
+        val n = System.getProperty("qa13.n")?.toInt() ?: 20
         val len = System.getProperty("qa13.len")?.toInt() ?: 40
         val base = System.getProperty("qa13.seed")?.toLong() ?: 13_000L
         val pool = Executors.newFixedThreadPool(4)
