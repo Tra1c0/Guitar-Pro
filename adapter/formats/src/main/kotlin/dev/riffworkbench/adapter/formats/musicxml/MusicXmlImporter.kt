@@ -230,15 +230,16 @@ private class MusicXmlScoreBuilder(private val score: XmlElement, private val id
 
     private fun time(t: XmlElement): TimeSignature? {
         if (t.child("senza-misura") != null) { losses.add("senza_misura", "Senza misura wird als 4/4 gelesen"); return null }
-        val beats = t.children("beats").map { b -> b.text.split('+').sumOf { it.trim().toIntOrNull() ?: 0 } }
+        // Long arithmetic: hostile beat counts must not wrap around into a plausible small signature.
+        val beats = t.children("beats").map { b -> b.text.split('+').sumOf { it.trim().toLongOrNull()?.coerceIn(0L, 1_000_000L) ?: 0L } }
         val types = t.children("beat-type").mapNotNull { it.text.trim().toIntOrNull() }
         if (beats.isEmpty() || types.isEmpty() || beats.size != types.size) return null
         val denominator = types.max()
         if (denominator !in 1..64 || denominator.countOneBits() != 1 || types.any { denominator % it != 0 }) { losses.add("time_signature", "Taktart ${t.textOf("beats")}/${t.textOf("beat-type")} ist nicht darstellbar"); return null }
-        val numerator = beats.indices.sumOf { beats[it] * (denominator / types[it]) }
+        val numerator = beats.indices.sumOf { beats[it] * (denominator / types[it]).toLong() }
         if (beats.size > 1) losses.add("composite_time", "Zusammengesetzte Taktarten werden als Summe gelesen")
         if (numerator !in 1..64) { losses.add("time_signature", "Taktart mit $numerator Schlägen ist nicht darstellbar"); return null }
-        return TimeSignature(numerator, denominator)
+        return TimeSignature(numerator.toInt(), denominator)
     }
 
     private fun dynamicLevel(d: XmlElement): DynamicLevel? = d.elements.firstNotNullOfOrNull { e -> DynamicLevel.entries.firstOrNull { it.name.equals(e.name, ignoreCase = true) } }
@@ -550,14 +551,23 @@ private class MusicXmlScoreBuilder(private val score: XmlElement, private val id
             }
             // Place beats into voice slots per measure; overlapping beats move to a free voice or are dropped.
             val slots = Array(measures.size) { Array(4) { ArrayList<BeatBuild>() } }
+            // Occupied intervals per slot (start -> latest end), so a dense measure is checked in O(log n) per beat, not O(n).
+            val occupied = Array(measures.size) { Array(4) { java.util.TreeMap<Fraction, Fraction>() } }
             for (v in 0..3) for (b in beatsByVoice[v].orEmpty().sortedWith(compareBy({ it.first.measure }, { it.start }))) {
                 val m = b.first.measure
                 if (m >= measures.size) continue
-                fun fits(slot: Int) = slots[m][slot].none { o -> o.start < b.start + b.length && b.start < o.start + o.length }
+                val bEnd = b.start + b.length
+                fun fits(slot: Int): Boolean {
+                    val map = occupied[m][slot]
+                    map.floorEntry(b.start)?.let { (s, e) -> if (s < bEnd && b.start < e) return false }
+                    map.higherEntry(b.start)?.let { (s, e) -> if (s < bEnd && b.start < e) return false }
+                    return true
+                }
                 val target = if (fits(v)) v else (0..3).firstOrNull { fits(it) }
                 if (target == null) { losses.add("voice_overlap", "Überlappende Noten einer Stimme wurden verworfen", trackId); continue }
                 if (target != v) losses.add("voice_overlap", "Überlappende Noten einer Stimme wurden in eine freie Stimme verschoben", trackId)
                 slots[m][target] += b
+                occupied[m][target].merge(b.start, bEnd) { x, y -> if (x > y) x else y }
             }
             val built = ArrayList<Built>()
             val bars = measures.indices.map { m ->
@@ -838,6 +848,16 @@ private class MusicXmlScoreBuilder(private val score: XmlElement, private val id
             val byStartPitch = built.groupBy { it.absStart to (it.note.pitch.midiNumber to it.note.pitch.cents) }
             val used = HashSet<EntityId>()
             val ordered = built.sortedBy { it.absStart }
+            // Fallback lookup for ties whose target starts slightly late: per (voice, pitch) sorted by start, searched by bisection.
+            val byVoicePitch = ordered.groupBy { Triple(it.voice, it.note.pitch.midiNumber, it.note.pitch.cents) }
+            fun nearFollower(b: Built, pitch: Pair<Int, Int>): Built? {
+                val list = byVoicePitch[Triple(b.voice, pitch.first, pitch.second)] ?: return null
+                var lo = 0; var hi = list.size
+                while (lo < hi) { val mid = (lo + hi) ushr 1; if (list[mid].absStart < b.absEnd) lo = mid + 1 else hi = mid }
+                val limit = b.absEnd + Fraction.of(1, 16)
+                for (k in lo until list.size) { val c = list[k]; if (c.absStart > limit) break; if (c.noteId !in used) return c }
+                return null
+            }
             for (b in ordered) {
                 val tieStart = b.x.el.children("tie").any { it.attr("type") == "start" } ||
                     b.x.el.children("notations").flatMap { it.children("tied") }.any { it.attr("type") == "start" }
@@ -845,7 +865,7 @@ private class MusicXmlScoreBuilder(private val score: XmlElement, private val id
                 val pitch = b.note.pitch.midiNumber to b.note.pitch.cents
                 val candidates = byStartPitch[b.absEnd to pitch].orEmpty().filter { it.noteId !in used && it.noteId != b.noteId }
                 val target = candidates.firstOrNull { it.voice == b.voice && it.note.string == b.note.string } ?: candidates.firstOrNull { it.voice == b.voice } ?: candidates.firstOrNull()
-                    ?: ordered.firstOrNull { it.absStart >= b.absEnd && it.voice == b.voice && it.note.pitch.midiNumber == pitch.first && it.note.pitch.cents == pitch.second && it.noteId !in used && it.absStart - b.absEnd <= Fraction.of(1, 16) }
+                    ?: nearFollower(b, pitch)
                 if (target == null) { losses.add("tie_unresolved", "Haltebögen ohne passende Folgenote wurden verworfen", trackId); continue }
                 used += target.noteId
                 links.getOrPut(b.noteId) { ArrayList() } += NoteLink(LinkKind.TIE, target.noteId)

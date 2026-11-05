@@ -450,30 +450,35 @@ private class MidiScoreBuilder(private val smf: SmfData, private val ids: IdSour
         if (g.channel == 9 || g.bendTicks.isEmpty()) return null
         val on = n.raw.on
         val off = maxOf(n.raw.off, on + 1)
-        var i = java.util.Collections.binarySearch(g.bendTicks, on).let { if (it >= 0) { var k = it; while (k + 1 < g.bendTicks.size && g.bendTicks[k + 1] == on) k++; k } else -it - 2 }
+        val i = java.util.Collections.binarySearch(g.bendTicks, on).let { if (it >= 0) { var k = it; while (k + 1 < g.bendTicks.size && g.bendTicks[k + 1] == on) k++; k } else -it - 2 }
         val startValue = if (i >= 0) g.bendValues[i] else 8192
         fun cents(v: Int) = Math.round((v - 8192) * g.bendRange / 8192.0).toInt()
-        // Curve over the whole note, positions relative to the raw note.
-        val raw = ArrayList<Pair<Double, Int>>()
-        raw += 0.0 to cents(startValue)
-        i++
-        while (i in 0 until g.bendTicks.size && g.bendTicks[i] < off) {
-            raw += (g.bendTicks[i] - on).toDouble() / (off - on) to cents(g.bendValues[i])
-            i++
-        }
-        raw += 1.0 to raw.last().second
-        if (raw.all { it.second == 0 }) return null
         // Map to the piece of the quantized note.
         val noteSpan = (c.end - c.start).toDouble()
         val a = (from - c.start) / noteSpan
         val b = (to - c.start) / noteSpan
+        // Bend events inside the raw note are indices [first, end); only those around this piece are needed. Binary searches keep
+        // a bend flood linear overall instead of (events x pieces) or (events x points).
+        val firstEvent = i + 1
+        fun lowerBound(tick: Double): Int { var lo = maxOf(firstEvent, 0); var hi = g.bendTicks.size; while (lo < hi) { val m = (lo + hi) ushr 1; if (g.bendTicks[m] < tick) lo = m + 1 else hi = m }; return lo }
+        val end = lowerBound(off.toDouble())
+        val span = (off - on).toDouble()
+        val lastValue = if (end - 1 >= firstEvent) g.bendValues[end - 1] else startValue
+        // Last event at or before a, first event at or after b (clamped to the note's events).
+        val lo = (lowerBound(on + a * span + 1e-9) - 1).coerceAtLeast(firstEvent)
+        val hi = minOf(lowerBound(on + b * span), end - 1)
+        val raw = ArrayList<Pair<Double, Int>>()
+        if (lo >= end || (g.bendTicks[lo] - on) / span > a) raw += 0.0 to cents(startValue)
+        for (k in lo..hi) if (k in firstEvent until end) raw += (g.bendTicks[k] - on).toDouble() / span to cents(g.bendValues[k])
+        if (hi + 1 >= end || raw.isEmpty() || raw.last().first < b) raw += 1.0 to cents(lastValue)
+        if (raw.all { it.second == 0 }) return null
         fun valueAt(x: Double): Double {
             if (x <= raw.first().first) return raw.first().second.toDouble()
-            for (k in 1 until raw.size) if (x <= raw[k].first) {
-                val (x0, y0) = raw[k - 1]; val (x1, y1) = raw[k]
-                return if (x1 <= x0) y1.toDouble() else y0 + (x - x0) / (x1 - x0) * (y1 - y0)
-            }
-            return raw.last().second.toDouble()
+            var l = 1; var h = raw.size
+            while (l < h) { val m = (l + h) ushr 1; if (raw[m].first < x) l = m + 1 else h = m }
+            if (l >= raw.size) return raw.last().second.toDouble()
+            val (x0, y0) = raw[l - 1]; val (x1, y1) = raw[l]
+            return if (x1 <= x0) y1.toDouble() else y0 + (x - x0) / (x1 - x0) * (y1 - y0)
         }
         val xs = (listOf(a, b) + raw.map { it.first }.filter { it > a && it < b }).sorted()
         var points = xs.map { x -> Math.round((x - a) / (b - a) * 96).coerceIn(0, 96) to Math.round(valueAt(x)).toInt() }

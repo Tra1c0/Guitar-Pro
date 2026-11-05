@@ -13,7 +13,14 @@ class XmlElement(val name: String, val attributes: Map<String, String>, val chil
     val elements: List<XmlElement> get() = children.filterIsInstance<XmlElement>()
     /** Concatenated direct text content, trimmed. */
     val text: String get() = children.filterIsInstance<XmlText>().joinToString("") { it.text }.trim()
-    fun child(name: String): XmlElement? = children.firstOrNull { it is XmlElement && it.name == name } as XmlElement?
+    // First child per name, built on first lookup in wide elements: shared elements referenced many times (GPIF beats/notes)
+    // must not cost O(children) per lookup. Benign race: concurrent builders compute the same map.
+    @Volatile private var byName: Map<String, XmlElement>? = null
+    fun child(name: String): XmlElement? {
+        if (children.size <= 16) return children.firstOrNull { it is XmlElement && it.name == name } as XmlElement?
+        val index = byName ?: HashMap<String, XmlElement>().also { m -> for (c in children) if (c is XmlElement) m.putIfAbsent(c.name, c); byName = m }
+        return index[name]
+    }
     fun children(name: String): List<XmlElement> = children.filter { it is XmlElement && it.name == name }.map { it as XmlElement }
     fun attr(name: String): String? = attributes[name]
     /** Descends by element names, e.g. path("Properties", "Property"). */
