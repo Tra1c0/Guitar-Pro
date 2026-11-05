@@ -107,6 +107,27 @@ class ApplicationFlowTest {
         }
         screenshot("settings-light")
     }
+    /** Rotation/theme change recreates the activity: the open project, its edits and the editor must survive (QA cycle 6). */
+    @Test fun activityRecreationKeepsTheOpenProjectAndItsEdits() {
+        createProject()
+        compose.onNodeWithTag("fret-5").performClick()
+        compose.waitUntil(20000) { container.projects.projects.value.singleOrNull()?.revision == 1L }
+        compose.activityRule.scenario.recreate()
+        compose.waitUntil(20000) { compose.onAllNodesWithTag("fret-0").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Rückgängig").assertIsEnabled()
+        assertEquals(5, allNotes(storedProject()).single().fret)
+    }
+
+    @Test fun audioDiagnosticsPageIsReachable() {
+        createProject()
+        compose.onNodeWithTag("nav-more").performClick()
+        compose.onNodeWithTag("page-diagnostics").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onAllNodesWithText("Audio-Diagnose").onFirst().assertExists()
+        compose.onNodeWithText("Blindvergleich").performScrollTo().assertExists()
+        screenshot("diagnostics-phone")
+    }
+
     @Test @Config(sdk = [35], qualifiers = "de-rDE-w1280dp-h800dp") fun tabletWorkspaceRendersWithNavigationRail() {
         createProject()
         compose.onNodeWithText("Funktionsstand").assertExists()
