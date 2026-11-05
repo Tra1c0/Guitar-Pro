@@ -44,7 +44,7 @@ object Timing {
                 val a = offsets[i - 1]; val b = offsets[i]
                 val qpm = inside.lastOrNull { it.first <= a + 1e-12 }?.second ?: startTempo
                 val stretch = bars.filter { a >= it.first - 1e-12 && a < it.first + it.second - 1e-12 }.maxOfOrNull { it.third } ?: 1.0
-                val performed = swing(b, measure.feel) - swing(a, measure.feel)
+                val performed = swing(b, measure.feel, lengthD) - swing(a, measure.feel, lengthD)
                 seconds[i] = seconds[i - 1] + performed * 4.0 * 60.0 / qpm * stretch
             }
             MeasureTiming(length, offsets, seconds)
@@ -59,9 +59,11 @@ object Timing {
     }
 
     /** Piecewise-linear swing warp in whole notes; keeps every quarter (or eighth for 16th swing) boundary fixed. */
-    fun swing(x: Double, feel: RhythmicFeel): Double {
+    fun swing(x: Double, feel: RhythmicFeel, length: Double = Double.MAX_VALUE): Double {
         val cell = when (feel) { RhythmicFeel.STRAIGHT -> return x; RhythmicFeel.SWING_SIXTEENTH -> 1.0 / 8; else -> 1.0 / 4 }
         val k = floor(x / cell + 1e-9)
+        // An incomplete last cell (7/8, 3/8, pickups) stays straight, so swing never changes the bar's length.
+        if ((k + 1) * cell > length + 1e-12) return x
         val r = (x - k * cell).coerceAtLeast(0.0)
         val half = cell / 2
         val warped = if (r <= half) r * (2.0 / 3.0 * cell) / half else 2.0 / 3.0 * cell + (r - half) * (cell / 3.0) / half

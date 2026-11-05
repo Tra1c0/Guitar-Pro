@@ -34,11 +34,14 @@ class ScorePlaybackCompiler(private val repeats: RepeatCompiler = UnfoldingRepea
     private fun clicks(project: Project, spans: List<RouteSpan>): List<MetronomeClick> = buildList {
         for (span in spans) {
             val signature = project.measures[span.measureIndex].signature
-            val beat = if (signature.denominator == 8 && signature.numerator % 3 == 0 && signature.numerator > 3) Fraction.of(3, 8) else Fraction.of(1, signature.denominator.toLong())
-            var offset = Fraction.ZERO
+            val beat = metronomeBeat(signature)
+            // A pickup is the end of a full bar: its clicks fall on the bar's last beats and none of them is beat 1.
+            val full = signature.length()
+            val shift = if (span.length < full) full + span.length * Fraction.of(-1) else Fraction.ZERO
+            var offset = beat * Fraction.of(kotlin.math.ceil(shift.toDouble() / beat.toDouble() - 1e-9).toLong()) + shift * Fraction.of(-1)
             var k = 0
             while (offset < span.length && k < 256) {
-                add(MetronomeClick(span.frameAt(offset.toDouble()).roundToLong(), if (k == 0) 0 else 1))
+                add(MetronomeClick(span.frameAt(offset.toDouble()).roundToLong(), if (offset + shift == Fraction.ZERO) 0 else 1))
                 offset += beat; k++
             }
         }
@@ -47,7 +50,7 @@ class ScorePlaybackCompiler(private val repeats: RepeatCompiler = UnfoldingRepea
     private class Ev(
         val noteId: EntityId, val trackIndex: Int, val trackId: EntityId, var frame: Double, var end: Double,
         val pitch: Pitch, var velocity: Int, val string: Int?, val articulations: List<Articulation>,
-        val routeIndex: Int, var sounding: Double, val marks: Set<NoteMark>, var links: List<NoteLink>,
+        val routeIndex: Int, var sounding: Double, var marks: Set<NoteMark>, var links: List<NoteLink>,
         var slide: Articulation.Slide?, val grace: Boolean,
     ) {
         val curve = ArrayList<CurvePoint>()
@@ -65,11 +68,16 @@ class ScorePlaybackCompiler(private val repeats: RepeatCompiler = UnfoldingRepea
         var tremolo: WrittenDuration? = null
         var trill: Pair<Double, WrittenDuration>? = null
         var spanRef: RouteSpan? = null
+        /** End of the picked part (before let ring extends the sound); tremolo counts picks only up to here. */
+        var pickEnd = 0.0
         val legatoOut: Boolean get() = NoteMark.HAMMER_ON in marks || NoteMark.PULL_OFF in marks || links.any { it.kind == LinkKind.HAMMER_ON || it.kind == LinkKind.PULL_OFF }
     }
 
     private class Builder(val project: Project, val sampleRate: Int) {
         val events = ArrayList<Ev>()
+        val tieTargets: Set<EntityId> = buildSet {
+            for (t in project.tracks) for (st in t.staves) for (bar in st.bars) for (v in bar.voices) for (b in v.beats) for (n in b.notes) for (l in n.links) if (l.kind == LinkKind.TIE) add(l.target)
+        }
         val maxRing = 8.0 * sampleRate
 
         fun beat(span: RouteSpan, trackIndex: Int, track: Track, beat: Beat) {
@@ -93,7 +101,8 @@ class ScorePlaybackCompiler(private val repeats: RepeatCompiler = UnfoldingRepea
                 min(span.frameAt(min(length, startOffset + whole)) - f0, (f1 - f0) * 0.9)
             }
             ordered.forEachIndexed { i, note ->
-                val delay = if (ordered.size > 1) spread * i / (ordered.size - 1) else 0.0
+                // A tied continuation is not re-strummed: it must start exactly where its origin ends to merge.
+                val delay = if (ordered.size > 1 && note.id !in tieTargets) spread * i / (ordered.size - 1) else 0.0
                 note(span, trackIndex, track, note, f0 + delay, f1, startOffset)
             }
         }
@@ -122,7 +131,7 @@ class ScorePlaybackCompiler(private val repeats: RepeatCompiler = UnfoldingRepea
             if (NoteMark.HEAVY_ACCENT in marks) velocity = (velocity * 1.32).toInt()
             var sounding = note.pitch.midiNumber + note.pitch.cents / 100.0 + instrument.fineTuneCents / 100.0
             val harmonic = note.articulations.filterIsInstance<Articulation.Harmonic>().firstOrNull()
-            if (harmonic != null) sounding = harmonicPitch(harmonic, note, instrument) ?: sounding
+            if (harmonic != null) sounding = harmonicPitch(harmonic, note, instrument)?.plus(instrument.fineTuneCents / 100.0) ?: sounding
             // Cents are unchecked in files: keep the sounding pitch in a range every voice can render in bounded time.
             sounding = if (sounding.isFinite()) sounding.coerceIn(-24.0, 151.0) else note.pitch.midiNumber.toDouble()
             val ev = Ev(note.id, trackIndex, track.id, start, max(start + 1, end), note.pitch, velocity.coerceIn(1, 127), note.string, note.articulations, span.routeIndex, sounding, marks, note.links,
@@ -199,6 +208,8 @@ class ScorePlaybackCompiler(private val repeats: RepeatCompiler = UnfoldingRepea
                         if (n.curve.isNotEmpty()) e.curve.addAll(n.curve.map { CurvePoint(it.frame + shift, it.cents) })
                         if (e.vibrato == null) n.vibrato?.let { e.vibrato = it.copy(startFrame = it.startFrame + shift) }
                         e.end = n.end; e.letRing = e.letRing || n.letRing; e.links = n.links; e.slide = n.slide ?: e.slide
+                        // The tied note's own hammer-on/pull-off decides how the following note is attacked.
+                        e.marks = e.marks - LEGATO_MARKS + n.marks.intersect(LEGATO_MARKS)
                         n.removed = true
                     }
                     val n = next()
@@ -214,6 +225,7 @@ class ScorePlaybackCompiler(private val repeats: RepeatCompiler = UnfoldingRepea
                         if (e.legatoOut && touching) n.attack = AttackKind.LEGATO
                         if (e.links.any { it.kind == LinkKind.LEGATO_SLIDE && it.target == n.noteId } && touching) n.attack = AttackKind.LEGATO
                     }
+                    e.pickEnd = e.end
                     if (e.letRing) e.end = max(e.end, min(n?.frame ?: (e.frame + maxRing), e.frame + maxRing))
                     else if (n != null && n.frame < e.end) e.end = max(e.frame + 1, n.frame)
                 }
@@ -226,13 +238,22 @@ class ScorePlaybackCompiler(private val repeats: RepeatCompiler = UnfoldingRepea
                 val span = e.spanRef
                 if ((tremolo != null || trill != null) && span != null) {
                     val rate = (tremolo ?: trill!!.second).length().toDouble()
-                    val step = max(1.0, span.frameAt(min(span.length.toDouble(), span.offsetAt(e.frame) + rate)) - e.frame)
-                    val count = ceil((e.end - e.frame) / step).toInt().coerceIn(1, 512)
+                    // Step at the local tempo; near the barline measure it on the bar's last stretch instead of clamping it short.
+                    val len = span.length.toDouble(); val o = span.offsetAt(e.frame)
+                    val step = max(1.0, if (o + rate <= len) span.frameAt(o + rate) - e.frame else span.frameAt(len) - span.frameAt(max(0.0, len - rate)))
+                    val picked = (if (e.pickEnd > e.frame) e.pickEnd else e.end) - e.frame
+                    val count = ceil(picked / step - 1e-9).toInt().coerceIn(1, 512)
                     for (k in 0 until count) {
                         val s = e.frame + k * step
-                        val piece = Ev(e.noteId, e.trackIndex, e.trackId, s, min(e.end, s + step), e.pitch, e.velocity, e.string, e.articulations, e.routeIndex,
+                        val last = k == count - 1
+                        val pieceEnd = if (last) e.end else min(e.end, s + step)
+                        val piece = Ev(e.noteId, e.trackIndex, e.trackId, s, pieceEnd, e.pitch, e.velocity, e.string, e.articulations, e.routeIndex,
                             e.sounding + if (trill != null && k % 2 == 1) trill.first else 0.0, e.marks, e.links, null, false)
                         piece.palmMute = e.palmMute; piece.dead = e.dead; piece.harmonic = e.harmonic
+                        // Each pick keeps the note's sound: bend/slide curve for its window, vibrato, let ring on the last pick, drum kit settings.
+                        piece.stroke = e.stroke; piece.choke = e.choke; piece.gain = e.gain; piece.pan = e.pan; piece.letRing = e.letRing && last
+                        e.vibrato?.let { v -> piece.vibrato = v.copy(startFrame = (v.startFrame - (s - e.frame).roundToLong()).coerceAtLeast(0)) }
+                        piece.curve.addAll(sliceCurve(e.curve, (s - e.frame).roundToLong(), (pieceEnd - e.frame).roundToLong()))
                         piece.attack = if (trill != null && k > 0) AttackKind.LEGATO else if (k == 0) e.attack else AttackKind.PICK
                         if (k == 0) piece.velocity = e.velocity else piece.velocity = (e.velocity * 0.92).toInt().coerceIn(1, 127)
                         expanded += piece
@@ -333,5 +354,30 @@ class ScorePlaybackCompiler(private val repeats: RepeatCompiler = UnfoldingRepea
             for (p in sorted) if (out.isEmpty() || p.frame > out.last().frame) out += p else out[out.lastIndex] = p
             return if (out.all { abs(it.cents) < 1e-9 }) emptyList() else out
         }
+    }
+}
+
+private val LEGATO_MARKS = setOf(NoteMark.HAMMER_ON, NoteMark.PULL_OFF)
+
+/** Metronome beat: compound meters (6/8, 9/8, 12/8, 6/16 …) click on dotted beats. */
+fun metronomeBeat(signature: TimeSignature): Fraction =
+    if ((signature.denominator == 8 || signature.denominator == 16) && signature.numerator % 3 == 0 && signature.numerator > 3) Fraction.of(3, signature.denominator.toLong())
+    else Fraction.of(1, signature.denominator.toLong())
+
+/** The part of [curve] inside [from, to) (frames relative to the note), re-based to [from], with the value at [from] as first point. */
+private fun sliceCurve(curve: List<CurvePoint>, from: Long, to: Long): List<CurvePoint> {
+    if (curve.isEmpty()) return emptyList()
+    fun at(f: Long): Double {
+        if (f <= curve.first().frame) return curve.first().cents
+        for (i in 1 until curve.size) if (f <= curve[i].frame) {
+            val a = curve[i - 1]; val b = curve[i]
+            return if (b.frame <= a.frame) b.cents else a.cents + (b.cents - a.cents) * (f - a.frame).toDouble() / (b.frame - a.frame)
+        }
+        return curve.last().cents
+    }
+    return buildList {
+        add(CurvePoint(0, at(from)))
+        for (p in curve) if (p.frame > from && p.frame < to) add(CurvePoint(p.frame - from, p.cents))
+        add(CurvePoint(to - from, at(to)))
     }
 }

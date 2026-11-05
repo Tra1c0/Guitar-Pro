@@ -59,7 +59,8 @@ class UnfoldingRepeatCompiler(private val routeLimit: Int = 20_000) : RepeatComp
             }
             val count = closeCount(index)
             if (count != null) {
-                if (!jumped && pass < count) { pass++; index = repeatStart; viaRepeatJump = true; continue }
+                // Jumping back starts the next pass of this section: a skipped earlier volta must not reset it to pass 1.
+                if (!jumped && pass < count) { pass++; index = repeatStart; viaRepeatJump = true; pendingReset = false; continue }
                 pendingReset = true
             }
             if (!jumped) {

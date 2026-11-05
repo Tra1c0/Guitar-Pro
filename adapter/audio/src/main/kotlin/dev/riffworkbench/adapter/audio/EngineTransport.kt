@@ -257,14 +257,27 @@ class EngineTransport(
 
     fun shutdown() { poller?.cancel(); poller = null; host.stop(); publish(TransportStatus.STOPPED, null) }
 
+    /**
+     * One regular bar of the starting bar's meter at the tempo where playback starts: a pickup, a fermata or a tempo
+     * change later in the first bar must not shorten or stretch the count-in.
+     */
     private fun countIn(plan: PlaybackPlan, from: Long): Pair<Long, LongArray> {
         val bars = settings.countInBars.coerceIn(0, 4)
         if (bars == 0) return 0L to LongArray(0)
         val span = plan.spanAt(from) ?: return 0L to LongArray(0)
-        val clicks = plan.clicks.filter { it.frame >= span.startFrame && it.frame < span.endFrame }
-        val barFrames = span.endFrame - span.startFrame
-        if (clicks.isEmpty() || barFrames <= 0) return 0L to LongArray(0)
-        val offsets = (0 until bars).flatMap { b -> clicks.map { b * barFrames + (it.frame - span.startFrame) } }
+        val p = project ?: return 0L to LongArray(0)
+        val signature = p.measures.getOrNull(span.measureIndex)?.signature ?: return 0L to LongArray(0)
+        val o = Fraction.of(kotlin.math.round(span.offsetAt(from.toDouble()) * 3840).toLong(), 3840)
+        // Tempo in effect at the start point (written order), independent of fermatas or swing in that bar.
+        val index = p.measures.withIndex().associate { it.value.id to it.index }
+        val qpm = p.tempo.filter { t -> val i = index[t.position.measureId] ?: Int.MAX_VALUE; i < span.measureIndex || (i == span.measureIndex && t.position.offset <= o) }
+            .maxWithOrNull(compareBy({ index[it.position.measureId] ?: 0 }, { it.position.offset }))?.quarterNotesPerMinute ?: p.tempo.firstOrNull()?.quarterNotesPerMinute ?: 120.0
+        val framesPerWhole = 4.0 * 60.0 / qpm * plan.sampleRate / plan.speed
+        if (!framesPerWhole.isFinite() || framesPerWhole <= 0.0) return 0L to LongArray(0)
+        val beat = dev.riffworkbench.playback.metronomeBeat(signature).toDouble() * framesPerWhole
+        val barFrames = kotlin.math.round(signature.length().toDouble() * framesPerWhole).toLong()
+        val perBar = kotlin.math.round(signature.length().toDouble() / dev.riffworkbench.playback.metronomeBeat(signature).toDouble()).toInt().coerceIn(1, 64)
+        val offsets = (0 until bars).flatMap { bar -> (0 until perBar).map { k -> bar * barFrames + kotlin.math.round(k * beat).toLong() } }
         return bars * barFrames to offsets.toLongArray()
     }
 
