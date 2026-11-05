@@ -13,7 +13,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.job
 import kotlinx.coroutines.test.*
 import org.junit.Assert.*
-import org.junit.Ignore
 import org.junit.Test
 
 /**
@@ -151,7 +150,6 @@ class Qa18StartPositionViewModelTest {
     }
 
     // ---------------------------------------------------------------- R2: natural end, play again
-    @Ignore("D5-1: EngineTransport.play() restarts at the top after a natural end because the last block still reports `ended`; fixed separately in adapter/audio")
     @Test fun r2_afterTheEndPlayStartsAtTheCursor() = harness { f ->
         editorTap(f, 2); settle(f.vm)                             // cursor in bar 2 (the user works there)
         f.vm.togglePlay(); awaitStatus(f, TransportStatus.PLAYING)

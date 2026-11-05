@@ -30,7 +30,7 @@ class ViewportScrollTest {
     private val MARGIN = 24f
 
     private fun project(bars: Int, extraNotes: Boolean = true): Project {
-        val session = EditorSession(ProjectFactory(ids).create("QA18 D5"), ids)
+        val session = EditorSession(ProjectFactory(ids).demo("QA18 D5"), ids)
         repeat(bars - 2) { session.dispatch(EditorCommand.AddMeasure(TimeSignature(4, 4))) }
         session.state.value.project.measures.forEachIndexed { i, m ->
             session.select(session.state.value.selection.copy(measureId = m.id, offset = Fraction.ZERO, string = 0))

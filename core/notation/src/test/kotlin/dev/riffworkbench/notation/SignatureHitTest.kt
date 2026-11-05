@@ -24,7 +24,7 @@ class SignatureHitTest {
     }
 
     @Test fun signatureGlyphsExistForBarOneAndForEverySignatureChange() {
-        val p = ProjectFactory(ids).create("Sig") // 4/4 then 7/8 today
+        val p = ProjectFactory(ids).demo("Sig") // demo shape: 4/4 then 7/8
         val l = ScoreLayouter.layout(LayoutRequest(p, 0, style, editGrid = Fraction.of(1, 16)))
         val (m0, m1) = l.measures
         assertEquals(listOf("4", "4"), signatureGlyphs(l, m0).map { it.text })
@@ -54,7 +54,7 @@ class SignatureHitTest {
 
     /** A bar with an unchanged signature shows the glyphs again when it opens a wrapped system (Layout.kt:406 `first`). */
     @Test fun firstBarOfAWrappedSystemRepeatsTheSignatureAlthoughItDidNotChange() {
-        val e = EditorSession(ProjectFactory(ids).create("Wrap"), ids)
+        val e = EditorSession(ProjectFactory(ids).demo("Wrap"), ids)
         repeat(6) { e.dispatch(EditorCommand.AddMeasure(TimeSignature(7, 8))) } // bars 1..7 are all 7/8 after bar 0
         val p = e.state.value.project
         // ~2 bars per system: a 7/8 bar on a 1/16 grid needs 14 columns x 30 units (Layout.kt:203-205) plus padding.
@@ -81,7 +81,7 @@ class SignatureHitTest {
 
     /** Today a tap on the glyphs is routed by ScoreView.kt:149-150 to columnAt(): it selects beat 0 of that bar, nothing else. */
     @Test fun aTapOnTheSignatureSelectsBeatZeroOfThatBarToday() {
-        val p = ProjectFactory(ids).create("Tap")
+        val p = ProjectFactory(ids).demo("Tap")
         val l = ScoreLayouter.layout(LayoutRequest(p, 0, style, editGrid = Fraction.of(1, 16)))
         for (m in l.measures) {
             val g = signatureGlyphs(l, m).first()
@@ -99,7 +99,7 @@ class SignatureHitTest {
 
     /** With the standard staff shown the glyphs move to the staff (Layout.kt:415-418); a hit region must follow showStandard. */
     @Test fun signatureGlyphsSitOnTheStandardStaffWhenItIsShown() {
-        val p = ProjectFactory(ids).create("Std")
+        val p = ProjectFactory(ids).demo("Std")
         val l = ScoreLayouter.layout(LayoutRequest(p, 0, style.copy(showTab = false, showStandard = true)))
         val m0 = l.measures[0]; val sys = l.systems[0]
         val tx = m0.contentX - (style.staffSpace * 2.4f + 4f) * 0.55f // timeWidth() without TAB
@@ -114,7 +114,7 @@ class SignatureHitTest {
 
     /** SVG/PDF only consume glyphs/glyphsBySystem/systems; an extra box list on ScoreLayout leaves their output unchanged. */
     @Test fun svgOutputDoesNotDependOnHitBoxes() {
-        val p = ProjectFactory(ids).create("Svg")
+        val p = ProjectFactory(ids).demo("Svg")
         val a = SvgExport.render(p, listOf(0))
         val b = SvgExport.render(p, listOf(0))
         assertEquals(a, b)
