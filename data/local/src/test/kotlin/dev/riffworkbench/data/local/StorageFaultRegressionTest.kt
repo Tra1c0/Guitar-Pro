@@ -102,3 +102,19 @@ class StorageFaultRegressionTest {
         assertTrue(repo.issues.value.any { it.code == "project_unreadable" })
     }
 }
+
+class CompactStorageRegressionTest {
+    private var n = 0
+    private val ids = IdSource { EntityId("c-${n++}") }
+    /** Pretty-printed JSON cost ~2 KB per note (mostly indentation) and pushed mid-size scores past the 64 MiB limit. */
+    @Test fun projectsAreStoredCompactlyAndOldPrettyFilesStillLoad() {
+        val e = EditorSession(ProjectFactory(ids).create("C"), ids)
+        e.dispatch(EditorCommand.PutNote(fret = 3))
+        val p = e.state.value.project
+        val text = projectJson.encodeToString(p)
+        assertFalse(text.contains("\n"))
+        val pretty = kotlinx.serialization.json.Json { encodeDefaults = true; prettyPrint = true; classDiscriminator = "type" }.encodeToString(Project.serializer(), p)
+        assertEquals(p, decodeProject(pretty.toByteArray()))
+        assertEquals(p, decodeProject(text.toByteArray()))
+    }
+}

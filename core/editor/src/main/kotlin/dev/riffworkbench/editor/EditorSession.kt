@@ -78,7 +78,7 @@ sealed interface EditorCommand {
 
 /** Single-owner dispatcher: call selection + commands on the same UI dispatcher. No adapter mutates this state. */
 class EditorSession(project: Project, private val ids: IdSource, private val historyLimit: Int = 200) {
-    private data class History(val project: Project, val selection: Selection)
+    private data class History(val project: Project, val selection: Selection, val diagnostics: List<Diagnostic>)
     private val undo = ArrayDeque<History>()
     private val redo = ArrayDeque<History>()
     private val mutable = MutableStateFlow(EditorState(project, initialSelection(project), diagnostics = ScoreValidator.validate(project)))
@@ -108,7 +108,7 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
             val diagnostics = ScoreValidator.validate(after)
             if (diagnostics.any { it.severity == Severity.ERROR }) Outcome.Failure(FailureCode.VALIDATION, diagnostics.first { it.severity == Severity.ERROR }.message, diagnostics)
             else {
-                undo.addLast(History(before.project, before.selection))
+                undo.addLast(History(before.project, before.selection, before.diagnostics))
                 while (undo.size > historyLimit) undo.removeFirst()
                 redo.clear()
                 mutable.value = EditorState(after, validSelection(after, before.selection), undo.isNotEmpty(), false, diagnostics)
@@ -123,9 +123,10 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
         if (from.isEmpty()) return Outcome.Failure(FailureCode.VALIDATION, "Keine weitere Änderung")
         val current = state.value
         val next = from.removeLast()
-        to.addLast(History(current.project, current.selection))
+        to.addLast(History(current.project, current.selection, current.diagnostics))
         val p = next.project.copy(revision = current.project.revision + 1)
-        mutable.value = EditorState(p, validSelection(p, next.selection), undo.isNotEmpty(), redo.isNotEmpty(), ScoreValidator.validate(p))
+        // A history entry was valid when it was recorded; its diagnostics do not depend on the revision number.
+        mutable.value = EditorState(p, validSelection(p, next.selection), undo.isNotEmpty(), redo.isNotEmpty(), next.diagnostics)
         return Outcome.Success(Unit)
     }
 
@@ -292,11 +293,27 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
 
     /** A tie that joined two notes on one string must not end up spanning two strings (playback groups ties per string). */
     private fun requireTiesStayOnTheirString(before: Project, after: Project) {
-        fun strings(p: Project): Map<EntityId, Int?> = p.tracks.flatMap { it.staves }.flatMap { it.bars }.flatMap { it.voices }.flatMap { it.beats }.flatMap { it.notes }.associate { it.id to it.string }
-        val old = strings(before); val now = strings(after)
+        // Only bars that changed can hold notes whose string changed; unchanged bars are shared instances.
+        val moved = HashSet<EntityId>()
+        for ((ti, t) in after.tracks.withIndex()) {
+            val oldTrack = before.tracks.getOrNull(ti)?.takeIf { it.id == t.id } ?: before.tracks.firstOrNull { it.id == t.id } ?: continue
+            if (oldTrack === t) continue
+            val oldStrings = HashMap<EntityId, Int?>()
+            for ((si, st) in t.staves.withIndex()) {
+                val os = oldTrack.staves.getOrNull(si) ?: continue
+                if (os === st) continue
+                for ((bi, bar) in st.bars.withIndex()) { val ob = os.bars.getOrNull(bi) ?: continue; if (ob === bar) continue
+                    for (v in ob.voices) for (b in v.beats) for (n in b.notes) oldStrings[n.id] = n.string
+                    for (v in bar.voices) for (b in v.beats) for (n in b.notes) if (n.id in oldStrings && oldStrings[n.id] != n.string) moved += n.id }
+            }
+        }
+        if (moved.isEmpty()) return
+        val strings = HashMap<EntityId, Int?>()
+        for (t in after.tracks) for (st in t.staves) for (bar in st.bars) for (v in bar.voices) for (b in v.beats) for (n in b.notes) strings[n.id] = n.string
         for (t in after.tracks) for (st in t.staves) for (bar in st.bars) for (v in bar.voices) for (b in v.beats) for (n in b.notes) for (l in n.links) if (l.kind == LinkKind.TIE) {
-            val a = now[n.id]; val z = now[l.target]
-            if (a != null && z != null && a != z && (old[n.id] != a || old[l.target] != z)) throw IllegalArgumentException("Gebundene Noten müssen auf derselben Saite bleiben")
+            if (n.id !in moved && l.target !in moved) continue
+            val a = strings[n.id]; val z = strings[l.target]
+            if (a != null && z != null && a != z) throw IllegalArgumentException("Gebundene Noten müssen auf derselben Saite bleiben")
         }
     }
 

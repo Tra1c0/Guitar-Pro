@@ -226,14 +226,25 @@ internal object NoteEdits {
 
 /** Keeps note links consistent after deletions. */
 internal object Links {
+    /**
+     * Drops links (and slide targets) that point at notes which no longer exist. Unchanged parts keep their identity, and a
+     * project without dangling links is returned as is: undo history relies on structural sharing (a full copy per edit
+     * made the 200-step history hold 200 copies of the score).
+     */
     fun prune(p: Project, removed: Set<EntityId> = emptySet()): Project {
-        val alive = p.tracks.flatMap { it.staves }.flatMap { it.bars }.flatMap { it.voices }.flatMap { it.beats }.flatMap { it.notes }.map { it.id }.toSet() - removed
-        return p.copy(tracks = p.tracks.map { t -> t.copy(staves = t.staves.map { st -> st.copy(bars = st.bars.map { bar -> bar.copy(voices = bar.voices.map { v -> v.copy(beats = v.beats.map { b ->
-            b.copy(notes = b.notes.map { n ->
-                val links = n.links.filter { it.target in alive }
-                val arts = n.articulations.map { a -> if (a is Articulation.Slide && a.target != null && a.target !in alive) a.copy(target = null) else a }
-                if (links.size == n.links.size && arts == n.articulations) n else n.copy(links = links, articulations = arts)
-            })
-        }) }) }) }) })
+        val alive = HashSet<EntityId>()
+        for (t in p.tracks) for (st in t.staves) for (bar in st.bars) for (v in bar.voices) for (b in v.beats) for (n in b.notes) alive += n.id
+        alive.removeAll(removed)
+        fun dangling(n: Note) = n.links.any { it.target !in alive } || n.articulations.any { it is Articulation.Slide && it.target != null && it.target !in alive }
+        var any = false
+        for (t in p.tracks) for (st in t.staves) for (bar in st.bars) for (v in bar.voices) for (b in v.beats) for (n in b.notes) if (dangling(n)) { any = true }
+        if (!any) return p
+        fun <T> List<T>.mapKeep(f: (T) -> T): List<T> { var changed = false; val out = map { val r = f(it); if (r !== it) changed = true; r }; return if (changed) out else this }
+        return p.copy(tracks = p.tracks.mapKeep { t -> t.staves.mapKeep { st -> st.bars.mapKeep { bar -> bar.voices.mapKeep { v -> v.beats.mapKeep { b ->
+            b.notes.mapKeep { n -> if (!dangling(n)) n else n.copy(links = n.links.filter { it.target in alive },
+                articulations = n.articulations.map { a -> if (a is Articulation.Slide && a.target != null && a.target !in alive) a.copy(target = null) else a }) }
+                .let { if (it === b.notes) b else b.copy(notes = it) }
+        }.let { if (it === v.beats) v else v.copy(beats = it) } }.let { if (it === bar.voices) bar else bar.copy(voices = it) } }
+            .let { if (it === st.bars) st else st.copy(bars = it) } }.let { if (it === t.staves) t else t.copy(staves = it) } })
     }
 }

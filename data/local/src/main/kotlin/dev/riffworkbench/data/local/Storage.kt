@@ -11,7 +11,8 @@ import java.util.UUID
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.*
 
-internal val projectJson = Json { encodeDefaults = true; prettyPrint = true; ignoreUnknownKeys = false; classDiscriminator = "type" }
+// Compact on disk: pretty printing made a 75k-note score 157 MB (mostly indentation) and pushed it past the 64 MiB limit.
+internal val projectJson = Json { encodeDefaults = true; prettyPrint = false; ignoreUnknownKeys = false; classDiscriminator = "type" }
 internal fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
 /** Same-directory temp, fsynced payload, atomic rename. Never falls back to a non-atomic replacement. */
