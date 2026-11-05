@@ -19,10 +19,18 @@ sealed interface HostCommand {
     /** Replaces the program at a new speed and maps the playhead via the old plan's route position. */
     /** New plan plus its loop frames (-1 = none), applied in one step so no block plays the new plan with the old loop. */
     class Reprogram(val program: EngineProgram, val mapFrom: PlaybackPlan?, val loopStart: Long = -2, val loopEnd: Long = -2) : HostCommand
+    /**
+     * Replaces the engine (sample bank arrived after the session started). Posted by [RealtimeHost.refreshEngine] only
+     * while nothing plays: the new engine starts empty, the transport re-installs rack, mix, clips, program and loop.
+     */
+    class Engine(val engine: SynthEngine) : HostCommand
 }
 
 /** What the UI may read; produced by the control thread from data the audio thread published. */
-/** [programs] counts Install/Reprogram commands the render thread has applied; [planFrame] belongs to that program. */
+/**
+ * [programs] counts Install/Reprogram commands the render thread has applied; [planFrame] belongs to that program.
+ * [plays] counts Play commands consumed: applied by the render thread, or discarded with a dead session's queue in [RealtimeHost.start].
+ */
 data class HostSnapshot(val playing: Boolean, val countingIn: Boolean, val ended: Boolean, val planFrame: Long, val loopsCompleted: Long, val underruns: Long, val running: Boolean, val programs: Long = 0, val plays: Long = 0)
 
 /**
@@ -64,7 +72,9 @@ class RealtimeHost(
     /** Set when the render thread stopped because of an unexpected error (device or driver). */
     @Volatile var lastError: String? = null; private set
     @Volatile private var thread: Thread? = null
-    private var engine: SynthEngine? = null
+    @Volatile private var engine: SynthEngine? = null
+    /** Whether the newest engine built (or posted via [HostCommand.Engine]) has the sample bank. */
+    @Volatile private var engineHasBank = false
     private var buffer = FloatArray(0)
     // Published by the audio thread.
     private val ringSize = 1024
@@ -79,14 +89,23 @@ class RealtimeHost(
     @Volatile private var lastPlan = 0L
     /** Install/Reprogram commands applied by the render thread (render thread writes, readers see it via the block ring). */
     @Volatile private var programs = 0L
-    /** Play commands applied by the render thread. */
+    /** Play commands consumed (applied by the render thread, or dropped by [start] with a dead session's queue). */
     @Volatile private var plays = 0L
     private var idleBlocks = 0L
+    /**
+     * Handshake between [post] and the idle stop in [renderBlock]: the render thread decides "queue empty -> stop" and a
+     * poster reads [running] under the same monitor, so a command posted into the block that trips the idle stop is either
+     * drained by the thread (it goes on) or its poster learns that the host is down and restarts it. The audio thread
+     * takes this uncontended monitor once per idle stop, while nothing sounds.
+     */
+    private val idleLock = Any()
+    /** Plays dropped by [start] from a dead session's queue (diagnostics, tests). */
+    @Volatile var droppedPlays = 0L; private set
 
     val isRunning: Boolean get() = running
 
     @Synchronized fun start(): Outcome<SinkFormat> {
-        format?.let { if (running) return Outcome.Success(it) }
+        format?.let { if (synchronized(idleLock) { running }) return Outcome.Success(it) }
         // A render thread that is winding down (idle stop or error) must finish before a new session reuses the engine;
         // its cleanup never takes this monitor, so joining here cannot deadlock.
         thread?.let { old -> if (old !== Thread.currentThread() && old.isAlive) { old.join(2000); if (old.isAlive) return Outcome.Failure(FailureCode.UNAVAILABLE, "Audio-Thread reagiert nicht", contractId = "C-AUDIO") } }
@@ -98,9 +117,23 @@ class RealtimeHost(
         val previous = engine
         val bank = bankProvider()
         engine = if (previous != null && previous.sampleRate == f.sampleRate && previous.hasBank == (bank != null)) previous else SynthEngine(f.sampleRate, maxOf(1024, f.blockFrames), bank)
+        engineHasBank = bank != null
         buffer = FloatArray(f.blockFrames * 2)
         written = 0; blocks = 0; idleBlocks = 0
-        running = true
+        synchronized(idleLock) {
+            // Leftovers of the dead session. State commands (rack, mix, clips, program, loop, pause, seek) still describe
+            // what the transport wants and are applied by the first block as before - dropping them would desynchronise a
+            // host restarted by preview() (which re-posts only rack and mix). A Play or Preview is an action: its poster
+            // re-posts it after restarting the host (EngineTransport reads post()'s result), so one still here was never
+            // re-posted (the restart failed, or the press was answered with "unavailable") and must not fire now.
+            val leftovers = generateSequence { commands.poll() }.toList()
+            for (c in leftovers) when (c) {
+                is HostCommand.Play -> { plays++; droppedPlays++ }
+                is HostCommand.Preview -> Unit
+                else -> commands.add(c)
+            }
+            running = true
+        }
         val session = ++generation
         thread = threadStarter("riff-audio") {
             try { while (running && renderBlock()) Unit }
@@ -115,7 +148,7 @@ class RealtimeHost(
     }
 
     @Synchronized fun stop() {
-        running = false
+        synchronized(idleLock) { running = false }
         thread?.let { if (it !== Thread.currentThread()) it.join(2000) }
         thread = null
         closeSink()
@@ -124,15 +157,38 @@ class RealtimeHost(
     @Volatile private var generation = 0
     @Synchronized private fun closeSink() { sinkRef.getAndSet(null)?.close() }
 
-    fun post(command: HostCommand) { commands.add(command) }
+    /**
+     * Queues [command] for the next block. Returns whether a live render thread will drain it; false means the host has
+     * stopped (idle stop or error) - also when it decided to stop while this command was being posted - and the caller
+     * must [start] it again and re-post (start() discards a dead session's Play/Preview commands).
+     */
+    fun post(command: HostCommand): Boolean { commands.add(command); return synchronized(idleLock) { running } }
+
+    /**
+     * The sample bank became available (or went away) after this session's engine was built - AppContainer loads it in
+     * the background, so a Play right after process start may have begun with modelled strings. Posts a replacement
+     * engine for the next block boundary and returns true; the caller must only do this while nothing plays (the new
+     * engine starts empty) and then re-install rack, mix, clips, program and loop. While voices of the old engine are
+     * still releasing (right after a stop) the swap would cut them: it is skipped and tried again at the next start.
+     * Allocation happens on the caller's thread.
+     */
+    fun refreshEngine(): Boolean {
+        val f = format ?: return false
+        if (!running || lastVoices > 0) return false
+        val bank = bankProvider()
+        if (engineHasBank == (bank != null)) return false
+        engineHasBank = bank != null
+        return post(HostCommand.Engine(SynthEngine(f.sampleRate, maxOf(1024, f.blockFrames), bank)))
+    }
 
     /** One audio cycle. Public for deterministic tests that drive the host without a thread. */
     fun renderBlock(): Boolean {
         val s = sink ?: return false
-        val e = engine ?: return false
+        var e = engine ?: return false
         val f = format ?: return false
         while (true) {
             when (val c = commands.poll() ?: break) {
+                is HostCommand.Engine -> { e = c.engine; engine = e }
                 is HostCommand.Install -> { e.install(c.program); programs++ }
                 is HostCommand.Rack -> e.installRack(c.rack)
                 is HostCommand.Mix -> e.setMix(c.mix)
@@ -174,7 +230,14 @@ class RealtimeHost(
         val accepted = s.write(buffer, frames)
         written += accepted
         idleBlocks = if (e.playing || e.countingIn || e.voicesInUse > 0) 0 else idleBlocks + 1
-        if (idleBlocks * frames > idleStopSeconds * f.sampleRate) { running = false; return false }
+        if (idleBlocks * frames > idleStopSeconds * f.sampleRate) {
+            // A command that arrived while this block was written (the user's Play at the idle boundary) keeps the
+            // thread alive for the next block, which drains it; see [idleLock].
+            synchronized(idleLock) {
+                if (!running) return false
+                if (commands.isEmpty()) { running = false; return false }
+            }
+        }
         return accepted == frames
     }
 
