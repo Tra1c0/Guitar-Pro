@@ -80,6 +80,17 @@ class WorkspaceViewModel(
         try { s.select(adjusted) } catch (e: IllegalArgumentException) { return }
         publish(); mutableInput.value = input.value.copy(buffer = "")
     }
+    /** A tap on one cell (drum grid, fretboard) targets exactly that cell, also while range mode is on; false if it does not exist. */
+    fun selectCell(selection: Selection): Boolean {
+        val s = session ?: return false
+        try { s.select(selection.copy(rangeEnd = null)) } catch (e: IllegalArgumentException) { return false }
+        publish(); mutableInput.value = input.value.copy(buffer = "")
+        return true
+    }
+    fun putNoteAt(string: Int, fret: Int) {
+        val selection = state.value.editor?.selection ?: return
+        if (selectCell(selection.copy(string = string))) command(EditorCommand.PutNote(fret = fret, duration = input.value.duration))
+    }
     fun selectRange(endMeasure: EntityId?) { session?.let { s -> runCatching { s.select(s.state.value.selection.copy(rangeEnd = endMeasure)) }; publish() } }
     fun setRangeMode(enabled: Boolean) { mutableInput.value = input.value.copy(rangeMode = enabled); if (!enabled) selectRange(null) }
 
@@ -169,7 +180,7 @@ class WorkspaceViewModel(
     }
     fun toggleDrum(trackId: EntityId, measureId: EntityId, offset: Fraction, midi: Int) {
         val selection = state.value.editor?.selection ?: return
-        select(selection.copy(trackId = trackId, measureId = measureId, offset = offset, string = 0))
+        if (!selectCell(selection.copy(trackId = trackId, measureId = measureId, offset = offset, string = 0))) return
         if (command(EditorCommand.ToggleDrum(midi, input.value.duration)) is Outcome.Success) previewSelected(midi)
     }
 
@@ -206,7 +217,7 @@ class WorkspaceViewModel(
         val before = active.state.value.project.revision
         val result = active.dispatch(command)
         if (result is Outcome.Failure) showNotice(result.message)
-        else if (active.state.value.project.revision != before) { lastCommand = command; enqueueSave() }
+        else if (active.state.value.project.revision != before) { if (command !is EditorCommand.Replace) lastCommand = command; enqueueSave() }
         publish()
         return result
     }
@@ -332,7 +343,12 @@ class WorkspaceViewModel(
         var project = e.project
         val editor = EditorSession(project, ids)
         editor.select(e.selection)
-        chord.frets.forEachIndexed { string, fret -> if (fret != null && string < track.instrument.tuning.size) { editor.select(editor.state.value.selection.copy(string = string)); editor.dispatch(EditorCommand.PutNote(fret = fret, duration = input.value.duration)) } }
+        chord.frets.forEachIndexed { string, fret -> if (fret != null && string < track.instrument.tuning.size) {
+            editor.select(editor.state.value.selection.copy(string = string))
+            // All or nothing: a chord that does not fit here is reported, never written partially or silently dropped.
+            val r = editor.dispatch(EditorCommand.PutNote(fret = fret, duration = input.value.duration))
+            if (r is Outcome.Failure) return showNotice(r.message)
+        } }
         project = editor.state.value.project
         if (command(EditorCommand.Replace(project, e.project.revision)) is Outcome.Success) previewSelected()
     }

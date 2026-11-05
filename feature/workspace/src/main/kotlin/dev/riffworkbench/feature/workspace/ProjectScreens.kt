@@ -312,7 +312,7 @@ import dev.riffworkbench.ui.score.pitchName
             Text(stringResource(R.string.fretboard), style = MaterialTheme.typography.titleMedium)
             Column(Modifier.horizontalScroll(rememberScrollState())) { instrument.tuning.indices.reversed().forEach { string -> Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(pitchName(instrument.tuning[string]), Modifier.width(28.dp))
-                (0..15).forEach { fret -> OutlinedButton(onClick = { vm.select(state.selection.copy(string = string)); vm.command(EditorCommand.PutNote(fret = fret, duration = vm.input.value.duration)) }, modifier = Modifier.size(48.dp).semanticsLabel("${stringResource(R.string.string_label)} ${string + 1}, $fret"), contentPadding = PaddingValues(0.dp)) { Text("$fret") } }
+                (0..15).forEach { fret -> OutlinedButton(onClick = { vm.putNoteAt(string, fret) }, modifier = Modifier.size(48.dp).semanticsLabel("${stringResource(R.string.string_label)} ${string + 1}, $fret"), contentPadding = PaddingValues(0.dp)) { Text("$fret") } }
             } } }
             HorizontalDivider()
             Text(tr("Akkordbibliothek", "Chord library"), style = MaterialTheme.typography.titleMedium)

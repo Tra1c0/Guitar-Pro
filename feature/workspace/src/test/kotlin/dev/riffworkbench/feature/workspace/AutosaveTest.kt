@@ -94,4 +94,19 @@ class AutosaveTest {
         vm.undo(); advanceUntilIdle()
         assertTrue(repo.stored.tracks.first().staves.first().bars.first().voices.first().beats.isEmpty())
     } }
+    @Test fun cellTapsInRangeModeActOnTheTappedCell() = runTest { harness { vm, repo, _ ->
+        val p = vm.state.value.editor!!.project
+        vm.setRangeMode(true)
+        vm.selectCell(vm.state.value.editor!!.selection.copy(measureId = p.measures[1].id, offset = Fraction.of(1, 4)))
+        vm.putNoteAt(2, 5); advanceUntilIdle()
+        val beat = repo.stored.tracks.first().staves.first().bars[1].voices.first().beats.single()
+        assertEquals(Fraction.of(1, 4), beat.offset); assertEquals(2, beat.notes.single().string); assertEquals(5, beat.notes.single().fret)
+    } }
+    @Test fun aChordThatDoesNotFitIsReportedAndNotRepeatable() = runTest { harness { vm, repo, _ ->
+        vm.select(vm.state.value.editor!!.selection.copy(offset = Fraction.of(15, 16)))
+        vm.setDuration(1)
+        vm.insertChord(ChordDefinition(EntityId("chord-e"), "E", listOf(40, 47, 52, 56, 59, 64), frets = listOf(0, 2, 2, 1, 0, 0))); advanceUntilIdle()
+        assertEquals(0L, repo.stored.revision)
+        assertNotNull(vm.state.value.notice)
+    } }
 }
