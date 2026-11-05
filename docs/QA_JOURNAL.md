@@ -157,3 +157,27 @@ Methoden (neu): (a) unabhängiges Referenz-Orakel für Route, Timing und Artikul
 **Ohne Befund:** Route nach Fix 3000/3000; Timing 16 316 Onsets und 3119 Takte innerhalb 1 Frame; Bindungen/Staccato/Let Ring 600/600; Stimmgerät-Latenz 70–85 ms, keine Anzeigen bei Stille/Rauschen; WAV-Decoder 2322 Varianten bit-exakt, 12 000 Mutationen ohne Ausnahme; WAV-Header aller Bittiefen/Raten/Kanäle korrekt; Clip-Sync sample-genau; Resampler-Chunking identisch zum Einmal-Lauf.
 
 Ergebnis Zyklus 4: **8 + 4 + 1 Defekte bestätigt und repariert** → nicht defektfrei.
+
+### Zyklus 5 — Numerische Referenz der Effekte, Skalierung/Speicher großer Projekte
+
+Methoden (neu): (a) Messung jedes Effekts mit Sinus-Sweeps, Impulsen und Sprüngen gegen seine Parameter und UI-Beschriftungen (Frequenzgang, statische Kennlinien, Zeitkonstanten, RT60, Aliasing per FFT/Goertzel), Mix-Gesetze; (b) Laufzeit-, Allokations- und Heap-Messungen mit großen Projekten (8 Spuren × 200/500/1000 Takte = 30k/75k/150k Noten, mit 256/512-MB-Heap), Durchsatz aller Ex-/Importe; (c) Review der restlichen Feature-Logik (Bibliothek, Einstellungen, Übungs-, Mixer- und Effekt-Bildschirme), Lokalisierung (de/en vollständig) und Barrierefreiheit (Icons, Touch-Ziele) — letztere ohne Befund.
+
+**Bestätigt und repariert — Effekte (`EffectsRegressionTest`, rot → grün):**
+1. Delay- und Hall-Fahnen wurden 6 s nach der letzten Stimme hart abgeschnitten, der eingefrorene Zustand kam bei der nächsten Note zurück. Jetzt Abschaltung erst nach 3 s stillem Ausgang, danach Effekt-Reset.
+2. Jede Effekt-Parameteränderung beim Abspielen schnitt alle klingenden Noten aller Spuren ab (Rack-Tausch mit `releaseAll`). Jetzt bleiben Stimmen und Zustand unveränderter Effekte erhalten.
+3. Master-Limiter sättigte jedes Sample und erreichte nur 0,73 statt der dokumentierten Grenze 0,94 (−24 dB 3. Harmonische bei Vollaussteuerung). Jetzt transparent bis 80 % der Grenze, weiches Knie darüber.
+4. AMP-Gain sprang bei 0,30 um bis zu 4,4 dB (Zuschalten der 2. Stufe). Jetzt Überblendung 0,25–0,35.
+5. OVERDRIVE ohne Oversampling: Rückfaltungen bis −10…−18 dB. Jetzt 4× überabgetastet wie der Amp.
+6. Effekt-Slider zeigten für nicht gesetzte Parameter den Bereichsanfang statt des DSP-Standardwerts (EQ-Mitte −12 statt 0 dB); Kompressor-Slider reichte unter den DSP-Bereich. Gemeinsame Tabelle `EffectDefaults`.
+
+**Bestätigt und repariert — Skalierung (`HistorySharingRegressionTest`, `CompactStorageRegressionTest`, `PracticeRegressionTest`, rot → grün):**
+1. **Regression aus Zyklus 1:** die Link-Bereinigung nach jeder Änderung kopierte den ganzen Partiturbaum → 200 Undo-Schritte hielten 566 MB (200 Takte), bei 500 Takten `OutOfMemoryError`. Jetzt identitätserhaltend (Structural Sharing), keine Kopie ohne hängende Links; Saiten-Prüfung nur für geänderte Takte; Undo/Redo nutzen gespeicherte Diagnosen.
+2. Projekt-JSON mit Pretty-Print: ~2 KB pro Note → ab ~32k Noten über dem 64-MiB-Limit; 500-Takt-Projekte nicht speicherbar, GP-Importe solcher Größe gingen verloren. Jetzt kompakt (alte Dateien laden weiter).
+3. Übungsschleife ging nach Einfügen/Löschen von Takten still verloren, während die UI sie noch anzeigte; Speed-Trainer wurde von jeder Cursorbewegung zurückgesetzt und sein Tempo nicht angezeigt; jede Cursorbewegung beim Abspielen kompilierte die ganze Partitur neu.
+4. (Android, Analyse) „Cursor folgt der Wiedergabe“ wirkte auf dem Übungsbildschirm nicht; Loop-Label zeigte Routenpositionen statt Taktnummern.
+
+**Bewusst nicht geändert / Einschränkungen (dokumentiert):** Volume-Gesetz v²/0,64 (0,8 = 0 dB), konstante Leistung beim Pan; Drum-Element-Pan linear (inkonsistent, gering). Cabinet-Latenz 64 Samples, im Mix nicht kompensiert (Kammfilter bei gedoppelten Spuren mit/ohne Box). Kompressor: Spitzenwert-Detektor mit hartem Knie, Attack auf Sinus ~1,8× länger als der Parameter. Delay-/Chorus-Mixgesetz nie ganz „wet“; keine BPM-Synchronisation. Limiter nur Sample-Peak (kein True Peak). Amp-DC ≈ −35 dB, Rest-Aliasing 19–23 kHz −26…−38 dB. Gate-Hysterese fest. Rack-Tausch vergleicht Effekt-Einheiten auf dem Audio-Thread (kleine Allokation nur bei Benutzeränderung). **Offen:** Jede Bearbeitung validiert weiterhin das ganze Projekt synchron auf dem UI-Thread (500 Takte: PutNote ~170 ms, linear, nicht quadratisch); `insertChord` validiert pro Saite. Eine Verlagerung vom UI-Thread oder inkrementelle Validierung wäre eine Architekturänderung. Die Bibliothek legt das Original-Asset vor dem Speichern ab (bleibt bei Fehlschlag liegen, per Hash dedupliziert). Preset-Wechsel erzeugt zwei Undo-Schritte. `CursorMode` im Modell ist ungenutzt.
+
+**Ohne Befund:** EQ (±0,00 dB an der Mittenfrequenz, Shelves korrekt), Filter, Kompressor unterhalb der Schwelle, Gate, Delay-Timing, Reverb-RT60/Dekorrelation, Chorus, Cabinet-Normierung, Solo/Mute, rampenförmige Gain-Änderungen, Metronompegel; `EngineProgram.prepare` 2 ms; GP7/MusicXML/MIDI/ASCII-Ex- und Importe linear; Autosave läuft abseits des UI-Threads und ist konfliert; Dateinamen-Bereinigung; Lokalisierung de/en vollständig.
+
+Ergebnis Zyklus 5: **6 + 4 Defekte bestätigt und repariert** (davon eine Regression aus Zyklus 1) → nicht defektfrei.
