@@ -181,3 +181,21 @@ Methoden (neu): (a) Messung jedes Effekts mit Sinus-Sweeps, Impulsen und Sprüng
 **Ohne Befund:** EQ (±0,00 dB an der Mittenfrequenz, Shelves korrekt), Filter, Kompressor unterhalb der Schwelle, Gate, Delay-Timing, Reverb-RT60/Dekorrelation, Chorus, Cabinet-Normierung, Solo/Mute, rampenförmige Gain-Änderungen, Metronompegel; `EngineProgram.prepare` 2 ms; GP7/MusicXML/MIDI/ASCII-Ex- und Importe linear; Autosave läuft abseits des UI-Threads und ist konfliert; Dateinamen-Bereinigung; Lokalisierung de/en vollständig.
 
 Ergebnis Zyklus 5: **6 + 4 Defekte bestätigt und repariert** (davon eine Regression aus Zyklus 1) → nicht defektfrei.
+
+### Zyklus 6 — Adversariale Prüfung der eigenen Reparaturen (23f7faa..HEAD) und UI-Verhaltenstests
+
+Methoden (neu): (a) unabhängiges Review aller Änderungen des QA-Zweigs auf eingeführte Fehler, jede Vermutung per Test **auf HEAD (rot) und auf dem Ausgangsstand 23f7faa (grün)** belegt; (b) neue Compose/Robolectric-UI-Tests auf CI: Neuerzeugung der Activity mit offenem Projekt und Bearbeitungen, Erreichbarkeit der Diagnose-Seite (CI-Lauf 41978848129 grün).
+
+**Bestätigte Regressionen aus früheren Zyklen, repariert (`FixReview*Test`, rot → grün):**
+1. Tremolo (Zyklus 4): Anschläge liefen über eine spätere Note derselben Saite (Stimme 2) hinweg.
+2. Metronom (Zyklus 4): jeder kurze Takt wurde als Auftakt behandelt → spätere kurze Takte (Importe) verloren den Downbeat-Akzent. Jetzt nur der erste Takt.
+3. Bindungs-/Saitenprüfung (Zyklus 2): Transponieren der ganzen Spur bzw. Umstimmen mit „Klang behalten“ wurde bei Akkorden mit Bindungen abgelehnt. Prüfung jetzt nur für Einzelnoten-Befehle (MoveToString, PutNote). **Bekannt:** Spurweites Transponieren kann eine Bindung wie vor der QA auf zwei Saiten verteilen (die Platzierung arbeitet pro Beat).
+4. Speed-Trainer (Zyklus 5): startete nach Stopp nicht wieder beim Starttempo.
+5. AMP (Zyklus 5): Die Stufen-Überblendung machte das Preset „Bass · Pick“ (Gain 0,3) 5 dB leiser und verzerrter. Zwei weitere Varianten (Überblendung der fertigen Ausgänge, lineare Überblendung im Fenster 0,3–0,4) wurden gemessen und verworfen: Die Koppelstufe der zweiten Stufe dreht bei tiefen Frequenzen die Phase, beide Varianten senken den Pegel um bis zu 4 dB. **Änderung vollständig zurückgenommen**; der Sprung bei Gain 0,3 ist wieder ein offener Punkt (bräuchte ein Stufen-Redesign).
+6. Effekt-`reset()` (Zyklus 5) allokierte auf dem Audio-Thread (Listenverkettungen) → Schleifen.
+
+**Widerlegt (mit Belegen):** EffectDefaults deckungsgleich mit `Effects.create`; Limiter-Änderung beeinflusst die Sample-Kalibrierung nicht (relativer Vergleich durch denselben Limiter); Rack-Effekt-Wiederverwendung nur bei identischer Einheit (ID) und Stimmsignatur; Archiv „Manifest zuerst“ entspricht dem eigenen Encoder seit jeher; XML-Kindindex, MusicXML-Slot-TreeMap, Tie-Bisektion und MIDI-Bend-Slicing semantisch äquivalent; RouteCompiler-Änderung für weitere Volten-Formen korrekt; Swing-Teilzelle; Einzähler-Tempo; kein Deadlock beim `RealtimeHost.start`-Join; Undo-Diagnosen; ToggleTie-Angrenzung mit Tuplets/Auftakten; Bibliotheks-Summary; System-Bucketing in PDF/ScoreView; NaN-Grenzen umfassen die Modell-Standardwerte.
+
+**Unbelegt, geringes Risiko:** WAV mit zu kleinem `blockAlign` (defekte Schreiber) wird jetzt als CORRUPT abgelehnt statt dekodiert; ein Export-Hinweis nach Drehung landet im alten Compose-State und ist nicht sichtbar (die Datei wird trotzdem vollständig geschrieben).
+
+Ergebnis Zyklus 6: **6 Regressionen bestätigt und repariert** (eine davon durch Rücknahme) → nicht defektfrei. Lehre: Jede Reparatur an Klang und Timing braucht einen Vorher/Nachher-Vergleich der ausgelieferten Presets und Beispiele, nicht nur einen Test des gemeldeten Falls.
