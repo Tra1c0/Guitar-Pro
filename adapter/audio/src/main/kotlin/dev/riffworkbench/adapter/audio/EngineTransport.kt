@@ -161,6 +161,8 @@ class EngineTransport(
     /** Decoded clips for [project] at [rate]; clips that fail to load are skipped and reported through the state reason. */
     private suspend fun clipsFor(project: Project, rate: Int): ClipSet {
         val loader = clipLoader ?: return ClipSet.EMPTY
+        // Only the prepared project's clips stay decoded (up to ~115 MB each): a closed project must not keep its PCM.
+        clipCache.keys.removeAll { k -> k.second != rate || project.audio.clips.none { it.asset == k.first } }
         if (project.audio.clips.isEmpty()) return ClipSet.EMPTY
         val buffers = HashMap<AssetHash, PcmBuffer>()
         for (hash in project.audio.clips.map { it.asset }.distinct()) {
@@ -172,7 +174,6 @@ class EngineTransport(
                 is Outcome.Failure -> mutable.value = mutable.value.copy(reason = "Referenz-Audio: ${r.message}")
             }
         }
-        if (clipCache.size > 8) clipCache.keys.filter { k -> project.audio.clips.none { it.asset == k.first } }.forEach { clipCache.remove(it) }
         return ClipSet.build(project, buffers, rate, settings.speed)
     }
 

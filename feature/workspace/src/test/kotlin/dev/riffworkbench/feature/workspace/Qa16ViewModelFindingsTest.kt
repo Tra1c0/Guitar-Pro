@@ -80,7 +80,7 @@ class Qa16ViewModelFindingsTest {
         val repo = Repository(session.state.value.project.copy(revision = 0))
         val vm = WorkspaceViewModel(repo.stored.id, repo, Snapshots(), exchange, settings, transport, ids, WorkspaceServices(), background = StandardTestDispatcher(testScheduler))
         val store = ViewModelStore(); store.put("test", vm)
-        try { advanceUntilIdle(); block(Fixture(vm, transport, host)) } finally { store.clear(); Dispatchers.resetMain() }
+        try { advanceUntilIdle(); block(Fixture(vm, transport, host)) } finally { store.clear(); transport.shutdown(); Dispatchers.resetMain() }
     }
 
     /** Mirror of WorkspaceViewModel.relayout() for the default view (TAB, no wrap unless [width]). */
