@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -38,26 +41,69 @@ import kotlin.math.roundToLong
     val view by vm.view.collectAsStateWithLifecycle()
     val tuner by vm.tuner.collectAsStateWithLifecycle()
     var speed by remember(practice.speed) { mutableFloatStateOf(practice.speed.toFloat()) }
-    ScrollPage(stringResource(R.string.practice), stringResource(R.string.practice_hint)) {
+    val layout by vm.layout.collectAsStateWithLifecycle()
+    val ws by vm.state.collectAsStateWithLifecycle()
+    val playing = transport.status == TransportStatus.PLAYING
+    val project = ws.editor?.project
+    val baseBpm = project?.tempo?.firstOrNull()?.quarterNotesPerMinute
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Row {
+                    Text("${(practice.speed * 100).toInt()}%", fontFamily = Tabino.Display, fontWeight = FontWeight.Bold, fontSize = 26.sp, color = Tabino.Lime)
+                    Text(" Tempo", fontFamily = Tabino.Display, fontWeight = FontWeight.Bold, fontSize = 26.sp)
+                }
+                Text(baseBpm?.let { "${(it * practice.speed).toInt()} ${tr("von", "of")} ${it.toInt()} BPM" } ?: project?.metadata?.title.orEmpty(),
+                    fontFamily = Tabino.Display, fontWeight = FontWeight.Bold, fontSize = 26.sp, color = Tabino.Faint, maxLines = 1)
+            }
+            transport.position?.let { pos -> project?.measures?.firstOrNull { it.id == pos.position.measureId }?.let { m -> if (playing && practice.visualMetronome) BeatDots(m.signature, pos.position.offset) } }
+        }
         if (transport.status == TransportStatus.UNAVAILABLE || transport.status == TransportStatus.FAILED) NoticeCard(transport.reason ?: stringResource(R.string.transport_unavailable), true)
-        Text("${stringResource(R.string.speed)} · ${(speed * 100).toInt()} %", style = MaterialTheme.typography.titleMedium)
+        TabinoCard(Modifier.fillMaxWidth().height(250.dp)) {
+            practice.loop?.let { l -> Surface(shape = RoundedCornerShape(8.dp), color = Tabino.Lavender.copy(alpha = 0.16f), modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 12.dp).fillMaxWidth().height(24.dp)) {
+                Box(contentAlignment = Alignment.Center) { Text("${tr("Schleife", "Loop")} · ${tr("Takt", "bar")} ${l.start.routeIndex + 1}–${l.end.routeIndex + 1}", style = MaterialTheme.typography.labelMedium, color = Tabino.Lavender) }
+            } }
+            val playhead = transport.position?.takeIf { playing || transport.status == TransportStatus.PAUSED }?.let { it.position.measureId to it.position.offset.toDouble() }
+            ws.editor?.let { e -> dev.riffworkbench.ui.score.ScoreCanvas(layout = layout, cursor = dev.riffworkbench.ui.score.ScoreCursor(e.selection.measureId, e.selection.offset, null, e.selection.rangeEnd),
+                playhead = playhead, follow = true, zoom = view.zoom, onZoom = vm::setZoom, onTap = { tap -> vm.tap(tap.measureId, tap.offset, tap.string); vm.seekToCursor() },
+                modifier = Modifier.weight(1f).fillMaxWidth().padding(6.dp), description = tr("Partitur mit Wiedergabeposition", "Score with playback position")) }
+        }
+        Row(Modifier.fillMaxWidth().height(84.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ChoiceTile(tr("Takt zurück", "Bar back"), false, { vm.moveMeasure(-1); vm.seekToCursor() }, Modifier.weight(1f).fillMaxHeight(), icon = TabinoIcons.Back5, idle = MaterialTheme.colorScheme.surfaceVariant)
+            Surface(onClick = vm::togglePlay, shape = RoundedCornerShape(34.dp), color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.weight(1.5f).fillMaxHeight()) {
+                Box(contentAlignment = Alignment.Center) { Icon(if (playing) TabinoIcons.Pause else TabinoIcons.Play, if (playing) tr("Pause", "Pause") else stringResource(R.string.play), Modifier.size(36.dp)) }
+            }
+            ChoiceTile(tr("Takt weiter", "Bar on"), false, { vm.moveMeasure(1); vm.seekToCursor() }, Modifier.weight(1f).fillMaxHeight(), icon = TabinoIcons.Next5, idle = MaterialTheme.colorScheme.surfaceVariant)
+        }
+        Row(Modifier.fillMaxWidth().height(52.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ChoiceTile("", practice.metronome, { vm.setMetronome(!practice.metronome) }, Modifier.width(52.dp).fillMaxHeight(), icon = TabinoIcons.Metronome, accent = Tabino.Lime,
+                description = stringResource(R.string.metronome), idle = MaterialTheme.colorScheme.surfaceVariant)
+            Surface(onClick = { vm.setSpeed(((practice.speed - 0.05) * 100).let { kotlin.math.round(it) } / 100) }, shape = RoundedCornerShape(26.dp), color = Tabino.Text, contentColor = Tabino.Ink, modifier = Modifier.weight(1f).fillMaxHeight()) {
+                Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) { Icon(TabinoIcons.Minus, tr("5 Prozent langsamer", "5 percent slower"), Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text("5 %", fontFamily = Tabino.Display, fontWeight = FontWeight.Bold, fontSize = 17.sp) }
+            }
+            Surface(onClick = { vm.setSpeed(((practice.speed + 0.05) * 100).let { kotlin.math.round(it) } / 100) }, shape = RoundedCornerShape(26.dp), color = Tabino.Text, contentColor = Tabino.Ink, modifier = Modifier.weight(1f).fillMaxHeight()) {
+                Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) { Icon(TabinoIcons.Plus, tr("5 Prozent schneller", "5 percent faster"), Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text("5 %", fontFamily = Tabino.Display, fontWeight = FontWeight.Bold, fontSize = 17.sp) }
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            val looping = practice.loop != null
+            Surface(onClick = { if (looping) vm.clearLoop() else vm.loopSelection() }, shape = RoundedCornerShape(22.dp), color = if (looping) Tabino.Lavender else MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = if (looping) Tabino.Ink else MaterialTheme.colorScheme.onSurface, modifier = Modifier.height(44.dp)) {
+                Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(TabinoIcons.Loop, null, Modifier.size(18.dp)); Text(if (looping) tr("Schleife an", "Loop on") else tr("Auswahl loopen", "Loop selection"), style = MaterialTheme.typography.labelLarge)
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            Text(stringResource(R.string.count_in), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            (0..2).forEach { bars -> FilterChip(practice.countInBars == bars, { vm.setCountIn(bars) }, label = { Text(if (bars == 0) tr("aus", "off") else "$bars") }) }
+        }
+        Text("${stringResource(R.string.speed)} · ${(speed * 100).toInt()} %", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 6.dp))
         Slider(speed, { speed = it }, valueRange = 0.25f..1.5f, steps = 24, onValueChangeFinished = { vm.setSpeed(speed.toDouble()) })
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(0.5, 0.7, 0.85, 1.0).forEach { s -> FilterChip(abs(practice.speed - s) < 0.001, { vm.setSpeed(s) }, label = { Text("${(s * 100).toInt()} %") }) }
         }
-        Text(stringResource(R.string.loop), style = MaterialTheme.typography.titleMedium)
-        Text(practice.loop?.let { l -> tr("Loop aktiv: Routen-Takt ${l.start.routeIndex + 1} bis ${l.end.routeIndex + 1}", "Loop: route bar ${l.start.routeIndex + 1} to ${l.end.routeIndex + 1}") }
-            ?: tr("Takte im Editor markieren (Bereich) und hier loopen.", "Select bars in the editor (range) and loop them here."), style = MaterialTheme.typography.bodyMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = vm::loopSelection) { Text(tr("Auswahl loopen", "Loop selection")) }
-            OutlinedButton(onClick = vm::clearLoop, enabled = practice.loop != null) { Text(tr("Loop aus", "Loop off")) }
-        }
         ToggleRow(stringResource(R.string.metronome), practice.metronome, vm::setMetronome)
-        ToggleRow(tr("Visuelles Metronom (Zählzeiten in der Transportleiste)", "Visual metronome (beats in the transport bar)"), practice.visualMetronome, { on -> vm.updatePractice { it.copy(visualMetronome = on) } })
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.count_in), style = MaterialTheme.typography.bodyMedium)
-            (0..2).forEach { bars -> FilterChip(practice.countInBars == bars, { vm.setCountIn(bars) }, label = { Text(if (bars == 0) tr("aus", "off") else "$bars ${tr("Takt", "bar")}") }) }
-        }
+        ToggleRow(tr("Visuelles Metronom (Zählzeit-Punkte)", "Visual metronome (beat dots)"), practice.visualMetronome, { on -> vm.updatePractice { it.copy(visualMetronome = on) } })
         ToggleRow(tr("Cursor folgt der Wiedergabe", "Cursor follows playback"), view.follow, vm::setFollow)
         HorizontalDivider()
         Text("Speed Trainer", style = MaterialTheme.typography.titleMedium)

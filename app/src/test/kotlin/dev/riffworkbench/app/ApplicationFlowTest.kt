@@ -30,10 +30,10 @@ class ApplicationFlowTest {
         container = (compose.activity.application as RiffApplication).container
     }
     private fun createProject() {
-        compose.onNodeWithText("+ Neues Projekt").performClick()
+        compose.onNodeWithTag("nav-new").performClick()
         compose.onNode(hasSetTextAction()).performTextInput("Drop A Test")
         compose.onNodeWithText("Anlegen").performClick()
-        compose.waitUntil(20000) { compose.onAllNodesWithText("Eintragen").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(20000) { compose.onAllNodesWithTag("fret-0").fetchSemanticsNodes().isNotEmpty() }
     }
     private fun storedProject(): Project = runBlocking { (container.projects.open(container.projects.projects.value.single().id) as Outcome.Success).value }
     private fun allNotes(p: Project) = p.tracks.flatMap { it.staves }.flatMap { it.bars }.flatMap { it.voices }.flatMap { it.beats }.flatMap { it.notes }
@@ -48,10 +48,10 @@ class ApplicationFlowTest {
             bitmap.recycle()
         }
     }
-    @Test fun createEnterTwoDigitFretUndoRedoAndPersist() {
+    @Test fun createEnterHighFretUndoRedoAndPersist() {
         createProject()
-        compose.onNodeWithTag("key-1").performClick(); compose.onNodeWithTag("key-2").performClick()
-        compose.onNodeWithText("Eintragen").performClick()
+        compose.onNodeWithTag("fret-range").performClick()
+        compose.onNodeWithTag("fret-12").performClick()
         compose.waitUntil(20000) { container.projects.projects.value.singleOrNull()?.revision == 1L }
         assertEquals(12, allNotes(storedProject()).single().fret)
         compose.onNodeWithContentDescription("Rückgängig").performClick()
@@ -65,17 +65,27 @@ class ApplicationFlowTest {
     @Test fun libraryRenders() { compose.onNodeWithText("Projekte").assertExists(); screenshot("library-phone") }
     @Test fun allWorkspaceAreasAndFeatureSearchRemainReachable() {
         createProject()
-        listOf("Arrangement", "Drumgrid", "Üben", "Audio & Stems", "Mixer & FX", "Instrumente", "Artikulationen", "Layout", "Austausch", "Historie", "Geräte & Integrationen", "Funktionsstand").forEach { title ->
-            compose.onAllNodes(hasText(title) and hasClickAction()).onFirst().performScrollTo().performClick()
+        compose.onNodeWithTag("nav-practice").performClick()
+        compose.onAllNodesWithText("Tempo", substring = true).onFirst().assertExists()
+        listOf("arrangement" to "Arrangement", "drums" to "Drumgrid", "audio" to "Audio & Stems", "mixer" to "Mixer & FX", "instruments" to "Instrumente", "effects" to "Artikulationen",
+            "layout" to "Layout", "exchange" to "Austausch", "history" to "Historie", "integrations" to "Geräte & Integrationen", "status" to "Funktionsstand").forEach { (route, title) ->
+            compose.onNodeWithTag("nav-more").performClick()
+            compose.onNodeWithTag("page-$route").performScrollTo().performClick()
+            compose.waitForIdle()
             compose.onAllNodesWithText(title).onFirst().assertExists()
         }
+        compose.onNodeWithTag("nav-editor").performClick()
+        compose.onAllNodesWithTag("fret-0").onFirst().assertExists()
+        compose.onNodeWithTag("nav-more").performClick()
+        compose.onNodeWithTag("page-status").performScrollTo().performClick()
         compose.onNodeWithText("Funktionen suchen").performTextInput("fx.bend")
         compose.onNodeWithText("Bend, Prebend und Release").assertExists()
         screenshot("status-phone")
     }
     @Test fun drumGridSharesPersistedScoreAndKeepsSimultaneousElements() {
         createProject()
-        compose.onNodeWithText("Drumgrid").performScrollTo().performClick()
+        compose.onNodeWithTag("nav-more").performClick()
+        compose.onNodeWithTag("page-drums").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Kick, 1, off").performClick()
         compose.waitUntil(20000) { container.projects.projects.value.single().revision == 1L }
         compose.onNodeWithContentDescription("Closed HH, 1, off").performClick()
@@ -87,7 +97,7 @@ class ApplicationFlowTest {
         screenshot("drums-phone")
     }
     @Test fun settingsPersistAcrossRepositoryRestart() {
-        compose.onNodeWithText("Einstellungen").performClick()
+        compose.onNodeWithTag("nav-settings").performClick()
         compose.onAllNodes(isToggleable())[0].performClick()
         compose.waitUntil(20000) { !container.settings.settings.value.darkTheme }
         runBlocking {

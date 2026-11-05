@@ -426,7 +426,8 @@ object ScoreLayouter {
                 val tiedTarget = isTieTarget(n)
                 val label = if (tiedTarget) "(${n.fret})" else fretLabel(n)
                 val size = if (tiedTarget) style.fretText * 0.8f else style.fretText
-                glyphs += TextGlyph(x, y + size * 0.36f, label, size, if (tiedTarget) Ink.MUTED else ink, halo = true, bold = !tiedTarget)
+                glyphs += TextGlyph(x, y + size * 0.36f, label, size, if (tiedTarget) Ink.MUTED else ink, halo = true, bold = !tiedTarget,
+                    chip = if (tiedTarget) -1 else strings - 1 - string, chipOutline = label == "x")
                 val w = TextMetrics.width(label, size, true) + 4f
                 noteBoxes += NoteBox(n.id, s.measure.id, b.offset, v.index, string, x - w / 2, y - style.tabLine / 2, w, style.tabLine)
                 n.articulations.filterIsInstance<Articulation.Grace>().firstOrNull()?.let { g ->

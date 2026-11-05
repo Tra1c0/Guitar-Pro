@@ -21,6 +21,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntSize
 import dev.riffworkbench.model.*
+import dev.riffworkbench.ui.components.Tabino
 import dev.riffworkbench.notation.*
 
 /** A tap on the score: measure, the nearest beat column and the string under the finger (TAB only). */
@@ -37,7 +38,8 @@ fun rememberInkPalette(): InkPalette {
             Ink.STAFF to c.outline.copy(alpha = 0.75f).toArgb(), Ink.NOTE to c.onSurface.toArgb(), Ink.TEXT to c.onSurface.toArgb(),
             Ink.MUTED to c.onSurfaceVariant.copy(alpha = 0.6f).toArgb(), Ink.ACCENT to c.primary.toArgb(), Ink.SELECTION to c.primary.toArgb(),
             Ink.PLAYHEAD to Color(0xFFFF7043).toArgb(), Ink.SECTION to c.primary.toArgb(), Ink.ON_SECTION to c.onPrimary.toArgb(),
-            Ink.ERROR to c.error.toArgb(), Ink.GRID to c.outlineVariant.toArgb()), c.surface.toArgb())
+            Ink.ERROR to c.error.toArgb(), Ink.GRID to c.outlineVariant.toArgb()), c.surface.toArgb(),
+            chips = Tabino.StringColors.map { it.toArgb() }.toIntArray(), chipText = Tabino.Ink.toArgb())
     }
 }
 

@@ -1,8 +1,8 @@
 # Abhängigkeiten, Quellen und Rechte
 
-Stand der Prüfung: 4. November 2026. Eigene Veröffentlichungslizenz noch nicht festgelegt. Es wurden keine Fremdquellen, Testtabs, RSE-Sounds, SF2s, IRs oder Amp-Modelle übernommen. Die App verwendet Systemfonts.
+Stand der Prüfung: 4. November 2026. Eigene Veröffentlichungslizenz noch nicht festgelegt. Es wurden keine Fremdquellen, Testtabs, RSE-Sounds, SF2s, IRs oder Amp-Modelle übernommen. Die Oberfläche bündelt zwei OFL-Schriften (unten).
 
-Die Fertigstellung hat **keine neue Runtime-Abhängigkeit** hinzugefügt. Synthesizer, Effekte, Notensatz, Formatparser und der WAV-Decoder sind eigener Kotlin-Code; komprimierte Audiodateien decodiert Android selbst (MediaExtractor/MediaCodec gehören zum Betriebssystem, es werden keine Codecs mitgeliefert).
+Die Fertigstellung hat **keine neue Bibliotheks-Abhängigkeit** hinzugefügt. Synthesizer, Effekte, Notensatz, Formatparser und der WAV-Decoder sind eigener Kotlin-Code; komprimierte Audiodateien decodiert Android selbst (MediaExtractor/MediaCodec gehören zum Betriebssystem, es werden keine Codecs mitgeliefert).
 
 ## Gepinnte Basis
 
@@ -23,6 +23,15 @@ Die Fertigstellung hat **keine neue Runtime-Abhängigkeit** hinzugefügt. Synthe
 | JDK / SDK | Java 17 / Android 36 | Build-Werkzeuge separat, nicht als eigene Runtime in der APK verteilt |
 
 Maven-Publikation wurde gegen Google Maven/Maven Central geprüft. Ein gemeinsamer Build ist die maßgebliche Prüfung, nicht die bloße Existenz der POMs. Das konkrete Dependency-Inventar ist mit `./gradlew :app:dependencies --configuration debugRuntimeClasspath` reproduzierbar. Die vollständige Apache-2.0-Lizenz liegt unter third_party und als App-Asset vor.
+
+## Mitgelieferte Schriften
+
+| Schrift | Quelle | Lizenz / Verwendung |
+|---|---|---|
+| Bricolage Grotesque (variabel) | [google/fonts `ofl/bricolagegrotesque`](https://github.com/google/fonts/tree/main/ofl/bricolagegrotesque), SHA-256 `413e7357…ac682` | SIL OFL 1.1; Überschriften und Ziffern der Oberfläche (Design „Tabino Mobile“). Lizenztext in `third_party/` und in der APK unter `assets/licenses/`. |
+| DM Sans (variabel) | [google/fonts `ofl/dmsans`](https://github.com/google/fonts/tree/main/ofl/dmsans), SHA-256 `8cd08d97…c1c0d` | SIL OFL 1.1; Fließtext der Oberfläche. Lizenztext wie oben. |
+
+Die Schriften werden unverändert gebündelt, damit das Design nicht von Gerätefonts oder Play-Diensten abhängt. Notensatz-Export (SVG/PDF) nutzt weiterhin Systemschriften.
 
 ## Werkzeuge außerhalb der App
 

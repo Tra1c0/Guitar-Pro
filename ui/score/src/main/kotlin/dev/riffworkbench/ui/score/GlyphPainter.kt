@@ -9,7 +9,7 @@ import android.graphics.Typeface
 import dev.riffworkbench.notation.*
 
 /** Colours for each semantic ink, as ARGB ints. */
-class InkPalette(val colors: Map<Ink, Int>, val background: Int) {
+class InkPalette(val colors: Map<Ink, Int>, val background: Int, val chips: IntArray? = null, val chipText: Int = 0xFF1A1620.toInt()) {
     fun of(ink: Ink) = colors[ink] ?: 0xFF000000.toInt()
     companion object {
         val PRINT = InkPalette(mapOf(Ink.STAFF to 0xFF8A8A8A.toInt(), Ink.NOTE to 0xFF141414.toInt(), Ink.TEXT to 0xFF141414.toInt(), Ink.MUTED to 0xFF9A9A9A.toInt(),
@@ -52,6 +52,27 @@ class GlyphPainter(private val palette: InkPalette) {
                     text.typeface = when { g.bold && g.italic -> boldItalic; g.bold -> bold; g.italic -> italic; else -> Typeface.SANS_SERIF }
                     val w = text.measureText(g.text)
                     val left = when (g.align) { Align.START -> g.x; Align.CENTER -> g.x - w / 2; Align.END -> g.x - w }
+                    val chips = palette.chips
+                    if (g.chip >= 0 && chips != null && chips.isNotEmpty()) {
+                        // Coloured fret pill: the colour names the string, as in the design's TAB.
+                        val color = chips[g.chip % chips.size]
+                        val h = g.size * 1.34f
+                        val top = g.y - g.size * 0.36f - h / 2
+                        val pad = g.size * 0.3f
+                        val chipW = maxOf(w + 2 * pad, h)
+                        val cx = left + w / 2
+                        rect.set(cx - chipW / 2, top, cx + chipW / 2, top + h)
+                        if (g.chipOutline) {
+                            fill.color = palette.background; canvas.drawRoundRect(rect, h * 0.36f, h * 0.36f, fill)
+                            stroke.color = color; stroke.strokeWidth = 1.6f; canvas.drawRoundRect(rect, h * 0.36f, h * 0.36f, stroke)
+                            text.color = color
+                        } else {
+                            fill.color = color; canvas.drawRoundRect(rect, h * 0.36f, h * 0.36f, fill)
+                            text.color = palette.chipText
+                        }
+                        canvas.drawText(g.text, left, g.y, text)
+                        continue
+                    }
                     if (g.halo) { fill.color = palette.background; canvas.drawRect(left - 1.5f, g.y - g.size * 0.8f, left + w + 1.5f, g.y + g.size * 0.14f, fill) }
                     text.color = palette.of(g.ink)
                     canvas.drawText(g.text, left, g.y, text)

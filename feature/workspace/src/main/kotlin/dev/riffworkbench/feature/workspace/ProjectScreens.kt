@@ -21,8 +21,9 @@ import dev.riffworkbench.ui.components.R
 import dev.riffworkbench.ui.score.pitchName
 
 @Composable internal fun ScrollPage(title: String, description: String, content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        SectionHeading(title, description)
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        BigTitle(title, null)
+        Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         content()
         Spacer(Modifier.height(16.dp))
     }

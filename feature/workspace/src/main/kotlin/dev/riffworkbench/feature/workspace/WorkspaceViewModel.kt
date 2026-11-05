@@ -111,6 +111,8 @@ class WorkspaceViewModel(
             if (settings.settings.value.autoAdvance && !input.value.chordMode) move(1)
         }
     }
+    /** Fret pad: one tap enters and commits the fret; the pad covers 0–24, so no two-digit preview is needed. */
+    fun enterFret(fret: Int) { mutableInput.value = input.value.copy(buffer = fret.coerceIn(0, 48).toString()); commitInput() }
     private fun existingFret(e: EditorState): Int? = selectedBeat(e)?.notes?.firstOrNull { it.string == e.selection.string }?.fret
 
     fun rest() { if (command(EditorCommand.PutRest(input.value.duration)) is Outcome.Success && settings.settings.value.autoAdvance && !input.value.chordMode) move(1) }

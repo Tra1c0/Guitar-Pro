@@ -12,22 +12,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.riffworkbench.capabilities.*
 
-private val DarkColors = darkColorScheme(primary = Color(0xFFD7F65B), onPrimary = Color(0xFF1B2206), secondary = Color(0xFFBFC9AA), background = Color(0xFF11140F), surface = Color(0xFF171B14), surfaceVariant = Color(0xFF293025), onBackground = Color(0xFFE5E9DD), onSurface = Color(0xFFE5E9DD), error = Color(0xFFFFB4A5))
-private val LightColors = lightColorScheme(primary = Color(0xFF4C6611), secondary = Color(0xFF586347), background = Color(0xFFF8FAF0), surface = Color(0xFFF8FAF0))
 
 @Composable fun RiffTheme(dark: Boolean = true, content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = if (dark) DarkColors else LightColors, content = content)
+    MaterialTheme(colorScheme = if (dark) TabinoDark else TabinoLight, shapes = TabinoShapes, typography = TabinoType, content = content)
 }
 @Composable fun english() = LocalConfiguration.current.locales[0].language == "en"
 @Composable fun SectionHeading(title: String, description: String? = null, kicker: String? = null) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        kicker?.let { Text(it.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontFamily = FontFamily.Monospace) }
+        kicker?.let { Text(it.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }
         Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
         description?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
 @Composable fun NoticeCard(text: String, error: Boolean = false) {
-    Surface(color = if (error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) {
+    Surface(color = if (error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.large) {
         Text(text, Modifier.fillMaxWidth().padding(16.dp), style = MaterialTheme.typography.bodyMedium)
     }
 }
