@@ -184,6 +184,8 @@ internal object Standard {
                 if (ghost) { b.add(TextGlyph(h.x - sp * 1.05f, h.y + sp * 0.45f, "(", sp * 1.5f, ink)); b.add(TextGlyph(h.x + sp * 1.05f, h.y + sp * 0.45f, ")", sp * 1.5f, ink)) }
                 h.alter?.let { accidental(b, h.x - sp * 1.7f, h.y, it, ink) }
                 for (k in 0 until d.dots) { val dy = if (h.pos % 2 == 0) -sp / 2 else 0f; b.add(OvalGlyph(h.x + sp * (1.2f + k * 0.7f), h.y + dy, sp * 0.16f, sp * 0.16f, 0f, ink, true)) }
+                // Without TAB the notehead is the only place to tap or drag a note (drums, piano, notation-only guitar).
+                if (!b.showTab) b.noteBoxes += NoteBox(h.note.id, s.measure.id, beat.offset, v.index, h.note.string, h.x - sp * 0.9f, h.y - sp * 0.6f, sp * 1.8f, sp * 1.2f)
             }
             if (d.denominator >= 2) {
                 val stemX = if (up) x + sp * 0.58f else x - sp * 0.58f

@@ -192,7 +192,7 @@ object ScoreLayouter {
                 val next = sorted.getOrNull(k + 1) ?: len
                 val d = next + o * Fraction.of(-1)
                 val content = bar?.voices?.flatMap { v -> v.beats.filter { it.offset == o } }.orEmpty()
-                val digits = content.flatMap { it.notes }.maxOfOrNull { (it.fret ?: 0).toString().length + if (Articulation.Mark(NoteMark.GHOST) in it.articulations || it.articulations.any { a -> a is Articulation.Harmonic }) 2 else 0 } ?: 1
+                val digits = content.flatMap { it.notes }.maxOfOrNull { (it.fret ?: 0).toString().length + if (Articulation.Mark(NoteMark.GHOST) in it.articulations || it.articulations.any { a -> a is Articulation.Harmonic } || isTieTarget(it)) 2 else 0 } ?: 1
                 val grace = content.any { b -> b.notes.any { n -> n.articulations.any { it is Articulation.Grace } } }
                 ColumnSpec(o, d, offsets[o] == true && content.isEmpty(), digits * style.fretText * 0.62f + style.fretText * 0.9f + if (grace) style.fretText else 0f)
             }
@@ -547,7 +547,10 @@ object ScoreLayouter {
             val w = max(style.fretText * 1.6f, xFor(s, b.offset + b.duration.length()) - x - 6f).coerceAtMost(style.column16 * 4f)
             val topY = sys.tabTop - style.fretText * 1.3f
             val maxCents = points.maxOf { abs(it.cents) }.coerceAtLeast(1)
-            fun py(c: Int) = y - (y - topY) * (abs(c).toFloat() / maxCents.toFloat()).coerceIn(0f, 1f) * if (c >= 0) 1f else -0.5f
+            // Dives go below the string, but only as far as the system has room (nothing is reserved below the TAB).
+            val diveRoom = (sys.bottom - y - style.fretText * 1.1f).coerceAtLeast(style.fretText * 0.25f)
+            fun py(c: Int): Float { val ratio = (abs(c).toFloat() / maxCents.toFloat()).coerceIn(0f, 1f)
+                return if (c >= 0) y - (y - topY) * ratio else y + minOf((y - topY) * 0.5f, diveRoom) * ratio }
             val sorted = points.sortedBy { it.position }
             var px = startX; var pyv = py(sorted.first().cents)
             if (sorted.first().cents != 0) { glyphs += LineGlyph(startX, y - 4f, startX, pyv, 1.3f, ink); arrow(startX, pyv, up = true, ink); label(startX, pyv, sorted.first().cents, ink) }
