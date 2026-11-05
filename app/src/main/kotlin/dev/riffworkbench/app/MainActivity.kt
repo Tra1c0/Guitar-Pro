@@ -134,9 +134,10 @@ object AppRoutes {
                 ) }
                 WorkspaceScreen(vm, onBack = leave, onExport = actions.bytes, onSettings = { nav.navigate(AppRoutes.SETTINGS) }, exportActions = actions)
             }
-            composable(AppRoutes.SETTINGS) {
+            composable(AppRoutes.SETTINGS) { entry ->
                 val vm: SettingsViewModel = viewModel(factory = factory { SettingsViewModel(container.settings) })
-                SettingsScreen(vm, onBack = { nav.popBackStack() })
+                // A second tap during the exit transition must not pop the screen below (library or project without leave()).
+                SettingsScreen(vm, onBack = { if (nav.currentBackStackEntry == entry) nav.popBackStack() })
             }
         }
     } } }

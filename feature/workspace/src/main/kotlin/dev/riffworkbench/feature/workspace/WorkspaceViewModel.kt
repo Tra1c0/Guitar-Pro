@@ -393,8 +393,11 @@ class WorkspaceViewModel(
         val result: Outcome<ExportResult> = when (target) {
             ExportTarget.NATIVE -> exchange.export(project)
             ExportTarget.SVG -> withContext(background) {
-                val svg = SvgExport.render(project, project.tracks.indices.toList())
-                Outcome.Success(ExportResult(svg.toByteArray(), "image/svg+xml", "${fileBase(project)}.svg", emptyList()))
+                // Like the format exporters: a layout failure becomes a notice, not an uncaught exception in viewModelScope.
+                try {
+                    val svg = SvgExport.render(project, project.tracks.indices.toList())
+                    Outcome.Success(ExportResult(svg.toByteArray(), "image/svg+xml", "${fileBase(project)}.svg", emptyList()))
+                } catch (e: RuntimeException) { Outcome.Failure(FailureCode.CORRUPT, "SVG-Export fehlgeschlagen: ${e.message ?: e.javaClass.simpleName}") }
             }
             ExportTarget.PDF, ExportTarget.WAV, ExportTarget.STEMS -> Outcome.Failure(FailureCode.VALIDATION, "Dieses Format wird gestreamt exportiert")
             else -> {
