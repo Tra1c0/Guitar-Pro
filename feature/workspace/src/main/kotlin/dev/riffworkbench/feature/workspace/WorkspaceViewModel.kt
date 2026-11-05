@@ -499,7 +499,8 @@ class WorkspaceViewModel(
         }
         result
     }
-    override fun onCleared() { tunerJob?.cancel(); viewModelScope.launch { services.tuner?.stop() } }
+    // viewModelScope is already cancelled when onCleared runs: a launch there never executes, so the microphone would stay open.
+    override fun onCleared() { tunerJob?.cancel(); services.tuner?.let { t -> kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch { t.stop() } } }
 
     private companion object {
         const val MAX_AUDIO_BYTES = 64 * 1024 * 1024
