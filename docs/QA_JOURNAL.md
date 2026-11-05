@@ -42,6 +42,14 @@ Methode: drei voneinander unabhängige Reviews (Editor/Speicher/ViewModels, Audi
 | 13 | adapter/audio | Ein auslaufender Render-Thread schloss die Ausgabe der nächsten Sitzung (stumme Wiedergabe). | `…dyingRenderThreadDoesNotCloseTheNextSession` |
 | 14 | adapter/audio | Stimmgerät ließ sich nach Eingabefehler (Gerät entfernt) nicht neu starten. | `…tunerRestartsAfterInputFailure` |
 
+| 15 | adapter/formats | GPIF: eine 1,3-KB-Datei mit einem geteilten, sehr breiten `<Beat>` hing 26 s (O(Referenzen × Kinder) in `XmlElement.child`). | `ImportComplexityRegressionTest.gpifSharedWideBeatIsLinear` |
+| 16 | adapter/formats | MIDI: Pitch-Bend-Flut quadratisch in `bendPiece` (128k Bends: 18 s). | `…midiBendFloodIsLinear` |
+| 17 | adapter/formats | MusicXML: unaufgelöste Haltebögen durchsuchten die ganze Stimme (20k Noten: 23 s). | `…musicXmlUnresolvedTiesAreLinear` |
+| 18 | adapter/formats | MusicXML: Stimmen-Slot-Platzierung quadratisch je Takt (16k Noten: 31 s). | `…musicXmlDenseMeasureIsNotQuadratic` |
+| 19 | adapter/formats | MusicXML: zusammengesetzte Taktart lief im Int über und wurde still zu 5/16. | `…compositeTimeSignatureDoesNotOverflow` |
+
+Zusätzlich: Mutations-Fuzzing über alle Importformate (≈39 000 Fälle, 2 s Timeout je Fall: GP3/4/5, GP7-Zip, GPIF-Text, GPX BCFZ/BCFS, MIDI, MusicXML Text/komprimiert) — keine ungefangene Ausnahme, kein Hänger. GP3/4/5-Layout gegen PyGuitarPro abgeglichen, ohne Befund.
+
 **Bestätigt durch Code-Analyse (Android, nur CI-kompiliert) und repariert:**
 
 - `AudioTrackSink`: ein gemeinsames `AudioTimestamp` wurde von Render-, Poller- und Stats-Thread gleichzeitig beschrieben → jetzt ThreadLocal (lock- und allokationsfrei im Render-Pfad).
@@ -50,4 +58,6 @@ Methode: drei voneinander unabhängige Reviews (Editor/Speicher/ViewModels, Audi
 
 **Bewusst nicht geändert (beabsichtigtes Design):** Tonhöhenänderung an einem Ende einer Haltebindung (Bund neu setzen, Transponieren eines Teilbereichs) wird abgelehnt. Der bestehende Test `editingATiedPitchCannotSilentlyBreakItsLink` legt das ausdrücklich fest.
 
-**Unbestätigte Verdachtsmomente (offen, nicht repariert):** getrennt gepostete Host-Kommandos in `installLocked` (Loop-Grenzen bei Tempowechsel im Loop), Poller-Neustart-Fenster in `startPolling`, nicht-volatile Felder `loopFrames`/`rackSignature`, Allokationen bei `Reprogram` im Audio-Thread, Count-in geht bei Reprogram verloren, Legato-Überblendung nutzt `ratioAt(0)`, DrumVoice-Hüllkurvenreste, `persist` bei Abbruch, `atomicWrite` ohne Verzeichnis-fsync, O(alle Projekte) pro Autosave, Settings-Datei neuerer Version wird überschrieben.
+**Unbestätigte Verdachtsmomente (offen, nicht repariert):** GPIF-Fermaten O(Fermaten × Beats) je Takt; GPX/BCFZ reserviert die im Kopf angegebene Größe (≤ 64 MiB) vor dem Dekodieren; GPIF `Octave*12+Tone` ohne Überlaufschutz; GP3-Akkord-Layout (erweitert) nicht gegen Referenz geprüft; getrennt gepostete Host-Kommandos in `installLocked` (Loop-Grenzen bei Tempowechsel im Loop), Poller-Neustart-Fenster in `startPolling`, nicht-volatile Felder `loopFrames`/`rackSignature`, Allokationen bei `Reprogram` im Audio-Thread, Count-in geht bei Reprogram verloren, Legato-Überblendung nutzt `ratioAt(0)`, DrumVoice-Hüllkurvenreste, `persist` bei Abbruch, `atomicWrite` ohne Verzeichnis-fsync, O(alle Projekte) pro Autosave, Settings-Datei neuerer Version wird überschrieben.
+
+CI: Läufe 41962076517 (`dd162d5`) und 41962151320 (`66fde4e`) grün — Android-Build, alle Tests inkl. neuer ViewModel-Tests, Lint. Ergebnis Zyklus 1: **19 + 5 Defekte bestätigt und repariert** → Zyklus zählt nicht als defektfrei.
