@@ -226,10 +226,11 @@ class Qa13ModelBasedTransportTest {
                     racesRun++
                     val g = CompletableDeferred<Unit>(); val e = CompletableDeferred<Unit>()
                     entered = e; gate = g
+                    val since = t.halts   // togglePlay records the tap before it prepares
                     val job = scope.async {
                         t.prepare(p, st)
                         op.seek?.let { t.seek(occ(planOf(p), it % planOf(p).route.size)) }
-                        t.play()
+                        t.play(since)
                     }
                     try { withTimeout(3000) { e.await() } } catch (x: TimeoutCancellationException) { v("I4-race-setup", "clip loader never entered (warm=$warm)") }
                     if (op.stop) t.stop() else t.pause()

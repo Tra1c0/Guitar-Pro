@@ -40,6 +40,13 @@ interface Transport {
     val state: StateFlow<TransportState>
     suspend fun prepare(project: Project, settings: PracticeSettings): Outcome<Unit>
     suspend fun play(): Outcome<Unit>
+    /**
+     * Number of pause()/stop() calls so far. A caller that prepares before playing reads it when the user asked to play
+     * and passes it to [play]: a halt in between wins, a halt before does not.
+     */
+    val halts: Long get() = 0
+    /** Plays unless a pause()/stop() happened after [since] (a value of [halts]). */
+    suspend fun play(since: Long): Outcome<Unit> = play()
     suspend fun pause(): Outcome<Unit>
     suspend fun seek(position: PlaybackOccurrence): Outcome<Unit>
     suspend fun setLoop(range: LoopRange?): Outcome<Unit>

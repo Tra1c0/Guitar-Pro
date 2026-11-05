@@ -40,7 +40,7 @@ class Qa13PrepareEpochReviewTest {
         t.pause(); host.renderBlock()                 // PAUSED, output warm
         val edited = project(4, withClip = true)
         // togglePlay() from PAUSED: prepare (slow: decodes the clip), then play.
-        val toggle = async(Dispatchers.Default) { t.prepare(edited, plain); t.play() }
+        val toggle = async(Dispatchers.Default) { val since = t.halts; t.prepare(edited, plain); t.play(since) }  // as WorkspaceViewModel.togglePlay
         withTimeout(5000) { entered.await() }
         t.stop()                                      // user presses Stop while Play is compiling
         // Meanwhile any other prepare(): a practice change (updatePractice) or an edit.
@@ -66,7 +66,7 @@ class Qa13PrepareEpochReviewTest {
         t.prepare(project(4), plain); t.play(); repeat(4) { host.renderBlock() }
         t.pause(); host.renderBlock()
         val edited = project(4, withClip = true)
-        val toggle = async(Dispatchers.Default) { t.prepare(edited, plain); t.play() }
+        val toggle = async(Dispatchers.Default) { val since = t.halts; t.prepare(edited, plain); t.play(since) }  // as WorkspaceViewModel.togglePlay
         withTimeout(5000) { entered.await() }
         t.stop(); gate.complete(Unit); toggle.await()
         repeat(4) { host.renderBlock() }

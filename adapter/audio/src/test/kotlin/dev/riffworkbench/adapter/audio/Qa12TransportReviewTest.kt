@@ -70,9 +70,10 @@ class Qa12TransportReviewTest {
         val edited = project(4, withClip = true)
         // Exactly what togglePlay() does from STOPPED: prepare, seek to the cursor, play.
         val toggle = async(Dispatchers.Default) {
+            val since = t.halts                          // togglePlay records the tap (cycle 16: replaces the prepare flag)
             t.prepare(edited, plain)
             t.seek(PlaybackOccurrence(ScorePosition(edited.measures[0].id), 1, 0))
-            t.play()
+            t.play(since)
         }
         withTimeout(5000) { entered.await() }      // prepare() is decoding the reference clip
         t.stop()                                    // user presses Stop (or ON_STOP -> pause())

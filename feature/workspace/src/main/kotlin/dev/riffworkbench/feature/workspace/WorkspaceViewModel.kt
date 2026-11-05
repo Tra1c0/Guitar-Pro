@@ -142,13 +142,18 @@ class WorkspaceViewModel(
     fun setDuration(denominator: Int = input.value.duration.denominator, dots: Int = input.value.duration.dots) {
         val duration = WrittenDuration(denominator, dots, input.value.duration.tuplets)
         val current = state.value.editor ?: return
-        if (selectedBeat(current) != null && command(EditorCommand.SetDuration(duration)) is Outcome.Failure) return
+        val before = input.value
+        // The entry duration is the edit grid: set it before the command's relayout, and redraw also without a selected beat.
         mutableInput.value = input.value.copy(duration = duration)
+        if (selectedBeat(current) != null) { if (command(EditorCommand.SetDuration(duration)) is Outcome.Failure) { mutableInput.value = before; relayout() }; return }
+        relayout()
     }
     fun setTuplet(ratio: TupletRatio?) {
         val current = state.value.editor ?: return
-        if (selectedBeat(current) != null && command(EditorCommand.SetTuplet(ratio)) is Outcome.Failure) return
+        val before = input.value
         mutableInput.value = input.value.copy(duration = input.value.duration.copy(tuplets = listOfNotNull(ratio)))
+        if (selectedBeat(current) != null) { if (command(EditorCommand.SetTuplet(ratio)) is Outcome.Failure) { mutableInput.value = before; relayout() }; return }
+        relayout()
     }
     fun togglePalmMute() {
         mutableInput.value = input.value.copy(palmMute = !input.value.palmMute)
@@ -262,7 +267,8 @@ class WorkspaceViewModel(
     }
 
     // ------------------------------------------------------------------ view and layout
-    fun setZoom(zoom: Float) { mutableView.value = view.value.copy(zoom = zoom.coerceIn(0.5f, 2.5f)) }
+    // Wrapped systems are laid out for viewport width / zoom: a zoom change re-wraps them.
+    fun setZoom(zoom: Float) { val z = zoom.coerceIn(0.5f, 2.5f); if (z == view.value.zoom) return; mutableView.value = view.value.copy(zoom = z); if (view.value.wrap) relayout() }
     fun setNotation(mode: NotationMode) { mutableView.value = view.value.copy(notation = mode); relayout() }
     fun setWrap(wrap: Boolean) { mutableView.value = view.value.copy(wrap = wrap); relayout() }
     fun setCompact(compact: Boolean) { mutableView.value = view.value.copy(compact = compact); relayout() }
@@ -292,11 +298,13 @@ class WorkspaceViewModel(
     fun togglePlay() { viewModelScope.launch {
         val status = transport.state.value.status
         if (status == TransportStatus.PLAYING) { transport.pause(); return@launch }
+        // The moment of the tap: a stop/pause (button, background, audio focus) after it wins over this play, one before not.
+        val since = transport.halts
         val project = session?.state?.value?.project ?: return@launch
         transport.prepare(project, practice.value).let { if (it is Outcome.Failure && it.code != FailureCode.UNAVAILABLE) showNotice(it.message) }
         // Resume continues where it paused; otherwise playback starts at the cursor (inside a loop: at the loop start).
         if (transport.state.value.status != TransportStatus.PAUSED) cursorPosition()?.let { transport.seek(it) }
-        when (val r = transport.play()) { is Outcome.Failure -> showNotice(r.message); is Outcome.Success -> Unit }
+        when (val r = transport.play(since)) { is Outcome.Failure -> showNotice(r.message); is Outcome.Success -> Unit }
     } }
     fun stop() { viewModelScope.launch { transport.stop() } }
     fun seekToCursor() { viewModelScope.launch { cursorPosition()?.let { transport.seek(it) } } }
