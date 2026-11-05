@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -187,7 +188,8 @@ object TabinoIcons {
     val bg = when { selected && accent != null -> accent; selected -> MaterialTheme.colorScheme.secondaryContainer; else -> idle }
     val fg = if (selected) MaterialTheme.colorScheme.onSecondaryContainer.takeIf { accent == null } ?: Tabino.Ink else MaterialTheme.colorScheme.onSurface
     Surface(onClick = onClick, enabled = enabled, shape = RoundedCornerShape(16.dp), color = bg, contentColor = fg,
-        modifier = modifier.semantics { contentDescription = description }) {
+        // `selected` lets TalkBack announce the state that is otherwise only shown by colour (chord mode, palm mute, duration…).
+        modifier = modifier.semantics { contentDescription = description; this.selected = selected }) {
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             if (icon != null) Icon(icon, null, Modifier.size(20.dp), tint = if (enabled) fg else fg.copy(alpha = 0.35f))
             if (icon == null || label.isNotEmpty()) Text(label, fontFamily = if (big) Tabino.Display else Tabino.Body, fontWeight = FontWeight.Bold,
@@ -219,7 +221,7 @@ data class PillItem(val icon: ImageVector, val label: String, val selected: Bool
 @Composable private fun PillNavItem(item: PillItem) {
     Surface(onClick = item.onClick, shape = CircleShape, color = if (item.selected) MaterialTheme.colorScheme.outline else Color.Transparent,
         contentColor = if (item.selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.size(44.dp).semantics { contentDescription = item.label }.let { m -> item.tag?.let { m.testTag(it) } ?: m }) {
+        modifier = Modifier.size(44.dp).semantics { contentDescription = item.label; selected = item.selected }.let { m -> item.tag?.let { m.testTag(it) } ?: m }) {
         Box(contentAlignment = Alignment.Center) { Icon(item.icon, null, Modifier.size(22.dp)) }
     }
 }

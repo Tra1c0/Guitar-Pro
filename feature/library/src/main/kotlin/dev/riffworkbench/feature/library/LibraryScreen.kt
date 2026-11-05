@@ -46,7 +46,7 @@ import dev.riffworkbench.ui.components.R
                     RoundIconButton(TabinoIcons.Open, stringResource(R.string.open_native), onImport, enabled = !busy)
                     RoundIconButton(TabinoIcons.Settings, stringResource(R.string.settings), onSettings)
                 } }
-                item { BigTitle(stringResource(R.string.library), if (en) "${projects.size} projects · offline" else "${projects.size} Projekte · offline", Modifier.padding(horizontal = 8.dp), size = 30) }
+                item { BigTitle(stringResource(R.string.library), if (en) "${projects.size} ${if (projects.size == 1) "project" else "projects"} · offline" else "${projects.size} ${if (projects.size == 1) "Projekt" else "Projekte"} · offline", Modifier.padding(horizontal = 8.dp), size = 30) }
                 error?.let { message -> item { Banner(message, true) { vm.showError(null) } } }
                 notice?.let { message -> item { Banner(message, false, vm::dismissNotice) } }
                 if (busy) item { LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) }
@@ -126,7 +126,7 @@ import dev.riffworkbench.ui.components.R
                 Text(project?.title ?: (if (en) "Your first riff" else "Dein erstes Riff"), fontFamily = Tabino.Display, fontWeight = FontWeight.Bold, fontSize = 24.sp, lineHeight = 26.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(project?.let { if (en) "${it.tracks} tracks · rev. ${it.revision}" else "${it.tracks} Spuren · Rev. ${it.revision}" } ?: "", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = Color(0xFF1F2E45), modifier = Modifier.weight(1f))
+                Text(project?.let { if (en) "${it.tracks} ${if (it.tracks == 1) "track" else "tracks"} · rev. ${it.revision}" else "${it.tracks} ${if (it.tracks == 1) "Spur" else "Spuren"} · Rev. ${it.revision}" } ?: "", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = Color(0xFF1F2E45), modifier = Modifier.weight(1f))
                 Box(Modifier.size(48.dp).background(Tabino.Ink, CircleShape), contentAlignment = Alignment.Center) {
                     Icon(if (project != null) TabinoIcons.Play else TabinoIcons.Plus, null, Modifier.size(22.dp), tint = Tabino.Text)
                 }
@@ -154,7 +154,7 @@ import dev.riffworkbench.ui.components.R
             }
             Column(Modifier.weight(1f)) {
                 Text(project.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(if (en) "${project.tracks} tracks · rev. ${project.revision}" else "${project.tracks} Spuren · Rev. ${project.revision}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(if (en) "${project.tracks} ${if (project.tracks == 1) "track" else "tracks"} · rev. ${project.revision}" else "${project.tracks} ${if (project.tracks == 1) "Spur" else "Spuren"} · Rev. ${project.revision}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = onDelete) { Icon(TabinoIcons.Trash, if (en) "Delete ${project.title}" else "${project.title} löschen", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
             Box(Modifier.size(36.dp).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape), contentAlignment = Alignment.Center) { Icon(TabinoIcons.Play, null, Modifier.size(16.dp)) }

@@ -1,6 +1,7 @@
 package dev.riffworkbench.ui.components
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -66,8 +67,10 @@ import dev.riffworkbench.capabilities.*
 }
 
 @Composable fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit, enabled: Boolean = true) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+    // One toggleable row: TalkBack reads the label together with the switch state, and the whole row is the touch target.
+    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).toggleable(value = checked, enabled = enabled, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onChange),
+        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
+        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }

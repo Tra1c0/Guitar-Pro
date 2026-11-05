@@ -33,6 +33,9 @@ import dev.riffworkbench.editor.EditorCommand
 import dev.riffworkbench.model.*
 import dev.riffworkbench.ui.components.*
 import dev.riffworkbench.ui.components.R
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 
 enum class WorkspacePage(val route: String, val title: Int, val icon: String) {
     EDITOR("editor", R.string.editor, "T"), ARRANGEMENT("arrangement", R.string.arrangement, "≡"), DRUMS("drums", R.string.drums, "▦"),
@@ -129,7 +132,8 @@ class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget
             SaveStatus.SAVING -> stringResource(R.string.saving) to Tabino.Sun
             SaveStatus.FAILED -> stringResource(R.string.save_failed) to MaterialTheme.colorScheme.error
         }
-        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Autosave is silent otherwise: a failed save must be announced to screen-reader users.
+        Row(Modifier.weight(1f).semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             ColorDot(color, 8.dp)
             Text(status, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
@@ -139,7 +143,7 @@ class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget
 }
 
 @Composable private fun NoticeRow(vm: WorkspaceViewModel, ui: WorkspaceState, notice: String) {
-    Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+    Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).semantics { liveRegion = LiveRegionMode.Polite }) {
         Row(Modifier.padding(start = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(notice, Modifier.weight(1f).padding(vertical = 8.dp), color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
             if (ui.saveStatus == SaveStatus.FAILED) TextButton(onClick = vm::retrySave) { Text(stringResource(R.string.retry)) }
