@@ -229,7 +229,7 @@ class WorkspaceViewModel(
         val before = active.state.value.project.revision
         val result = active.dispatch(command)
         if (result is Outcome.Failure) showNotice(result.message)
-        else if (active.state.value.project.revision != before) { if (command !is EditorCommand.Replace) lastCommand = command; enqueueSave() }
+        else if (active.state.value.project.revision != before) { if (command !is EditorCommand.Replace && command !is EditorCommand.MoveNote) lastCommand = command; enqueueSave() }
         publish()
         return result
     }

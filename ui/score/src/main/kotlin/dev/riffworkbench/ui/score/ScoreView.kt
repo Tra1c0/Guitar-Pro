@@ -163,10 +163,12 @@ fun ScoreCanvas(
                 while (true) {
                     val event = awaitPointerEvent()
                     if (event.changes.count { it.pressed } > 1) { dragAt = null; return@awaitEachGesture }   // pinch: zoom as before
-                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                    if (!change.pressed) break
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: run { dragAt = null; return@awaitEachGesture }
+                    // A cancelled gesture (system gesture, parent intercept) arrives as an already consumed release: abandon it.
+                    if (!change.pressed) { if (change.isConsumed) { dragAt = null; return@awaitEachGesture }; break }
                     if (!dragging && (change.position - down.position).getDistance() > viewConfiguration.touchSlop) dragging = true
-                    if (dragging) { change.consume(); last = change.position; dragAt = last }
+                    // While dragging, following the playback pauses like after a pan, so the score does not move under the finger.
+                    if (dragging) { change.consume(); last = change.position; dragAt = last; userScrolledAt = System.currentTimeMillis() }
                 }
                 if (!dragging) return@awaitEachGesture
                 dragAt = null

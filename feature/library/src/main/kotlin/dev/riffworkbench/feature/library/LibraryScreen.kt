@@ -60,13 +60,13 @@ import dev.riffworkbench.ui.components.R
                         QuickTile(stringResource(R.string.open_native), "GP3–8 · MusicXML · MIDI", Tabino.Lavender, Modifier.weight(1f).fillMaxWidth(), enabled = !busy, onClick = onImport)
                     }
                 } }
-                if (projects.size > 1 || (projects.isEmpty() && !creating)) item {
-                    Text(if (projects.isEmpty()) stringResource(R.string.empty_library) else if (en) "More projects" else "Weitere Projekte",
+                if (projects.isNotEmpty() || !creating) item {
+                    Text(if (projects.isEmpty()) stringResource(R.string.empty_library) else if (en) "All projects" else "Alle Projekte",
                         fontFamily = Tabino.Display, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.padding(start = 8.dp, top = 4.dp))
                 }
                 if (projects.isEmpty()) item { Text(stringResource(R.string.empty_description), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp)) }
-                // Every project except the one on the "continue" card (that is the most recent, not the first one).
-                items(projects.filter { it.id != recent?.id }, key = { it.id.value }) { project -> ProjectRow(project, projects.indexOf(project), onOpen = { onOpen(project.id) }, onDelete = { confirmDelete = project }) }
+                // Every project, including the one on the "continue" card: the list is where projects are deleted.
+                items(projects, key = { it.id.value }) { project -> ProjectRow(project, projects.indexOf(project), onOpen = { onOpen(project.id) }, onDelete = { confirmDelete = project }) }
                 item { Text(if (en) "Opens Guitar Pro 3–8 (.gp3/.gp4/.gp5/.gpx/.gp), MusicXML (.musicxml/.mxl), MIDI and RiffWorkbench projects (.riffproj). The original file is kept with the project." else
                     "Öffnet Guitar Pro 3–8 (.gp3/.gp4/.gp5/.gpx/.gp), MusicXML (.musicxml/.mxl), MIDI und RiffWorkbench-Projekte (.riffproj). Die Originaldatei bleibt im Projekt erhalten.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) }

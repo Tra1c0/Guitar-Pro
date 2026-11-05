@@ -105,12 +105,13 @@ object XmlReader {
             if (++nodes > MAX_NODES) throw error("XML enthält zu viele Knoten")
             expect('<')
             val name = name()
-            val attributes = LinkedHashMap<String, String>()
+            // Allocated lazily and shared when empty: millions of small elements must not each retain an empty map/list.
+            var attributes: LinkedHashMap<String, String>? = null
             while (true) {
                 skipSpace()
                 if (i >= s.length) throw error("Unerwartetes Dateiende im Tag $name")
                 val c = s[i]
-                if (c == '/') { expect('/'); expect('>'); return XmlElement(name, attributes, emptyList()) }
+                if (c == '/') { expect('/'); expect('>'); return XmlElement(name, attributes ?: emptyMap(), emptyList()) }
                 if (c == '>') { i++; break }
                 val key = name()
                 skipSpace(); expect('='); skipSpace()
@@ -121,7 +122,7 @@ object XmlReader {
                 val end = s.indexOf(quote, i)
                 if (end < 0) throw error("Unvollständiger Attributwert")
                 if (++nodes > MAX_NODES) throw error("XML enthält zu viele Knoten")
-                if (attributes.put(key, decode(s.substring(i, end))) != null) throw error("Doppeltes Attribut $key")
+                if ((attributes ?: LinkedHashMap<String, String>().also { attributes = it }).put(key, decode(s.substring(i, end))) != null) throw error("Doppeltes Attribut $key")
                 i = end + 1
             }
             val children = ArrayList<XmlNode>()
@@ -137,7 +138,7 @@ object XmlReader {
                             if (close != name) throw error("Schließendes Tag </$close> passt nicht zu <$name>")
                             skipSpace(); expect('>')
                             flush()
-                            return XmlElement(name, attributes, children)
+                            return XmlElement(name, attributes ?: emptyMap(), if (children.isEmpty()) emptyList() else children.also { it.trimToSize() })
                         }
                         s.startsWith("<!--", i) -> skipPast("-->")
                         s.startsWith("<![CDATA[", i) -> {
@@ -164,8 +165,11 @@ object XmlReader {
                 if (c.isLetterOrDigit() || c == '_' || c == '-' || c == '.' || c == ':') i++ else break
             }
             if (i == start) throw error("Name erwartet")
-            return s.substring(start, i)
+            // Element and attribute names repeat constantly: share one String per distinct name (bounded cache).
+            val n = s.substring(start, i)
+            return names[n] ?: n.also { if (names.size < 4096) names[it] = it }
         }
+        private val names = HashMap<String, String>()
         private fun decode(raw: String): String {
             if ('&' !in raw) return raw
             val out = StringBuilder(raw.length)

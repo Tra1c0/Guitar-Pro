@@ -279,16 +279,27 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
         require(track.instrument.tuning.isNotEmpty()) { "Ziehen von Noten nur bei Saiteninstrumenten" }
         require(p.measures.any { it.id == c.toMeasure } && c.toOffset >= Fraction.ZERO && c.toString in track.instrument.tuning.indices) { "Ziel existiert nicht" }
         val beatAt = { m: EntityId, o: Fraction -> track.staves.first().bars.firstOrNull { it.measureId == m }?.voices?.firstOrNull { it.index == s.voice }?.beats?.firstOrNull { it.offset == o } }
-        val note = beatAt(s.measureId, s.offset)?.notes?.firstOrNull { it.string == s.string } ?: throw IllegalArgumentException("Zuerst eine Note wählen")
+        val sourceBeat = beatAt(s.measureId, s.offset)
+        val note = sourceBeat?.notes?.firstOrNull { it.string == s.string } ?: throw IllegalArgumentException("Zuerst eine Note wählen")
         if (c.toMeasure == s.measureId && c.toOffset == s.offset && c.toString == s.string) return p
+        // Ties are never broken silently (as MoveToString): a tied note is released first.
+        val tied = note.links.any { it.kind == LinkKind.TIE } || p.tracks.any { t -> t.staves.any { st -> st.bars.any { b -> b.voices.any { v -> v.beats.any { bt -> bt.notes.any { n -> n.links.any { it.kind == LinkKind.TIE && it.target == note.id } } } } } } }
+        require(!tied) { "Gebundene Note zuerst lösen, dann verschieben" }
+        val targetExisted = beatAt(c.toMeasure, c.toOffset) != null
+        val onlyNote = sourceBeat.notes.size == 1
         require(beatAt(c.toMeasure, c.toOffset)?.notes?.none { it.string == c.toString } ?: true) { "Zielposition ist belegt" }
         val fret = (if (c.toString == s.string) note.fret else null) ?: NoteEdits.fretFor(track.instrument, c.toString, note.pitch.midiNumber)
             ?: throw IllegalArgumentException("Ton ist auf dieser Saite nicht spielbar")
         val target = s.copy(measureId = c.toMeasure, offset = c.toOffset, string = c.toString, rangeEnd = null)
         val placed = apply(apply(p, s, EditorCommand.Delete), target, EditorCommand.PutNote(fret = fret, duration = c.duration))
-        return updateBeat(placed, target, createIfMissing = false) { beat, _, _ ->
-            beat.copy(notes = beat.notes.map { n -> if (n.string != c.toString) n else n.copy(pitch = n.pitch.copy(cents = note.pitch.cents), velocity = note.velocity, articulations = note.articulations, fingering = note.fingering) })
+        // The note itself travels (same id, so links from and to it survive); only string and fret change.
+        val moved = updateBeat(placed, target, createIfMissing = false) { beat, _, _ ->
+            beat.copy(notes = beat.notes.map { n -> if (n.string != c.toString) n else note.copy(string = c.toString, fret = fret) },
+                fermata = if (onlyNote && !targetExisted) sourceBeat.fermata else beat.fermata, strum = if (onlyNote && !targetExisted) sourceBeat.strum else beat.strum)
         }
+        // A strum or fermata that moved with the beat's only note does not stay behind on the rest.
+        return if (onlyNote && !targetExisted && (sourceBeat.fermata != null || sourceBeat.strum != null))
+            updateBeat(moved, s, createIfMissing = false) { beat, _, _ -> beat.copy(fermata = null, strum = null) } else moved
     }
 
     private fun updateBeat(p: Project, s: Selection, createIfMissing: Boolean = true, transform: (Beat, Track, Boolean) -> Beat): Project = p.copy(tracks = p.tracks.map { track ->

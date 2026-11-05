@@ -55,7 +55,9 @@ class EngineTransport(
     @Volatile private var starting = false
     @Volatile private var startingSince = 0L
     /** Halt epoch when the caller began preparing this play (togglePlay compiles in prepare() while the output is open). */
-    @Volatile private var prepareEpoch: Long? = null
+    private var preparesInFlight = 0
+    /** A pause/stop arrived while a prepare() was running: the play() that follows it must not start. Guarded by [haltLock]. */
+    private var haltedDuringPrepare = false
     /** Number of pause()/stop() calls so far; lets callers (stress test) notice an external halt between its passes. */
     val halts: Long get() = synchronized(haltLock) { haltEpoch }
     private val haltLock = Any()
@@ -67,12 +69,9 @@ class EngineTransport(
      * same musical position; otherwise compilation waits for the next play/preview so edits never open the device.
      */
     override suspend fun prepare(project: Project, settings: PracticeSettings): Outcome<Unit> {
-        val epoch = synchronized(haltLock) { haltEpoch }
-        prepareEpoch = epoch
-        return prepareLocked(project, settings).also {
-            // Only a halt that arrived during this prepare is remembered for the following play().
-            synchronized(haltLock) { if (haltEpoch == epoch && prepareEpoch == epoch) prepareEpoch = null }
-        }
+        // Overlapping prepares (practice change, edit) share one flag, so none of them can clear a halt meant for togglePlay.
+        synchronized(haltLock) { if (preparesInFlight++ == 0) haltedDuringPrepare = false }
+        try { return prepareLocked(project, settings) } finally { synchronized(haltLock) { preparesInFlight-- } }
     }
     private suspend fun prepareLocked(project: Project, settings: PracticeSettings): Outcome<Unit> = mutex.withLock {
         // The speed trainer raises the speed here; a caller that re-sends its unchanged start speed (cursor move, edit)
@@ -155,7 +154,7 @@ class EngineTransport(
 
     override suspend fun play(): Outcome<Unit> {
         // A stop/pause during the preceding prepare() (where the compile happens while the output runs) also wins.
-        val epoch = synchronized(haltLock) { (prepareEpoch ?: haltEpoch).also { prepareEpoch = null } }
+        val epoch = synchronized(haltLock) { if (haltedDuringPrepare) { haltedDuringPrepare = false; -1L } else haltEpoch }
         return mutex.withLock {
         val p = project ?: return@withLock Outcome.Failure(FailureCode.VALIDATION, "Kein Projekt vorbereitet", contractId = "C-AUDIO")
         val wasRunning = host.isRunning
@@ -183,16 +182,19 @@ class EngineTransport(
     override suspend fun pause(): Outcome<Unit> {
         synchronized(haltLock) {
             haltEpoch++
-            starting = false
+            if (preparesInFlight > 0) haltedDuringPrepare = true
             // Only a running playback becomes PAUSED; a stopped transport stays STOPPED so the next play starts at the cursor.
             // The published status may lag one poll behind a play that was just posted: ask the engine as well.
-            if (mutable.value.status == TransportStatus.PLAYING || starting || host.snapshot().let { it.playing || it.countingIn }) { halted = TransportStatus.PAUSED; host.post(HostCommand.Pause); publish(TransportStatus.PAUSED, null) }
+            val running = mutable.value.status == TransportStatus.PLAYING || starting || host.snapshot().let { it.playing || it.countingIn }
+            starting = false
+            if (running) { halted = TransportStatus.PAUSED; host.post(HostCommand.Pause); publish(TransportStatus.PAUSED, null) }
         }
         return Outcome.Success(Unit)
     }
 
     override suspend fun stop(): Outcome<Unit> = synchronized(haltLock) {
         haltEpoch++
+        if (preparesInFlight > 0) haltedDuringPrepare = true
         starting = false
         pendingSeek = null
         halted = TransportStatus.STOPPED
