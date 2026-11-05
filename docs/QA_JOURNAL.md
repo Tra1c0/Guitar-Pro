@@ -99,3 +99,31 @@ Methoden (anders als Zyklus 1): (a) seed-basierte, modellbasierte Zufallstests: 
 Messwerte (Desktop-JVM, nicht Telefon): 0 Byte Allokation pro 10 000 Render-Blöcke über alle Presets, Effektarten, Cabinet-Modelle, Clips, Preview, Seek, Loop, Rack-Tausch (auch mit `-XX:-DoEscapeAnalysis`). Extreme Effektparameter (0, ±1e9, NaN, ±∞) und Noten (MIDI 0/127, Bends ±4800, 1000-Noten-Akkorde, Tempo 1e-9…1e300 BPM) liefern endliche Ausgabe ≤ 0,73. 10 simulierte Minuten 8-Spur-Stresstest: Median 0,48–0,55 ms, P99 ≈ 0,8–1,06 ms bei 4 ms Budget, ≤ 38 Stimmen, Heap ohne Wachstum, nach Pause 0 Stimmen. 30-s-Nebenläufigkeitstest (6 Coroutinen, 13 424 Operationen, echter Render-Thread): 0 Ausnahmen, kein Deadlock, konsistenter Endzustand. Verdacht (b) „Poller geht beim Neustart verloren“ in 592 Versuchen nicht reproduziert (theoretisch µs-Fenster, nicht geändert).
 
 Ergebnis Zyklus 2: **7 + 2 + 5 Defekte bestätigt und repariert** → nicht defektfrei.
+
+### Zyklus 3 — Fehlerinjektion/Absturzkonsistenz (Speicher) und geometrische Eigenschaften (Notensatz)
+
+Methoden (neu gegenüber Zyklus 1–2): (a) simulierte Abstürze an jedem Schritt von `save()` (18 Zustände + 150 zufällige Absturzketten mit 1180 Prüfungen), echtes ENOSPC auf einem 2-MiB-tmpfs und EROFS-Remount, 16 parallele Coroutinen mit 6400 Operationen, 45 feindliche Archive; (b) geometrische Invarianten über 24 530 Layouts aus 1000 generierten Projekten (alle Stile, Breiten, Raster, Stimmen) und 1000 SVG-Exporte, Kollisionsprüfung von Textglyphen mit Screenshots, Skalierungsmessungen (100–10 000 Takte); (c) eigene statische Suche nach riskanten Mustern in Android-Code (`!!`, `first()`, Ressourcenfreigabe).
+
+**Bestätigt und repariert — Speicher (`StorageFaultRegressionTest`, rot → grün):**
+1. Einstellungen: Datei einer neueren Version (unbekannter Schlüssel/Enum) oder abgeschnittene Datei → Laden scheiterte, der nächste Schalter überschrieb alle Einstellungen mit Standardwerten. Jetzt vorwärtskompatibel; unlesbare Datei wird als `settings.json.unreadable-*` aufbewahrt.
+2. Beschädigtes Asset auf der Platte ließ sich nie reparieren und blockierte den Import gültiger Archive.
+3. 252-KiB-Archiv („Deflate-Bombe“, 4 × 63 MiB) blähte vor jeder Prüfung 252 MiB auf; bei ≤ 320 MiB Heap `OutOfMemoryError` außerhalb von `Outcome` (Absturz). Jetzt Manifest zuerst, Assets nur bis zur deklarierten Größe.
+4. Jeder Autosave las und validierte die gesamte Bibliothek unter dem Repository-Lock (21 Projekte: 1,3 s auf dem Desktop); Revisionen wurden doppelt dekodiert.
+5. (gering) Snapshot nach Löschen erzeugte ein kaputtes Projektverzeichnis; eine zerrissene `.meta.json` versteckte alle Snapshots; abgeschnittenes Archiv wurde als IO statt CORRUPT gemeldet.
+
+**Bestätigt und repariert — Notensatz/Rendering (`RenderingRegressionTest`, `LaneLabelRegressionTest`, rot → grün):**
+1. Haltebögen machten das Layout quadratisch (4000 gebundene Takte 5,7 s, 10 000: 27–39 s; Relayout bei jeder Eingabe).
+2. Gestauchte Systeme: Wiederholungs-Start schob Spalten hinter den Taktstrich (nicht antippbar); Takt- und Tonart überdeckten TAB-Schlüssel und Notenschlüssel. Feste Elemente werden jetzt nicht mehr gestaucht.
+3. Mehrere Sprungmarken in einem Takt lagen exakt übereinander; Volta-Nummer lag auf Abschnitts- und Tempolabel; Labels der Kopfzeile liefen in schmalen Takten in den Nachbartakt.
+4. SVG mit Steuerzeichen/einzelnen Surrogaten in Titel oder Spurnamen war kein gültiges XML (364 von 1000 Exporten); SVG war schmaler als das Layout (dichte Takte abgeschnitten).
+5. PDF-Export quadratisch in der Systemzahl (2000 Takte 8,6 s); Spurüberschrift konnte allein am Seitenende stehen.
+6. `ScoreView` zeichnete pro Frame alle Glyphen (nur x-Culling) und filterte für den Playhead alle Spalten → jetzt Index pro System/Takt (Android, durch Analyse belegt, Kern-Index getestet).
+7. Playhead lief im letzten Schlag bis zu 2 Einheiten zurück; Tippen auf eine Bundzahl in gestauchten Systemen wählte den Nachbar-Slot.
+
+**Bestätigt durch Code-Analyse (Android) und repariert:** `AudioRecordSource.open` gab das `AudioRecord` nicht frei, wenn `startRecording()` warf.
+
+**Widerlegt / ohne Befund:** Absturzkonsistenz von `save()` in allen 18 Zuständen und 150 Ketten; ENOSPC/EROFS (immer IO-Failure, alter Stand intakt); 44 von 45 feindlichen Archiven typisiert abgelehnt (einzige Annahme: `"schemaVersion": "1"` als String — harmlos); `FileAssetStore` (640 parallele `put`, Pfad-Traversal unmöglich); Einstellungen bei 200 parallelen Updates konsistent; alle Layout-Koordinaten endlich, Systeme geordnet, jeder Beat hat eine Spalte, Hit-Tests runden korrekt (außer den reparierten Fällen); Escaping von `< & " '`, Emoji, RTL korrekt.
+
+**Bekannt, nicht geändert (dokumentiert):** Zwei `FileProjectRepository`-Instanzen auf demselben Verzeichnis verlieren CONFLICTs (App erzeugt genau eine; Mehrprozess als unverifiziert dokumentiert). Sind beide Heads unlesbar, wird nicht nach intakten `revision-*.json` gesucht (dokumentiertes Verhalten in PROJECT_FORMAT.md). Keine automatische Bereinigung alter Revisionen/Waisen (dokumentiert für Phase 1). Sehr dichte Einzeltakte bleiben breiter als die Seite (Mindeststauchung 0,5; in der App horizontal scrollbar, im PDF abgeschnitten). Sehr hohe Noten (Transponieren +48) werden in Standardnotation über dem System gezeichnet; Bends auf der letzten Note ragen über das Ende hinaus. Einzeltakte mit > 2000 Noten skalieren superlinear (4096 Noten: 0,7 s). Pinch-Zoom-Zeitverhalten in `ScoreView` nicht testbar.
+
+Ergebnis Zyklus 3: **≈ 20 Defekte bestätigt und repariert** → nicht defektfrei. Nächste Zyklen müssen andere Fehlerklassen untersuchen.
