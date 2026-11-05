@@ -62,6 +62,7 @@ class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget
     val page = WorkspacePage.entries.first { it.route == route }
     val keyboardFocus = remember { FocusRequester() }
     val playing = transport.status == TransportStatus.PLAYING
+    val paused = transport.status == TransportStatus.PAUSED
     LaunchedEffect(ui.editor?.project?.id) { if (ui.editor != null) runCatching { keyboardFocus.requestFocus() } }
     val textEditing = remember { mutableStateOf(false) }
     CompositionLocalProvider(LocalTextEditing provides textEditing) {
@@ -111,9 +112,12 @@ class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget
                         PillItem(TabinoIcons.More, tr("Mehr", "More"), page !in primaryPages, { moreOpen = true }, "nav-more"),
                     ),
                     centerIcon = if (playing) TabinoIcons.Pause else TabinoIcons.Play,
-                    centerLabel = if (playing) tr("Pause", "Pause") else stringResource(R.string.play),
+                    centerLabel = when { playing -> tr("Pause", "Pause"); paused -> tr("Fortsetzen", "Resume"); else -> stringResource(R.string.play) },
                     onCenter = vm::togglePlay, centerTag = "transport-play",
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp),
+                    // Explicit "back to the start": cursor to bar 1 and the transport stopped (Bericht 1 §3).
+                    beforeCenter = PillItem(TabinoIcons.SkipStart, stringResource(R.string.jump_to_start), false, vm::jumpToStart, "transport-start"),
+                    centerPaused = paused,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 10.dp),
                 )
             }
         }
@@ -125,7 +129,7 @@ class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget
 }
 
 @Composable private fun TopBar(vm: WorkspaceViewModel, ui: WorkspaceState, onBack: () -> Unit) {
-    Row(Modifier.fillMaxWidth().height(56.dp).padding(start = 12.dp, end = 12.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(Modifier.fillMaxWidth().height(48.dp).padding(start = 12.dp, end = 12.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         RoundIconButton(TabinoIcons.Back, "${stringResource(R.string.back)}: ${stringResource(R.string.library)}", onBack)
         val (status, color) = when (ui.saveStatus) {
             SaveStatus.SAVED -> stringResource(R.string.saved) to Tabino.Lime
@@ -230,6 +234,7 @@ private fun handleKey(vm: WorkspaceViewModel, page: WorkspacePage, event: KeyEve
         Key.DirectionDown -> vm.moveString(-1)
         Key.PageDown -> vm.moveMeasure(1)
         Key.PageUp -> vm.moveMeasure(-1)
+        Key.MoveHome -> vm.jumpToStart()
         Key.R -> vm.rest()
         Key.P -> vm.togglePalmMute()
         Key.X -> vm.toggleMark(NoteMark.DEAD)

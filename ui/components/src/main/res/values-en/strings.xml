@@ -85,6 +85,9 @@
     <string name="loop">A/B loop</string>
     <string name="play">Play</string>
     <string name="stop">Stop</string>
+    <string name="jump_to_start">Jump to start</string>
+    <string name="follow_resume">Follow</string>
+    <string name="bar_settings">Edit time signature and tempo</string>
     <string name="transport_unavailable">Audio engine is not available yet</string>
     <string name="audio_hint">Multiple clips and stems will share the same transport. No audio is played at this stage.</string>
     <string name="audio_empty">No audio clips yet</string>

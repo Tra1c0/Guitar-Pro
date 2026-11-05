@@ -39,6 +39,8 @@ data class ViewOptions(
     /** Wrapped systems (page-like) instead of one continuous strip. */
     val wrap: Boolean = false,
     val follow: Boolean = true,
+    /** Following paused after a manual pan/zoom while playing; resumed by the "Folgen" chip, Play, seek or stop. */
+    val followSuspended: Boolean = false,
     val compact: Boolean = false,
     val viewportWidthDp: Float = 400f,
 )

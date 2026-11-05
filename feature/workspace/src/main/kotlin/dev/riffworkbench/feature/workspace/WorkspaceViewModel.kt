@@ -53,6 +53,11 @@ class WorkspaceViewModel(
     private var layoutJob: Job? = null
     private var tunerJob: Job? = null
     private var layoutKey: Any? = null
+    /**
+     * Start-position rule (Bericht 1 §3): the edit cursor is the start marker. Pause → Play resumes where it paused only
+     * while nothing was navigated in between; any selection change while PAUSED makes the next Play start at the cursor.
+     */
+    private var navigatedSincePause = false
 
     init {
         viewModelScope.launch { for (project in saves) persist(project) }
@@ -78,15 +83,28 @@ class WorkspaceViewModel(
         val s = session ?: return
         val adjusted = if (input.value.rangeMode) s.state.value.selection.copy(rangeEnd = selection.measureId) else selection.copy(rangeEnd = null)
         try { s.select(adjusted) } catch (e: IllegalArgumentException) { return }
+        noteNavigation()
         publish(); mutableInput.value = input.value.copy(buffer = "")
     }
     /** A tap on one cell (drum grid, fretboard) targets exactly that cell, also while range mode is on; false if it does not exist. */
     fun selectCell(selection: Selection): Boolean {
         val s = session ?: return false
         try { s.select(selection.copy(rangeEnd = null)) } catch (e: IllegalArgumentException) { return false }
+        noteNavigation()
         publish(); mutableInput.value = input.value.copy(buffer = "")
         return true
     }
+    private fun noteNavigation() { if (transport.state.value.status == TransportStatus.PAUSED) navigatedSincePause = true }
+    /**
+     * Explicit navigation (arrows, PageUp/Down, bar map): like a score tap, the transport follows while PLAYING (D5-8), so
+     * cursor and playhead stay together; while PAUSED the next Play starts here.
+     */
+    private fun navigateTo(selection: Selection) {
+        select(selection)
+        if (transport.state.value.status == TransportStatus.PLAYING) seekToCursor()
+    }
+    /** Bar map: jump to the start of [measureId]. */
+    fun selectMeasure(measureId: EntityId) { val s = state.value.editor?.selection ?: return; navigateTo(s.copy(measureId = measureId, offset = Fraction.ZERO)) }
     fun putNoteAt(string: Int, fret: Int) {
         val selection = state.value.editor?.selection ?: return
         if (selectCell(selection.copy(string = string))) command(EditorCommand.PutNote(fret = fret, duration = input.value.duration))
@@ -183,7 +201,7 @@ class WorkspaceViewModel(
             offset < Fraction.ZERO -> s.copy(offset = Fraction.ZERO)
             else -> s.copy(offset = offset)
         }
-        select(next)
+        navigateTo(next)
     }
     fun moveString(delta: Int) {
         val e = state.value.editor ?: return
@@ -193,7 +211,15 @@ class WorkspaceViewModel(
     fun moveMeasure(delta: Int) {
         val e = state.value.editor ?: return
         val i = (e.project.measures.indexOfFirst { it.id == e.selection.measureId } + delta).coerceIn(e.project.measures.indices)
-        select(e.selection.copy(measureId = e.project.measures[i].id, offset = Fraction.ZERO))
+        navigateTo(e.selection.copy(measureId = e.project.measures[i].id, offset = Fraction.ZERO))
+    }
+    /** Explicit "back to the start": cursor to bar 1, beat 1, transport stopped, so the next Play unambiguously starts at the top. */
+    fun jumpToStart() {
+        val e = state.value.editor ?: return
+        select(e.selection.copy(measureId = e.project.measures.first().id, offset = Fraction.ZERO))
+        navigatedSincePause = false
+        resumeFollow()
+        viewModelScope.launch { transport.stop() }
     }
     fun toggleDrum(trackId: EntityId, measureId: EntityId, offset: Fraction, midi: Int) {
         val selection = state.value.editor?.selection ?: return
@@ -272,7 +298,10 @@ class WorkspaceViewModel(
     fun setNotation(mode: NotationMode) { mutableView.value = view.value.copy(notation = mode); relayout() }
     fun setWrap(wrap: Boolean) { mutableView.value = view.value.copy(wrap = wrap); relayout() }
     fun setCompact(compact: Boolean) { mutableView.value = view.value.copy(compact = compact); relayout() }
-    fun setFollow(follow: Boolean) { mutableView.value = view.value.copy(follow = follow) }
+    fun setFollow(follow: Boolean) { mutableView.value = view.value.copy(follow = follow, followSuspended = false) }
+    /** A manual pan/zoom/drag while following: the view stays where the user put it until [resumeFollow] (chip, Play, seek, stop). */
+    fun suspendFollow() { if (!view.value.followSuspended) mutableView.value = view.value.copy(followSuspended = true) }
+    fun resumeFollow() { if (view.value.followSuspended) mutableView.value = view.value.copy(followSuspended = false) }
     fun setViewportWidth(dp: Float) { if (kotlin.math.abs(dp - view.value.viewportWidthDp) > 8f) { mutableView.value = view.value.copy(viewportWidthDp = dp); if (view.value.wrap) relayout() } }
 
     private fun relayout() {
@@ -287,7 +316,8 @@ class WorkspaceViewModel(
         if (key == layoutKey) return
         layoutKey = key
         layoutJob?.cancel()
-        val request = LayoutRequest(e.project, trackIndex, style, width, grid, e.selection.voice, if (e.project.tracks[trackIndex].staves.firstOrNull()?.bars?.any { b -> b.voices.count { it.beats.isNotEmpty() } > 1 } == true) e.selection.voice else null)
+        // Margin 6 (instead of 12): the editor canvas is small on a phone; pages and exports keep their own margins.
+        val request = LayoutRequest(e.project, trackIndex, style, width, grid, e.selection.voice, if (e.project.tracks[trackIndex].staves.firstOrNull()?.bars?.any { b -> b.voices.count { it.beats.isNotEmpty() } > 1 } == true) e.selection.voice else null, margin = EDITOR_MARGIN)
         layoutJob = viewModelScope.launch {
             val result = withContext(background) { runCatching { ScoreLayouter.layout(request) }.getOrNull() }
             if (result != null) mutableLayout.value = result
@@ -297,17 +327,21 @@ class WorkspaceViewModel(
     // ------------------------------------------------------------------ practice and transport
     fun togglePlay() { viewModelScope.launch {
         val status = transport.state.value.status
-        if (status == TransportStatus.PLAYING) { transport.pause(); return@launch }
+        resumeFollow()
+        if (status == TransportStatus.PLAYING) { navigatedSincePause = false; transport.pause(); return@launch }
         // The moment of the tap: a stop/pause (button, background, audio focus) after it wins over this play, one before not.
         val since = transport.halts
         val project = session?.state?.value?.project ?: return@launch
         transport.prepare(project, practice.value).let { if (it is Outcome.Failure && it.code != FailureCode.UNAVAILABLE) showNotice(it.message) }
-        // Resume continues where it paused; otherwise playback starts at the cursor (inside a loop: at the loop start).
-        if (transport.state.value.status != TransportStatus.PAUSED) cursorPosition()?.let { transport.seek(it) }
+        // Resume continues where it paused unless the user navigated meanwhile; otherwise playback starts at the cursor
+        // (inside a loop: at the loop start). The cursor is the visible start marker (Bericht 1 §3).
+        val resume = transport.state.value.status == TransportStatus.PAUSED && !navigatedSincePause
+        navigatedSincePause = false
+        if (!resume) cursorPosition()?.let { transport.seek(it) }
         when (val r = transport.play(since)) { is Outcome.Failure -> showNotice(r.message); is Outcome.Success -> Unit }
     } }
-    fun stop() { viewModelScope.launch { transport.stop() } }
-    fun seekToCursor() { viewModelScope.launch { cursorPosition()?.let { transport.seek(it) } } }
+    fun stop() { resumeFollow(); viewModelScope.launch { transport.stop() } }
+    fun seekToCursor() { resumeFollow(); viewModelScope.launch { cursorPosition()?.let { transport.seek(it) } } }
     private fun cursorPosition(): PlaybackOccurrence? {
         val e = session?.state?.value ?: return null
         val route = routeIndexFor(e.project, e.selection.measureId) ?: return null
@@ -525,8 +559,10 @@ class WorkspaceViewModel(
     // viewModelScope is already cancelled when onCleared runs: a launch there never executes, so the microphone would stay open.
     override fun onCleared() { tunerJob?.cancel(); services.tuner?.let { t -> kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch { t.stop() } } }
 
-    private companion object {
-        const val MAX_AUDIO_BYTES = 64 * 1024 * 1024
-        const val MAX_CLIP_MICROS = 600_000_000L
+    companion object {
+        /** Layout margin of the editor canvas (layout units). */
+        const val EDITOR_MARGIN = 6f
+        private const val MAX_AUDIO_BYTES = 64 * 1024 * 1024
+        private const val MAX_CLIP_MICROS = 600_000_000L
     }
 }

@@ -18,10 +18,14 @@ data class LayoutStyle(
     val rhythmInTab: Boolean = true,
     val measurePadding: Float = 10f,
     val systemGap: Float = 26f,
+    /** Staff and string line width. The editor draws them heavier on the dark surface; READ (pages, SVG, PDF) keeps the fine 0.8. */
+    val lineWidth: Float = 1.2f,
+    /** Height of the top lane (bar number, section, tempo, endings) above the staves. */
+    val numberLane: Float = 18f,
 ) {
     companion object {
         val EDIT = LayoutStyle()
-        val READ = LayoutStyle(tabLine = 13f, staffSpace = 7f, fretText = 10.5f, column16 = 19f, measurePadding = 8f, systemGap = 20f)
+        val READ = LayoutStyle(tabLine = 13f, staffSpace = 7f, fretText = 10.5f, column16 = 19f, measurePadding = 8f, systemGap = 20f, lineWidth = 0.8f, numberLane = 22f)
     }
 }
 
@@ -42,12 +46,20 @@ data class LayoutRequest(
 data class MeasureBox(val measureId: EntityId, val index: Int, val system: Int, val x: Float, val contentX: Float, val width: Float, val top: Float, val bottom: Float)
 data class Column(val measureId: EntityId, val measureIndex: Int, val offset: Fraction, val x: Float, val width: Float, val system: Int, val virtual: Boolean)
 data class NoteBox(val noteId: EntityId, val measureId: EntityId, val offset: Fraction, val voice: Int, val string: Int?, val x: Float, val y: Float, val w: Float, val h: Float)
+/**
+ * Hit region of a drawn time signature (bar 1, every signature change and the courtesy repeat at the start of a wrapped
+ * system). [courtesy] marks a repeat whose signature was set in an earlier bar.
+ */
+data class SignatureBox(val measureId: EntityId, val index: Int, val system: Int, val x: Float, val y: Float, val w: Float, val h: Float, val courtesy: Boolean)
 class SystemBox(val index: Int, val top: Float, val bottom: Float, val x0: Float, val x1: Float, val staffTop: Float, val staffBottom: Float, val tabTop: Float, val tabBottom: Float,
                 /** y of each string index (0 = lowest string) in TAB, empty without TAB. */ val stringY: FloatArray)
 
-class ScoreLayout(val width: Float, val height: Float, val glyphs: List<Glyph>, val measures: List<MeasureBox>, val columns: List<Column>, val notes: List<NoteBox>, val systems: List<SystemBox>) {
+class ScoreLayout(val width: Float, val height: Float, val glyphs: List<Glyph>, val measures: List<MeasureBox>, val columns: List<Column>, val notes: List<NoteBox>, val systems: List<SystemBox>,
+                  val signatures: List<SignatureBox> = emptyList()) {
     /** x position for a cursor or playhead at [offset] in a measure, interpolated between columns. */
     fun xFor(measureId: EntityId, offset: Fraction): Float? = xFor(measureId, offset.toDouble())
+    /** The time signature drawn under (x, y), if any; a long press there edits that bar's signature. */
+    fun signatureAt(x: Float, y: Float): SignatureBox? = signatures.firstOrNull { x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h }
     // Per-measure and per-system indexes, built once: the playhead and the view query them every frame.
     private val columnsByMeasure: Map<EntityId, List<Column>> by lazy { columns.groupBy { it.measureId } }
     private val measureById: Map<EntityId, MeasureBox> by lazy { measures.associateBy { it.measureId } }
@@ -127,6 +139,7 @@ object ScoreLayouter {
         val measureBoxes = ArrayList<MeasureBox>()
         val columns = ArrayList<Column>()
         val noteBoxes = ArrayList<NoteBox>()
+        val signatureBoxes = ArrayList<SignatureBox>()
         val systems = ArrayList<SystemBox>()
         val staff = track.staves.firstOrNull()
         val strings = track.instrument.tuning.size
@@ -148,7 +161,7 @@ object ScoreLayouter {
                 maxX = max(maxX, list.last().x + list.last().width)
             }
             resolveTies()
-            val layout = ScoreLayout(maxX + r.margin, y + r.margin, glyphs, measureBoxes, columns, noteBoxes, systems)
+            val layout = ScoreLayout(maxX + r.margin, y + r.margin, glyphs, measureBoxes, columns, noteBoxes, systems, signatureBoxes)
             specs.forEach { layout.registerLength(it.measure.id, length(it.measure).toDouble()) }
             return layout
         }
@@ -277,7 +290,7 @@ object ScoreLayouter {
         // ---------------------------------------------------------------- systems
         fun drawSystem(si: Int, list: List<MeasureSpec>, top: Float, header: Float): Float {
             val laneTop = top
-            var y = top + 22f // measure numbers, sections, tempo, endings
+            var y = top + style.numberLane // measure numbers, sections, tempo, endings
             val staffTop: Float; val staffBottom: Float
             if (showStandard) {
                 val (low, high) = Standard.range(this, list.mapNotNull { it.bar })
@@ -299,8 +312,8 @@ object ScoreLayouter {
             val system = SystemBox(si, laneTop, y, x0, x1, staffTop, staffBottom, tabTop, tabBottom, stringY)
             systems += system
             // Staff lines and header
-            if (showStandard) for (k in 0..4) glyphs += LineGlyph(x0, staffTop + k * style.staffSpace, x1, staffTop + k * style.staffSpace, 0.8f, Ink.STAFF)
-            if (showTab) for (s in 0 until strings) glyphs += LineGlyph(x0 + header - 6f, stringY[s], x1, stringY[s], 0.8f, Ink.STAFF)
+            if (showStandard) for (k in 0..4) glyphs += LineGlyph(x0, staffTop + k * style.staffSpace, x1, staffTop + k * style.staffSpace, style.lineWidth, Ink.STAFF)
+            if (showTab) for (s in 0 until strings) glyphs += LineGlyph(x0 + header - 6f, stringY[s], x1, stringY[s], style.lineWidth, Ink.STAFF)
             if (showTab) {
                 stringY.forEachIndexed { s, sy -> glyphs += TextGlyph(x0 + 2f, sy + style.fretText * 0.3f, MusicText.pitchClass(track.instrument.tuning[s] + track.instrument.capoByString[s]), style.fretText * 0.62f, Ink.MUTED, Align.START) }
                 val mid = (tabTop + tabBottom) / 2
@@ -406,6 +419,9 @@ object ScoreLayouter {
             val showTime = s.showTime || first
             if (showTime) {
                 val tx = s.contentX - timeWidth() * 0.55f
+                // Hit region over the glyphs: the TAB band (or the staff band without TAB), as wide as the signature column.
+                val (hitTop, hitBottom) = if (showTab) sys.tabTop - style.tabLine / 2 to sys.tabBottom + style.tabLine / 2 else sys.staffTop - style.staffSpace to sys.staffBottom + style.staffSpace
+                signatureBoxes += SignatureBox(m.id, s.index, sys.index, tx - timeWidth() / 2, hitTop, timeWidth(), hitBottom - hitTop, courtesy = first && !s.showTime)
                 if (showTab) {
                     val mid = (sys.tabTop + sys.tabBottom) / 2
                     val size = min(style.tabLine * 1.5f, (sys.tabBottom - sys.tabTop) / 2.2f + 6f)

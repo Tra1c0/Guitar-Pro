@@ -29,23 +29,12 @@ import dev.riffworkbench.ui.score.pitchName
     }
 }
 
-@Composable private fun Stepper(label: String, value: String, onMinus: () -> Unit, onPlus: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.widthIn(min = 72.dp))
-        OutlinedButton(onClick = onMinus, contentPadding = PaddingValues(0.dp), modifier = Modifier.size(48.dp)) { Text("−") }
-        Text(value, style = MaterialTheme.typography.titleMedium, fontFamily = FontFamily.Monospace, modifier = Modifier.widthIn(min = 40.dp))
-        OutlinedButton(onClick = onPlus, contentPadding = PaddingValues(0.dp), modifier = Modifier.size(48.dp)) { Text("+") }
-    }
-}
-
 @Composable fun ArrangementScreen(vm: WorkspaceViewModel, state: EditorState) {
     val p = state.project
     val measure = p.measures.first { it.id == state.selection.measureId }
     val index = p.measures.indexOf(measure)
     var title by remember(p.metadata.title) { mutableStateOf(p.metadata.title) }
     var artist by remember(p.metadata.artist) { mutableStateOf(p.metadata.artist) }
-    val tempoHere = p.tempo.firstOrNull { it.position == ScorePosition(measure.id) }
-    var bpm by remember(p.tempo, measure.id) { mutableStateOf(((tempoHere ?: p.tempo.firstOrNull())?.quarterNotesPerMinute ?: 120.0).toInt().toString()) }
     var section by remember(p.sections, measure.id) { mutableStateOf(p.sections.firstOrNull { it.measureId == measure.id }?.label ?: "") }
     ScrollPage(stringResource(R.string.arrangement), stringResource(R.string.portrait_hint)) {
         OutlinedTextField(title, { title = it.take(200) }, label = { Text(stringResource(R.string.project_title)) }, modifier = Modifier.textEditing().fillMaxWidth(), singleLine = true)
@@ -64,22 +53,7 @@ import dev.riffworkbench.ui.score.pitchName
             OutlinedButton(onClick = vm::deleteBars, enabled = p.measures.size > 1) { Text(tr("Löschen", "Delete")) }
             OutlinedButton(onClick = vm::clearBars) { Text(tr("Leeren", "Clear")) }
         }
-        Text(stringResource(R.string.time_signature), style = MaterialTheme.typography.titleSmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Stepper(tr("Zähler", "Beats"), "${measure.signature.numerator}", { if (measure.signature.numerator > 1) vm.command(EditorCommand.SetSignature(measure.id, measure.signature.copy(numerator = measure.signature.numerator - 1))) },
-                { if (measure.signature.numerator < 32) vm.command(EditorCommand.SetSignature(measure.id, measure.signature.copy(numerator = measure.signature.numerator + 1))) })
-        }
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(2, 4, 8, 16).forEach { d -> FilterChip(measure.signature.denominator == d, { vm.command(EditorCommand.SetSignature(measure.id, measure.signature.copy(denominator = d))) }, label = { Text("/$d") }) }
-            listOf(TimeSignature(4, 4), TimeSignature(3, 4), TimeSignature(6, 8), TimeSignature(7, 8), TimeSignature(5, 4), TimeSignature(12, 8)).forEach { sig ->
-                AssistChip(onClick = { vm.command(EditorCommand.SetSignature(measure.id, sig)) }, label = { Text("${sig.numerator}/${sig.denominator}") })
-            }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(bpm, { bpm = it.filter { c -> c.isDigit() || c == '.' }.take(6) }, label = { Text("BPM") }, modifier = Modifier.textEditing().width(120.dp), singleLine = true)
-            Button(onClick = { bpm.toDoubleOrNull()?.let { vm.command(if (index == 0) EditorCommand.SetTempo(it) else EditorCommand.SetTempoAt(measure.id, it)) } ?: vm.showNotice("Ungültiges Tempo") }) { Text(stringResource(R.string.tempo)) }
-            if (tempoHere != null && index > 0) TextButton(onClick = { vm.command(EditorCommand.SetTempoAt(measure.id, null)) }) { Text(tr("Tempowechsel entfernen", "Remove tempo change")) }
-        }
+        SignatureTempoControls(vm, p, measure, index)
         Text(tr("Tonart", "Key"), style = MaterialTheme.typography.titleSmall)
         Stepper(if (measure.key.fifths >= 0) "♯" else "♭", "${kotlin.math.abs(measure.key.fifths)}", { if (measure.key.fifths > -7) vm.command(EditorCommand.SetKey(measure.id, measure.key.copy(fifths = measure.key.fifths - 1))) },
             { if (measure.key.fifths < 7) vm.command(EditorCommand.SetKey(measure.id, measure.key.copy(fifths = measure.key.fifths + 1))) })
