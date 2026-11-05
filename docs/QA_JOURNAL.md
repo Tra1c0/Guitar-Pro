@@ -213,3 +213,22 @@ Methode (neu): identischer Dump-Test in beiden Versionen über alle Fixtures, We
 **Beabsichtigte Unterschiede, größer als zuvor beschrieben:** Die Voice-Map-Korrektur (Zyklus 1 #8) betraf nicht nur Voice-Stealing, sondern jeden Akkord, der eine gerade wiederverwendete Stimme traf: Der Schlussakkord des Vergleichsriffs ist jetzt 1–8 dB lauter (er wurde vorher teilweise abgeschnitten). Master-FX-Renderings sind durch den Limiter 0,2–2,2 dB lauter (Spitzen −2,8 → −0,6 dBFS vor der Korrektur oben). Stimmgerät: oberhalb E6 (1,7–2,1 kHz, außerhalb des Gitarrenbereichs) teils ungenauer (bis −11 Cent), im Gitarrenbereich genauer. Tabelle aller beabsichtigten Unterschiede: Swing-7/8-Takt 88 000 → 84 000 Frames (GP4-Fixture), Tremolo-Kurven, MIDI-Export (eine 1-Tick-Note weniger, neuer Verlusteintrag), Layout-Breiten/Spaltenpositionen ohne Änderung der Glyph- oder Systemzahl, ASCII-Export des Werksprojekts, kompaktes Native-JSON (27,6 → 5,1 MB, Re-Import identisch).
 
 Ergebnis Zyklus 7: **2 Defekte bestätigt und repariert** (einer aus Zyklus 5, einer vorbestehend) → nicht defektfrei.
+
+### Zyklus 8 — Tests gegen reale Dateien Dritter (Korpus)
+
+Methode (neu): öffentliche Testkorpora, nur lokal verwendet, nicht im Repo: alphaTab `test-data` (Commit 7d3efe78; GP3/4/5, GPX, GP7/8, MusicXML), W3C `musicxml` (ece89abc), jazz-soft `test-midi-files` (ee79d9e3, MIT). 674 Dateien, ≈ 6000 Importerläufe: Erkennung, Import, Validierung, Wiedergabe, Layout, SVG, Ex-/Re-Import; Inhaltsprüfungen gegen die Erwartungen der alphaTab-Tests (102 Prüfungen), unabhängiger MusicXML-DOM-Parser als Orakel (250 Dateien), Vergleich desselben Stücks in mehreren Formaten (121 Paare), MIDI gegen die Generator-Skripte.
+
+**Bestätigt und repariert (`CorpusFindingsRegressionTest`, `UnfrettedLayoutScalingRegressionTest`; synthetische Repros ohne Fremddaten, rot → grün):**
+1. **200 von 208 echten GP7/8-Dateien wurden als „Beschädigtes ZIP-Archiv“ abgelehnt** — Guitar Pro schreibt Datenbeschreiber ohne Signatur (crc, unkomprimiert, komprimiert), an denen `ZipInputStream` scheitert. Jetzt Lesen über das zentrale Verzeichnis (mit CRC-/Größenprüfung und denselben Budgets), Rückfall auf die lokale Header-Kette für Archive ohne Verzeichnis. Nachkontrolle am Korpus: **208/208**.
+2. MusicXML: negativer `<offset sound="yes">` ließ die ganze Datei scheitern (4 Werke in .xml und .mxl).
+3. MusicXML: `<fret>` ohne `<string>` (oder umgekehrt) erzeugte eine ungültige Note → ganze Datei abgelehnt.
+4. GPIF-Akkorddiagramme ignorierten `baseFret` (D-Griff im 5. Bund kam als 1,3,3,3,1), ohne Verlustmeldung.
+5. MusicXML-Bends: Release ohne vorherigen Bend ging unter die Grundtonhöhe; mehrere Bends ohne Positionsangabe fielen auf denselben Zeitpunkt.
+6. Layout unbundierter Spuren (Klavier, die meisten MIDI-/MusicXML-Importe) quadratisch: Notenschlüssel aus allen Noten pro Takt neu berechnet (1734-Takt-MIDI: 32 s pro Layout).
+7. GP 7.0 wurde wegen leerer `<AudioTracks></AudioTracks>` als GP8 erkannt (mit falscher Verlustmeldung); rohes GPIF-XML wurde als GP7 erkannt, der Import scheiterte dann mit „Keine ZIP-Datei“ (jetzt klare Meldung).
+
+**Korpus-Ergebnis nach den Fixes:** GP3 18/18, GP4 23/23, GP5 56/56, GPX 37/37, GP7/8 208/208, MusicXML .xml 195/198 (Katalogdatei, zwei Teile ohne `<divisions>`), .musicxml 31/33 (W3C-Fragmente ohne `<divisions>`), .mxl 19/19, MIDI 58/76 (18 typisierte Ablehnungen: Typ 2, illegale Statusbytes, leere/abgeschnittene Dateien — laut Korpus selbst ungültig). Kein Absturz, kein Hänger, jedes erfolgreiche Importergebnis valide.
+
+**Nicht geändert (dokumentiert):** TuxGuitar-Dead-Notes (`<play><mute>straight</mute>` bzw. x-Notenkopf auf der zusammengeführten Notationszeile) verlieren DEAD ohne Verlustmeldung — herstellerspezifisch und mehrdeutig („straight“ ist in MusicXML ein Blechbläser-Dämpfer). MIDI-Bank in MusicXML, Tonhöhen-Note in Schlagzeugpart (→ Drum 60) und untypisierter `<creator>` ohne Verlustmeldung (gering). Volten-Lesart bei „repeat-close-alternate-endings“ weicht von alphaTab ab (Takt ohne Klammer wird in jedem Durchgang gespielt — Standardlesart, nicht als Defekt gewertet). Übervolle GP-Takte werden mit Verlustmeldung gekürzt; GP6-Drum-Element/Variation mit Verlustmeldung verworfen. MusicXML-Teile ohne `<divisions>` werden typisiert abgelehnt (alphaTab erbt sie vom vorigen Teil).
+
+Ergebnis Zyklus 8: **7 Defektklassen (9 Einzelbefunde) bestätigt und repariert** → nicht defektfrei.
