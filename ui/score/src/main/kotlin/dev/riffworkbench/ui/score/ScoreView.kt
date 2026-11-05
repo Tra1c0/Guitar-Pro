@@ -94,6 +94,8 @@ fun ScoreCanvas(
     LaunchedEffect(cursor?.measureId, cursor?.offset, layout, zoom, viewport) {
         val l = layout ?: return@LaunchedEffect
         val c = cursor ?: return@LaunchedEffect
+        // Before the first measure pass the viewport is 0×0: every position looks off-screen and the view would jump.
+        if (viewport.width == 0 || viewport.height == 0) return@LaunchedEffect
         // While following playback the playhead owns the viewport; re-running on a layout/viewport change must not
         // yank it back to the edit cursor (that made the view jump between cursor and playhead).
         if (currentFollow) return@LaunchedEffect
@@ -110,7 +112,7 @@ fun ScoreCanvas(
     LaunchedEffect(playhead, follow, layout, zoom) {
         val l = layout ?: return@LaunchedEffect
         val p = playhead ?: return@LaunchedEffect
-        if (!follow) return@LaunchedEffect
+        if (!follow || viewport.width == 0 || viewport.height == 0) return@LaunchedEffect
         if (System.currentTimeMillis() - userScrolledAt < 2500) return@LaunchedEffect
         val x = (l.xFor(p.first, p.second) ?: return@LaunchedEffect) * factor
         if (x < offsetX + viewport.width * 0.1f || x > offsetX + viewport.width * 0.75f) offsetX = x - viewport.width * 0.25f
