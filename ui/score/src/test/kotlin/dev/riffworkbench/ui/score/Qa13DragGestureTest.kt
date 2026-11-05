@@ -41,7 +41,7 @@ class Qa13DragGestureTest {
         val box = layout.notes.first()
         compose.setContent {
             ScoreCanvas(layout = layout, cursor = ScoreCursor(p.measures[0].id, Fraction.ZERO, 2), playhead = null, follow = false, zoom = 1f,
-                onZoom = { zooms += it }, onTap = { taps += it }, modifier = Modifier.size(600.dp, 320.dp).testTag("score"), onMoveNote = { a, b -> moves += a to b })
+                onZoom = { zooms += it }, onTap = { taps += it }, modifier = Modifier.size(600.dp, 1200.dp).testTag("score"), onMoveNote = { a, b -> moves += a to b })
         }
         val d = compose.density.density
         diag = "box=$box density=$d slop?"
@@ -51,7 +51,11 @@ class Qa13DragGestureTest {
     /** Control: drag + release moves the note. */
     @Test fun dragAndReleaseMoves() {
         val at = setUp()
-        compose.onNodeWithTag("score").performTouchInput { down(at); moveBy(Offset(60f, 0f)); moveBy(Offset(60f, 0f)); up() }
+        // Sanity: a plain tap at the same point hits the note (the viewport is tall enough not to scroll).
+        compose.onNodeWithTag("score").performTouchInput { click(at) }
+        compose.waitForIdle()
+        assertTrue("tap must hit the note: taps=$taps at=$at $diag", taps.lastOrNull()?.noteId != null)
+        compose.onNodeWithTag("score").performTouchInput { down(at); moveBy(Offset(30f, 0f)); moveBy(Offset(30f, 0f)); up() }
         compose.waitForIdle()
         assertEquals("moves=$moves taps=$taps zooms=$zooms at=$at $diag", 1, moves.size)
     }

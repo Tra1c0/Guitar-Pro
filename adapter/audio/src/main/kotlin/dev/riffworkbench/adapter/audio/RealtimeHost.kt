@@ -23,7 +23,7 @@ sealed interface HostCommand {
 
 /** What the UI may read; produced by the control thread from data the audio thread published. */
 /** [programs] counts Install/Reprogram commands the render thread has applied; [planFrame] belongs to that program. */
-data class HostSnapshot(val playing: Boolean, val countingIn: Boolean, val ended: Boolean, val planFrame: Long, val loopsCompleted: Long, val underruns: Long, val running: Boolean, val programs: Long = 0)
+data class HostSnapshot(val playing: Boolean, val countingIn: Boolean, val ended: Boolean, val planFrame: Long, val loopsCompleted: Long, val underruns: Long, val running: Boolean, val programs: Long = 0, val plays: Long = 0)
 
 /**
  * Measured audio performance (diagnostics page). Render times are the DSP work per callback block, against the block
@@ -79,6 +79,8 @@ class RealtimeHost(
     @Volatile private var lastPlan = 0L
     /** Install/Reprogram commands applied by the render thread (render thread writes, readers see it via the block ring). */
     @Volatile private var programs = 0L
+    /** Play commands applied by the render thread. */
+    @Volatile private var plays = 0L
     private var idleBlocks = 0L
 
     val isRunning: Boolean get() = running
@@ -134,7 +136,7 @@ class RealtimeHost(
                 is HostCommand.Install -> { e.install(c.program); programs++ }
                 is HostCommand.Rack -> e.installRack(c.rack)
                 is HostCommand.Mix -> e.setMix(c.mix)
-                is HostCommand.Play -> e.play(c.from, c.countInFrames, c.clickOffsets)
+                is HostCommand.Play -> { e.play(c.from, c.countInFrames, c.clickOffsets); plays++ }
                 HostCommand.Pause -> e.pause()
                 is HostCommand.Seek -> e.seek(c.frame)
                 is HostCommand.Loop -> e.setLoop(c.start, c.end)
@@ -193,7 +195,7 @@ class RealtimeHost(
     fun snapshot(): HostSnapshot {
         val f = format
         val count = blocks
-        if (f == null || count == 0L) return HostSnapshot(false, false, false, lastPlan, loops, 0, running, programs)
+        if (f == null || count == 0L) return HostSnapshot(false, false, false, lastPlan, loops, 0, running, programs, plays)
         val presented = sink?.presentedFrame() ?: (written - f.latencyFrames).coerceAtLeast(0)
         var i = count - 1
         val oldest = maxOf(0L, count - ringSize + 8)
@@ -203,6 +205,6 @@ class RealtimeHost(
         val playing = flags and 1 != 0 && flags and 2 == 0
         val within = (presented - ringSink[slot]).coerceIn(0, f.blockFrames.toLong())
         val plan = ringPlan[slot] + if (playing) within else 0
-        return HostSnapshot(lastFlags and 1 != 0, flags and 2 != 0, lastFlags and 4 != 0, plan, loops, sink?.underruns() ?: 0, running, ringPrograms[slot])
+        return HostSnapshot(lastFlags and 1 != 0, flags and 2 != 0, lastFlags and 4 != 0, plan, loops, sink?.underruns() ?: 0, running, ringPrograms[slot], plays)
     }
 }

@@ -67,6 +67,7 @@ class EngineTransport(
     private var planProject: EntityId? = null
     /** Install/Reprogram commands posted so far; the poller trusts a snapshot's frame only once the engine has applied all. */
     @Volatile private var postedPrograms = 0L
+    @Volatile private var postedPlays = 0L
     /** Speed last requested by the caller (practice settings), as opposed to the speed the trainer has reached. */
     @Volatile private var requestedSpeed = 1.0
 
@@ -202,7 +203,8 @@ class EngineTransport(
             restartFromTop = false
             halted = null
             starting = true; startingSince = System.nanoTime()
-            host.post(HostCommand.Play(from, countIn, clicks))
+            host.post(HostCommand.Play(from, countIn, clicks)); postedPlays++
+            mutable.value = mutable.value.copy(sample = SamplePosition(from, current.sampleRate), position = current.positionAt(from))
             trainerPasses = 0; lastLoops = snap.loopsCompleted
             publish(TransportStatus.PLAYING, null)
         }
@@ -273,7 +275,7 @@ class EngineTransport(
         mutable.value = mutable.value.copy(loop = range)
         // A loop set (or recompiled) while the playhead is outside it engages at once instead of never (after it) or late.
         val playing = mutable.value.status == TransportStatus.PLAYING || starting
-        val at = mutable.value.sample?.frame
+        val at = mutable.value.sample?.frame ?: host.snapshot().planFrame
         if (playing && at != null && at !in start until end) {
             host.post(HostCommand.Seek(start))
             mutable.value = mutable.value.copy(sample = SamplePosition(start, p.sampleRate), position = p.positionAt(start))
@@ -383,7 +385,7 @@ class EngineTransport(
                 val p = plan
                 val held = halted
                 // (An `ended` flag left over from the previous run is not an answer; give up after 1 s if the thread never starts.)
-                if (starting && (snap.playing || snap.countingIn || !snap.running || System.nanoTime() - startingSince > 1_000_000_000L)) starting = false
+                if (starting && (snap.plays >= postedPlays || !snap.running || System.nanoTime() - startingSince > 1_000_000_000L)) starting = false
                 val status = when {
                     held != null -> held
                     // Until the first block of the new playback the snapshot is stale: keep PLAYING and the seek position.
