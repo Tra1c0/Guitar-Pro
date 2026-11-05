@@ -74,7 +74,9 @@ class EngineTransport(
         host.post(HostCommand.Clips(clipsFor(project, rate)))
         val previous = plan
         val program = EngineProgram.prepare(next)
-        if (previous == null || installedRate != rate) host.post(HostCommand.Install(program)) else host.post(HostCommand.Reprogram(program, previous))
+        val loop = settings.loop?.let { loopFramesFor(next, it) }
+        if (previous == null || installedRate != rate) host.post(HostCommand.Install(program))
+        else host.post(HostCommand.Reprogram(program, previous, loop?.first ?: -1L, loop?.second ?: -1L))
         // While not playing, the published frame belongs to the old plan (speed or tempo changes move bars): carry it over.
         if (previous != null && installedRate == rate && mutable.value.status != TransportStatus.PLAYING) mutable.value.sample?.let { s ->
             previous.positionAt(s.frame)?.let { pos -> next.frameOf(pos.routeIndex, pos.position.offset) }?.let { f ->
@@ -162,6 +164,14 @@ class EngineTransport(
     override suspend fun setLoop(range: LoopRange?): Outcome<Unit> = mutex.withLock {
         settings = settings.copy(loop = range)
         applyLoopLocked(range)
+    }
+
+    /** Loop frames of [range] in [p], or null when the range is not on the route. */
+    private fun loopFramesFor(p: PlaybackPlan, range: LoopRange): Pair<Long, Long>? {
+        val start = p.frameOf(range.start.routeIndex, range.start.position.offset) ?: return null
+        val endSpan = p.spans.getOrNull(range.end.routeIndex)?.takeIf { it.measureId == range.end.position.measureId } ?: return null
+        val end = if (range.end.position.offset == Fraction.ZERO) endSpan.endFrame else kotlin.math.round(endSpan.frameAt(range.end.position.offset.toDouble())).toLong()
+        return if (end > start) start to end else null
     }
 
     private fun applyLoopLocked(range: LoopRange?): Outcome<Unit> {

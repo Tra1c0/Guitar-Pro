@@ -17,7 +17,8 @@ sealed interface HostCommand {
     class Preview(val note: ScheduledNote, val postedNanos: Long = System.nanoTime()) : HostCommand
     class Clips(val clips: ClipSet) : HostCommand
     /** Replaces the program at a new speed and maps the playhead via the old plan's route position. */
-    class Reprogram(val program: EngineProgram, val mapFrom: PlaybackPlan?) : HostCommand
+    /** New plan plus its loop frames (-1 = none), applied in one step so no block plays the new plan with the old loop. */
+    class Reprogram(val program: EngineProgram, val mapFrom: PlaybackPlan?, val loopStart: Long = -2, val loopEnd: Long = -2) : HostCommand
 }
 
 /** What the UI may read; produced by the control thread from data the audio thread published. */
@@ -144,7 +145,9 @@ class RealtimeHost(
                     val target = c.mapFrom?.positionAt(e.position)?.let { pos -> c.program.plan.frameOf(pos.routeIndex, pos.position.offset) }
                     val wasPlaying = e.playing
                     e.install(c.program)
-                    if (target != null) { if (wasPlaying) e.play(target) else e.seek(target) }
+                    if (c.loopStart != -2L) e.setLoop(c.loopStart, c.loopEnd)
+                    // During a count-in the engine is "playing" but must keep counting: only move the start point.
+                    if (target != null) { if (wasPlaying && !e.countingIn) e.play(target) else e.seek(target) }
                 }
             }
         }

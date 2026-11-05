@@ -84,6 +84,8 @@ class MixState internal constructor(internal val gains: FloatArray, internal val
  * The real-time renderer. All methods must be called from one thread (the audio thread or an offline loop).
  * After construction, [render] performs no allocation, I/O or locking.
  */
+private val NO_CLICKS = LongArray(0)
+
 class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val bank: SampleBank? = null) {
     val hasBank: Boolean get() = bank != null
     private val strings = Array(72) { StringVoice(sampleRate) }
@@ -134,7 +136,7 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
     fun setMix(next: MixState) { mix = next }
     fun currentRack(): ChannelRack? = rack
 
-    fun play(from: Long, countInFrames: Long = 0, countInClickOffsets: LongArray = LongArray(0)) {
+    fun play(from: Long, countInFrames: Long = 0, countInClickOffsets: LongArray = NO_CLICKS) {
         seekInternal(from, chase = countInFrames == 0L)
         countInLeft = countInFrames.coerceAtLeast(0)
         countInElapsed = 0
@@ -145,7 +147,7 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
         ended = false
     }
     fun pause() { playing = false; countingIn = false; countInLeft = 0; releaseAll(fast = false) }
-    fun seek(frame: Long) { seekInternal(frame, chase = playing) }
+    fun seek(frame: Long) { seekInternal(frame, chase = playing && !countingIn) }
     fun setLoop(start: Long, end: Long) { if (start in 0 until end) { loopStart = start; loopEnd = end } else { loopStart = -1; loopEnd = -1 } }
     val loopActive: Boolean get() = loopEnd > loopStart && loopStart >= 0
 
@@ -278,6 +280,10 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
     }
 
     private fun trigger(note: ScheduledNote, offset: Int, duration: Long) {
+        // One non-finite parameter would turn the channel's effect state (and the master) into NaN until the rack is rebuilt.
+        if (!note.soundingPitch.isFinite() || !note.elementGain.isFinite() || !note.elementPan.isFinite()) return
+        note.vibrato?.let { if (!it.rateHz.isFinite() || !it.depthCents.isFinite()) return }
+        for (i in note.curve.indices) if (!note.curve[i].cents.isFinite()) return
         val r = rack ?: return
         val t = note.trackIndex
         val ch = r.channels.getOrNull(t) ?: return

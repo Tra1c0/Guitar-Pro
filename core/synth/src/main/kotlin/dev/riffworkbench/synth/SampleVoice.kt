@@ -161,7 +161,8 @@ internal class SampleVoice(private val sampleRate: Int) {
             val t = (frame - vibratoStart).toDouble() / sampleRate
             cents += vibratoDepth * (t / 0.15).coerceAtMost(1.0) * sin(Dsp.TWO_PI * vibratoRate * t)
         }
-        return baseRatio * Dsp_pow2((baseMidi - rootMidi + cents / 100.0) / 12.0)
+        // Bounded step: a hostile pitch must not push the read position to magnitudes where the loop wrap stops working.
+        return (baseRatio * Dsp_pow2((baseMidi - rootMidi + cents / 100.0) / 12.0)).coerceIn(0.0, 64.0)
     }
 
     /** Adds [count] samples into [out] from [offset]; [clock] is the engine clock of the first sample. */
@@ -179,7 +180,7 @@ internal class SampleVoice(private val sampleRate: Int) {
             for (k in 0 until chunk) {
                 val ratio = ratio0 + (ratio1 - ratio0) * k / chunk
                 var s = 0f
-                if (r.loopEnd > 0 && pos >= r.loopEnd) { while (pos >= r.loopEnd) pos -= (r.loopEnd - r.loopStart); looped = true; if (loopDecay == 1f) loopDecay = exp(-ln(10.0) * r.decayDbPerSec / 20.0 / sampleRate).toFloat() }
+                if (r.loopEnd > 0 && pos >= r.loopEnd) { pos = r.loopStart + (pos - r.loopStart) % (r.loopEnd - r.loopStart); looped = true; if (loopDecay == 1f) loopDecay = exp(-ln(10.0) * r.decayDbPerSec / 20.0 / sampleRate).toFloat() }
                 if (r.loopEnd > 0) s = cubicLoop(data, pos, r.loopStart, r.loopEnd) else if (pos < r.frames - 2) s = cubic(data, pos) else fade = 0f
                 pos += ratio
                 if (looped) env *= loopDecay

@@ -123,6 +123,8 @@ class ScorePlaybackCompiler(private val repeats: RepeatCompiler = UnfoldingRepea
             var sounding = note.pitch.midiNumber + note.pitch.cents / 100.0 + instrument.fineTuneCents / 100.0
             val harmonic = note.articulations.filterIsInstance<Articulation.Harmonic>().firstOrNull()
             if (harmonic != null) sounding = harmonicPitch(harmonic, note, instrument) ?: sounding
+            // Cents are unchecked in files: keep the sounding pitch in a range every voice can render in bounded time.
+            sounding = if (sounding.isFinite()) sounding.coerceIn(-24.0, 151.0) else note.pitch.midiNumber.toDouble()
             val ev = Ev(note.id, trackIndex, track.id, start, max(start + 1, end), note.pitch, velocity.coerceIn(1, 127), note.string, note.articulations, span.routeIndex, sounding, marks, note.links,
                 note.articulations.filterIsInstance<Articulation.Slide>().firstOrNull(), false)
             ev.spanRef = span
@@ -141,7 +143,7 @@ class ScorePlaybackCompiler(private val repeats: RepeatCompiler = UnfoldingRepea
             curves(ev, note, duration)
             if (NoteMark.PICK_SCRAPE in marks) ev.curve.apply { clear(); add(CurvePoint(0, 0.0)); add(CurvePoint(duration.roundToLong(), -1200.0)) }
             note.articulations.filterIsInstance<Articulation.Vibrato>().firstOrNull()?.let { v ->
-                ev.vibrato = VibratoSpec(v.depthCents.toDouble().coerceIn(0.0, 200.0), v.rateHz.coerceIn(0.5, 12.0), min(0.08 * sampleRate, duration * 0.25).roundToLong())
+                ev.vibrato = VibratoSpec(v.depthCents.toDouble().coerceIn(0.0, 200.0), (if (v.rateHz.isFinite()) v.rateHz else 5.0).coerceIn(0.5, 12.0), min(0.08 * sampleRate, duration * 0.25).roundToLong())
             }
             note.articulations.filterIsInstance<Articulation.TremoloPicking>().firstOrNull()?.let { ev.tremolo = it.rate }
             note.articulations.filterIsInstance<Articulation.Trill>().firstOrNull()?.let { t ->
