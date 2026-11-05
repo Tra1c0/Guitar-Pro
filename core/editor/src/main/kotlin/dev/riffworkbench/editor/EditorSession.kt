@@ -22,6 +22,12 @@ sealed interface EditorCommand {
     data class ToggleDrum(val midiNote: Int, val duration: WrittenDuration = WrittenDuration()) : EditorCommand
     data class PutRest(val duration: WrittenDuration) : EditorCommand
     data object Delete : EditorCommand
+    /**
+     * Drag and drop: moves the selected note (string instruments) to another beat position and/or string as one undo step.
+     * The pitch is kept (fret recomputed on another string); velocity, techniques and fingering travel with it. A new beat
+     * gets [duration]; an existing target beat keeps its own. The source becomes a rest when it was the beat's last note.
+     */
+    data class MoveNote(val toMeasure: EntityId, val toOffset: Fraction, val toString: Int, val duration: WrittenDuration = WrittenDuration()) : EditorCommand
     data class SetDuration(val duration: WrittenDuration) : EditorCommand
     data class ToggleMark(val kind: NoteMark) : EditorCommand
     data class AddTrack(val kind: InstrumentKind) : EditorCommand
@@ -171,6 +177,7 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
         EditorCommand.ToggleTie -> NoteEdits.toggleTie(p, s, ids)
         is EditorCommand.SetVelocity -> NoteEdits.setVelocity(p, s, c.velocity)
         is EditorCommand.MoveToString -> NoteEdits.moveToString(p, s, c.string)
+        is EditorCommand.MoveNote -> moveNote(p, s, c)
         is EditorCommand.Transpose -> NoteEdits.transpose(p, s, c.semitones, c.scope)
         is EditorCommand.SetTuplet -> NoteEdits.setDurationRipple(p, s) { it.copy(tuplets = listOfNotNull(c.ratio)) }
         is EditorCommand.SetFermata -> {
@@ -264,6 +271,23 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
                 }
                 else -> beat
             }
+        }
+    }
+
+    private fun moveNote(p: Project, s: Selection, c: EditorCommand.MoveNote): Project {
+        val track = p.tracks.first { it.id == s.trackId }
+        require(track.instrument.tuning.isNotEmpty()) { "Ziehen von Noten nur bei Saiteninstrumenten" }
+        require(p.measures.any { it.id == c.toMeasure } && c.toOffset >= Fraction.ZERO && c.toString in track.instrument.tuning.indices) { "Ziel existiert nicht" }
+        val beatAt = { m: EntityId, o: Fraction -> track.staves.first().bars.firstOrNull { it.measureId == m }?.voices?.firstOrNull { it.index == s.voice }?.beats?.firstOrNull { it.offset == o } }
+        val note = beatAt(s.measureId, s.offset)?.notes?.firstOrNull { it.string == s.string } ?: throw IllegalArgumentException("Zuerst eine Note wählen")
+        if (c.toMeasure == s.measureId && c.toOffset == s.offset && c.toString == s.string) return p
+        require(beatAt(c.toMeasure, c.toOffset)?.notes?.none { it.string == c.toString } ?: true) { "Zielposition ist belegt" }
+        val fret = (if (c.toString == s.string) note.fret else null) ?: NoteEdits.fretFor(track.instrument, c.toString, note.pitch.midiNumber)
+            ?: throw IllegalArgumentException("Ton ist auf dieser Saite nicht spielbar")
+        val target = s.copy(measureId = c.toMeasure, offset = c.toOffset, string = c.toString, rangeEnd = null)
+        val placed = apply(apply(p, s, EditorCommand.Delete), target, EditorCommand.PutNote(fret = fret, duration = c.duration))
+        return updateBeat(placed, target, createIfMissing = false) { beat, _, _ ->
+            beat.copy(notes = beat.notes.map { n -> if (n.string != c.toString) n else n.copy(pitch = n.pitch.copy(cents = note.pitch.cents), velocity = note.velocity, articulations = note.articulations, fingering = note.fingering) })
         }
     }
 

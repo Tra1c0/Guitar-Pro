@@ -69,7 +69,7 @@ import kotlin.math.roundToLong
             } }
             val playhead = transport.position?.takeIf { playing || transport.status == TransportStatus.PAUSED }?.let { it.position.measureId to it.position.offset.toDouble() }
             ws.editor?.let { e -> dev.riffworkbench.ui.score.ScoreCanvas(layout = layout, cursor = dev.riffworkbench.ui.score.ScoreCursor(e.selection.measureId, e.selection.offset, null, e.selection.rangeEnd),
-                playhead = playhead, follow = view.follow, zoom = view.zoom, onZoom = vm::setZoom, onTap = { tap -> vm.tap(tap.measureId, tap.offset, tap.string); vm.seekToCursor() },
+                playhead = playhead, follow = view.follow && playing, zoom = view.zoom, onZoom = vm::setZoom, onTap = { tap -> vm.tap(tap.measureId, tap.offset, tap.string); vm.seekToCursor() },
                 modifier = Modifier.weight(1f).fillMaxWidth().padding(6.dp), description = tr("Partitur mit Wiedergabeposition", "Score with playback position")) }
         }
         Row(Modifier.fillMaxWidth().height(84.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

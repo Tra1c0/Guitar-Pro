@@ -91,6 +91,18 @@ class WorkspaceViewModel(
         val selection = state.value.editor?.selection ?: return
         if (selectCell(selection.copy(string = string))) command(EditorCommand.PutNote(fret = fret, duration = input.value.duration))
     }
+    /**
+     * Drag and drop of a note in the score: moves it to [toMeasure]/[toOffset] on [toString] (pitch kept). A new beat gets
+     * the duration chosen in the input bar; it can be changed afterwards on the selected note. One undo step.
+     */
+    fun moveNote(fromMeasure: EntityId, fromOffset: Fraction, fromString: Int?, toMeasure: EntityId, toOffset: Fraction, toString: Int?) {
+        val selection = state.value.editor?.selection ?: return
+        val from = fromString ?: return
+        if (!selectCell(selection.copy(measureId = fromMeasure, offset = fromOffset, string = from))) return
+        val target = toString ?: from
+        if (command(EditorCommand.MoveNote(toMeasure, toOffset, target, input.value.duration)) is Outcome.Success)
+            selectCell(selection.copy(measureId = toMeasure, offset = toOffset, string = target))
+    }
     fun selectRange(endMeasure: EntityId?) { session?.let { s -> runCatching { s.select(s.state.value.selection.copy(rangeEnd = endMeasure)) }; publish() } }
     fun setRangeMode(enabled: Boolean) { mutableInput.value = input.value.copy(rangeMode = enabled); if (!enabled) selectRange(null) }
 

@@ -123,7 +123,9 @@ import dev.riffworkbench.ui.score.pitchName
             follow = view.follow && transport.status == TransportStatus.PLAYING,
             zoom = view.zoom,
             onZoom = vm::setZoom,
-            onTap = { tap -> vm.tap(tap.measureId, tap.offset, tap.string) },
+            // While playing, a tap also moves playback there: cursor and playhead stay together instead of fighting over the view.
+            onTap = { tap -> vm.tap(tap.measureId, tap.offset, tap.string); if (transport.status == TransportStatus.PLAYING) vm.seekToCursor() },
+            onMoveNote = { from, to -> vm.moveNote(from.measureId, from.offset, from.string, to.measureId, to.offset, to.string) },
             modifier = Modifier.weight(1f).fillMaxWidth().padding(6.dp).clip(RoundedCornerShape(20.dp)).onSizeChanged { with(density) { vm.setViewportWidth(it.width.toDp().value) } },
             description = tr("Partitur, Takt $measureNumber, Position ${selection.offset}, Saite ${selection.string + 1}", "Score, bar $measureNumber, position ${selection.offset}, string ${selection.string + 1}"),
         )
