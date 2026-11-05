@@ -406,3 +406,33 @@ Tests: `Qa16ViewModelFindingsTest` (7, mit Shim vorher 7/7 rot, nachher 7/7 grü
 **Bekannt, nicht geändert:** Pinch-Zoom bei umbrochener Ansicht löst je Schritt ein (abbrechbares) Neu-Layout aus; laufende Layout-Berechnungen werden nicht unterbrochen, nur verworfen. `onCleared` stoppt den Transport nicht (das übernimmt `leave()`); nach Wiederöffnen hält der geteilte Transport bis zum nächsten Prepare alte Tempo-/Metronom-Einstellungen (ohne Wirkung, Play bereitet neu vor). Monkey-Test: Auswahl des obersten Fensters ist eine Heuristik; Datei-Auswahldialoge werden abgebrochen.
 
 Ergebnis Zyklus 16: **4 Defektgruppen bestätigt und behoben** → nicht defektfrei.
+
+### Zyklus 17 — DSP-Eigenschafts-Fuzzing und Speicher-/Ressourcen-Lebensdauer
+
+Methoden (neu): (a) `Qa17DspFuzzCampaign`: 1 960 zufällige Effektketten (≈ 9 500 Einheiten, alle Arten, Grenz-/Null-/NaN-/±Inf-Parameter, 4 Abtastraten, 6 Blockgrößen, Stille/DC/Rechteck/Impuls/Rauschen) und 225 zufällige Engine-Renderings (1–8 Spuren, alle Presets, bis 400 Noten, Bends/Vibrato/Flageoletts, mit/ohne Sample-Bank); Invarianten D1–D8 (kein NaN, Limiter-Decke, Blockbudget, Stille→Stille, Blockgrößen-Unabhängigkeit, `reset()` = neu, keine Allokation, Stimmenraub ohne Klick). (b) Speicher-/Ressourcen-Messung: WorkspaceViewModel-Zyklen (öffnen, bearbeiten, spielen, exportieren, rendern, schließen) N = 20/50/100 mit Heap nach GC, Klassenhistogramm, WeakReferences, Thread- und Dateideskriptorzählung; Undo-Historie eines 300-Takt-Projekts.
+
+**Bestätigt und repariert (rot → grün):**
+1. *Speicher:* Der PCM-Cache für Referenz-Audio behielt dekodierte Clips geschlossener Projekte (bis 8 × ≈ 115 MB — weit über dem Android-Heap) → nur Clips des vorbereiteten Projekts bleiben (`Qa17ClipCacheFindingsTest`, deterministisch über den Cache-Inhalt; die erste Fassung mit `System.gc()`/WeakReference war auf CI nicht deterministisch).
+2. Stimmenraub schnitt die geraubte Stimme hart ab: Klicks bis −9 dBFS (Drums), −14 dBFS (Sample-Gitarre) → Ausklang-Rest je Spur (4 ms). Der Test vergleicht gegen eine Referenz ohne die geraubte Stimme (der ursprüngliche Vergleich enthielt deren eigene Wellenform und war unerfüllbar).
+3. NaN in Pan/Gain eines Referenz-Clips (nur aus Dateien möglich) machte den ganzen Master zu NaN.
+4. `Chorus.reset()` setzte das LFO nicht zurück (Klang nach Leerlauf geschichtsabhängig).
+5. Kompressor, Saiten- und Sample-Stimmen rechneten ihre Steuerrate je Aufruf statt fortlaufend → Ergebnis hing von der Blockgröße (Export vs. Live) und von Notenanfängen anderer Spuren/Metronom ab.
+6. Erster Block nach Rack-Aufbau wurde von 0 eingeblendet (Export: erste ≈ 21 ms gedämpft).
+7. Overdrive erreichte nie exakte Stille (Grenzzyklus nahe Flush-to-Zero) und kostete bei Stille das 3–4-fache an CPU → Biquad-Flush und softClip-Schutz; nach 10 s Stille exakt 0.
+Tests: `Qa17DspFindingsTest` (7/7 rot vor dem Fix), `Qa17ClipCacheFindingsTest`. CI: 42041498640 (6d4c033) grün im 2. Versuch — der 1. scheiterte an HTTP 429 von Maven Central beim Laden der Robolectric-SDK-Datei (Infrastruktur, kein Testfehler).
+
+**Gehalten:** kein NaN außer (3); Limiter nie über 0,94; Verzögerungs-Feedback 0,95 stabil; alle anderen Effekte bitgleich über Blockgrößen und nach `reset()`; keine Allokation im Renderpfad nach JIT-Aufwärmen (JFR); Stimmenpools nie überschritten; PcmBuilder in Stücken = am Stück; 170 Ketten bei 48 kHz/256 Frames ≤ 1 ms pro Block. Speicher: in der App-ähnlichen Konfiguration Heap über 100 Zyklen flach, keine abgeräumten ViewModels/Sessions/Layouts erreichbar, Threads (14) und Dateideskriptoren (65) konstant; Android-Registrierungen (Audiofokus, Kopfhörer-Receiver, Lifecycle-Observer, Export-Launcher) paarweise.
+
+**Ursache des 2,3-GB-Hängers aus Zyklus 16:** reiner Testaufbau — je Folge ein neuer Transport mit nie endendem Poller (Thread-Starter ohne Thread); behoben durch `transport.shutdown()` in der Fixture.
+
+**Bekannt, nicht geändert:** Undo-Historie speichert je Schritt die volle Diagnoseliste (≈ 37 B pro Diagnose; bei 2 400 Warnungen ≈ 90 KB pro Schritt, durch 200 Schritte begrenzt — Partiturbaum selbst strukturell geteilt, 2,3 KB pro Bearbeitung). Release-Erkennung der Saiten/Samples liegt jetzt auf dem Steuer-Takt (bis 15/31 Frames später). Hintereinander gestapelte Verstärkungen (Makeup +24, EQ +18, Pegel +12, Resonanz) können ohne Master-Limiter > 40 dBFS ergeben (jede Einheit hält ihre dokumentierte Verstärkung). `PendingExports` kann bei fehlendem Dokumentanbieter ein abgeräumtes ViewModel halten (höchstens eins).
+
+Ergebnis Zyklus 17: **7 Defektgruppen bestätigt und behoben** → nicht defektfrei.
+
+### Pausiert nach Zyklus 17 (auf Nutzerwunsch)
+
+Der Nutzer hat gebeten, den laufenden Zyklus abzuschließen und das Ziel danach vorerst zu stoppen. **Abschlussbedingung nicht erfüllt:** Zyklen 1–17 fanden jeweils Defekte; es gab nie drei defektfreie Zyklen in Folge. Fortlaufend steigende Befundzahlen bei neuen Methoden (modellbasiert, generativ, Fuzzing) zeigen, dass weitere Fehlerklassen wahrscheinlich sind.
+
+**Bei Wiederaufnahme naheliegend (noch nicht angewandte Methoden):** Mutationstests (Testqualität), Lint-/Detekt-Befunde der CI systematisch auswerten, modellbasierte Tests für Stimmgerät/Aufnahme, Performance-Profile großer Projekte auf dem Gerät, generative Rundreise für GP3–5/GPX-Importer.
+
+**Weiterhin nie geprüft (keine Hardware in dieser Umgebung):** Klang/Latenz auf Geräten, Unterläufe/Thermik unter Last, echte Audiofokus-/Kopfhörer-Ereignisse, Mikrofon mit realem Signal, SAF-Anbieter (Drive, USB), Darstellung und Gesten auf echter Hardware (nur Robolectric), TalkBack/Accessibility-Scanner, Navigation-Deep-Link-Extras, Main-Thread-Blockaden (nur aus Code abgeleitet). Der vom Nutzer gewünschte Fast-Forward von `ccr-0b650dff-jnhups-qa` nach `ccr-0b650dff-jnhups` wurde von der Berechtigungsprüfung blockiert und ist offen.
