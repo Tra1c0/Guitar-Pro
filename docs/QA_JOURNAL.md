@@ -61,3 +61,29 @@ Zusätzlich: Mutations-Fuzzing über alle Importformate (≈39 000 Fälle, 2 s T
 **Unbestätigte Verdachtsmomente (offen, nicht repariert):** GPIF-Fermaten O(Fermaten × Beats) je Takt; GPX/BCFZ reserviert die im Kopf angegebene Größe (≤ 64 MiB) vor dem Dekodieren; GPIF `Octave*12+Tone` ohne Überlaufschutz; GP3-Akkord-Layout (erweitert) nicht gegen Referenz geprüft; getrennt gepostete Host-Kommandos in `installLocked` (Loop-Grenzen bei Tempowechsel im Loop), Poller-Neustart-Fenster in `startPolling`, nicht-volatile Felder `loopFrames`/`rackSignature`, Allokationen bei `Reprogram` im Audio-Thread, Count-in geht bei Reprogram verloren, Legato-Überblendung nutzt `ratioAt(0)`, DrumVoice-Hüllkurvenreste, `persist` bei Abbruch, `atomicWrite` ohne Verzeichnis-fsync, O(alle Projekte) pro Autosave, Settings-Datei neuerer Version wird überschrieben.
 
 CI: Läufe 41962076517 (`dd162d5`) und 41962151320 (`66fde4e`) grün — Android-Build, alle Tests inkl. neuer ViewModel-Tests, Lint. Ergebnis Zyklus 1: **19 + 5 Defekte bestätigt und repariert** → Zyklus zählt nicht als defektfrei.
+
+### Zyklus 2 — Eigenschaftsbasierte Tests, Round-Trips, Plattform-Lebenszyklus
+
+Methoden (anders als Zyklus 1): (a) seed-basierte, modellbasierte Zufallstests: 5000 Befehlsfolgen mit 50–150 Befehlen (≈ 550 000 Editor-Befehle, inkl. ungültiger IDs/Werte/NaN) mit Invarianten (Validator ohne ERROR nach Erfolg, Failure ändert nichts, Undo/Redo exakt, Revision steigt, keine fremde Exception, Auswahl gültig); (b) Round-Trips über 900 generierte Projekte × GP7/MusicXML/MIDI/ASCII und 3626 × natives JSON/Archiv; (c) Playback-Eigenschaften über 12 508 Kompilierungen (Sortierung, Grenzen, Spans, `positionAt∘frameOf`, Vergleich gegen unabhängiges Entfalten); (d) eigene Analyse des Android-Lebenszyklus (Activity-Neuerzeugung, SAF-Ergebnisse, Manifest).
+
+**Invarianten, die gehalten haben:** alle Editor-Invarianten (0 Fehlschläge), nativer Codec (außer NaN, s. u.), Playback-Timing.
+
+**Bestätigt und repariert (Tests rot → grün, `PropertyFindingsRegressionTest`):**
+
+| # | Bereich | Defekt |
+|---|---|---|
+| 1 | ASCII | Export scheiterte bei jedem neuen Band-Projekt (leere Schlagzeugspur → `List is empty`). |
+| 2 | GP7 | Fermate mit Faktor 1,0 kam als 1,5 zurück (Decoder verwarf `Length=0`), ohne Verlustmeldung. |
+| 3 | Editor | Takt vor Takt 1 einfügen ließ den neuen Takt 1 ohne Tempo; danach war das Starttempo löschbar und MusicXML-Round-Trip änderte die Dauer. |
+| 4 | Editor | `MoveToString` (und Transponieren) konnte eine Haltebindung über zwei Saiten spannen → Wiedergabe ignorierte die Bindung. |
+| 5 | Editor | `ToggleTie` band über Pausen hinweg; angezeigt, aber nicht gespielt. |
+| 6 | Editor | Sprungmarke auf nicht existierenden Takt wurde angenommen (jetzt abgelehnt); Dal Segno ohne Segno wird als WARNUNG angezeigt (bewusst keine Ablehnung, damit importierte Dateien offen bleiben; die Wiedergabe meldet den Fehler ausdrücklich). |
+| 7 | Editor | NaN/∞ in Fermate, Vibrato, Feinstimmung, Drum-Werten und Clip-Gain wurden angenommen → Projekt nicht mehr speicherbar (JSON), Tonhöhen NaN. |
+
+**Bestätigt durch Code-Analyse (Android) und repariert (`7461e59`, CI grün):** Lange Exporte (WAV/Stems/PDF/Bytes) liefen im Composition-Scope und wurden bei Bildschirmdrehung abgebrochen (abgeschnittene Datei); offene Exportaufträge lagen in `remember`-State, sodass eine Drehung bei geöffnetem Dateidialog den Auftrag verwarf (leere Datei). Jetzt App-Scope und Container-Zustand.
+
+**Widerlegt:** GPIF-Fermaten O(Fermaten × Beats) — 100 000 Fermaten × 4096 Beats bleiben auch im alten Code unter dem Zeitlimit; Änderung zurückgenommen. Manifest: nur Launcher-Activity exportiert, Backup aus, keine Intent-Filter für Dateien — ohne Befund. `stressTest` ersetzt das Projekt im Transport nur vorübergehend; `togglePlay` bereitet das eigene Projekt neu vor — ohne Befund.
+
+**Bekannt, nicht geändert (Design oder geringe Relevanz, dokumentiert):** Einfügen von Takten auf eine Spur mit weniger Saiten verwirft Noten auf fehlenden Saiten (beabsichtigte Saitenverschiebung, Test `pasteBetweenSixAndSevenStringTracksShiftsStrings`) — es fehlt nur ein Hinweis. Nicht gemeldete Kleinverluste: MusicXML fasst Pedal-Hi-Hat 37/46 zu 44 zusammen, Spurname „Bass“ überschreibt Gitarrenprogramm, Triolen-Export erzeugt unnötige `duration_mismatch`-Hinweise, DEAD/PULL_OFF auf Drum-Noten fallen weg; GP7 macht aus reinen Velocity-Änderungen `Dynamic`-Artikulationen; MIDI führt zwei Drum-Spuren zusammen. `SetRepeat` mit Alternativenden, die alle Takte ausschließen, wird von der Wiedergabe ausdrücklich abgelehnt (beabsichtigt, `RouteCompilerTest`).
+
+Ergebnis Zyklus 2: **7 + 2 Defekte bestätigt und repariert** → nicht defektfrei.
