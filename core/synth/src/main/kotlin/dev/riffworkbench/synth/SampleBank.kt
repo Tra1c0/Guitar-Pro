@@ -1,0 +1,94 @@
+package dev.riffworkbench.synth
+
+/** Reads bytes like an input stream: fills [buffer] from [offset], returns the count read or -1 at the end. */
+fun interface ByteReader { fun read(buffer: ByteArray, offset: Int, length: Int): Int }
+
+/**
+ * Multisampled instrument in the RWSB format written by tools/make_guitar_bank.py: sustained notes per
+ * velocity layer and round robin (with a seamless loop and their natural decay), release noises and dead notes.
+ * Immutable after loading; voices only read it, so one bank serves the real-time and the offline engine.
+ */
+class SampleBank private constructor(val sampleRate: Int, internal val regions: Array<Region>) {
+    internal class Region(val kind: Int, val root: Int, val loKey: Int, val hiKey: Int, val layer: Int, val rr: Int,
+                          val decayDbPerSec: Float, val loopStart: Int, val loopEnd: Int, val data: ShortArray) {
+        val frames get() = data.size
+    }
+
+    /** [key][layer] -> round robins (sustained notes). */
+    private val notes: Array<Array<Array<Region>>>
+    private val releases: Array<Array<Region>>
+    internal val deadNotes: Array<Region>
+    val layers: Int
+    val bytes: Long = regions.sumOf { it.data.size * 2L }
+
+    init {
+        layers = (regions.filter { it.kind == KIND_NOTE }.maxOfOrNull { it.layer } ?: 0) + 1
+        notes = Array(128) { key -> Array(layers) { layer -> regions.filter { it.kind == KIND_NOTE && it.layer == layer && key in it.loKey..it.hiKey }.sortedBy { it.rr }.toTypedArray() } }
+        releases = Array(128) { key -> regions.filter { it.kind == KIND_RELEASE && key in it.loKey..it.hiKey }.sortedBy { it.rr }.toTypedArray() }
+        deadNotes = regions.filter { it.kind == KIND_DEAD }.toTypedArray()
+        require(notes.all { k -> k.all { it.isNotEmpty() } }) { "Sample-Bank deckt nicht alle Tonhöhen ab" }
+    }
+
+    internal fun note(key: Int, layer: Int, rr: Int): Region { val list = notes[key.coerceIn(0, 127)][layer.coerceIn(0, layers - 1)]; return list[rr % list.size] }
+    internal fun release(key: Int, rr: Int): Region? { val list = releases[key.coerceIn(0, 127)]; return if (list.isEmpty()) null else list[rr % list.size] }
+
+    companion object {
+        const val KIND_NOTE = 0
+        const val KIND_RELEASE = 1
+        const val KIND_DEAD = 2
+        private const val MAX_BYTES = 256L * 1024 * 1024
+
+        /** Parses a bank while streaming, so only the PCM (not a second copy of the file) is held in memory. */
+        fun read(reader: ByteReader): SampleBank {
+            val head = ByteArray(14).also { readFully(reader, it, 14) }
+            require(String(head, 0, 4, Charsets.US_ASCII) == "RWSB") { "Keine RiffWorkbench-Sample-Bank" }
+            require(u16(head, 4) == 1) { "Unbekannte Sample-Bank-Version" }
+            val rate = s32(head, 6); val count = s32(head, 10)
+            require(rate in 8_000..192_000 && count in 1..10_000) { "Ungültiger Sample-Bank-Kopf" }
+            val meta = ByteArray(22)
+            var total = 0L
+            var chunk = ByteArray(0)
+            val regions = Array(count) {
+                readFully(reader, meta, 22)
+                val frames = s32(meta, 18)
+                total += frames * 2L
+                require(frames in 1..(60 * rate) && total <= MAX_BYTES) { "Sample-Bank zu groß" }
+                if (chunk.size < frames * 2) chunk = ByteArray(frames * 2)
+                readFully(reader, chunk, frames * 2)
+                val data = ShortArray(frames) { i -> ((chunk[2 * i].toInt() and 0xFF) or (chunk[2 * i + 1].toInt() shl 8)).toShort() }
+                val loopStart = s32(meta, 10); val loopEnd = s32(meta, 14)
+                require(loopEnd == 0 || (loopStart in 0 until loopEnd && loopEnd <= frames)) { "Ungültige Loop-Punkte" }
+                Region(meta[0].toInt(), meta[1].toInt() and 0xFF, meta[2].toInt() and 0xFF, meta[3].toInt() and 0xFF, meta[4].toInt(), meta[5].toInt(),
+                    Float.fromBits(s32(meta, 6)), loopStart, loopEnd, data)
+            }
+            return SampleBank(rate, regions)
+        }
+
+        fun read(bytes: ByteArray): SampleBank {
+            var pos = 0
+            return read { b, off, len -> if (pos >= bytes.size) -1 else { val n = minOf(len, bytes.size - pos); System.arraycopy(bytes, pos, b, off, n); pos += n; n } }
+        }
+
+        /** Test helper: a bank of sine "notes" (one layer, one round robin per minor third). */
+        internal fun synthetic(rate: Int = 44_100, seconds: Double = 1.0): SampleBank {
+            val roots = (37..86 step 3).toList()
+            val regions = roots.mapIndexed { i, root ->
+                val hz = 440.0 * Math_pow2((root - 69) / 12.0)
+                val n = (seconds * rate).toInt()
+                val data = ShortArray(n) { k -> (kotlin.math.sin(2 * Math.PI * hz * k / rate) * 12000 * kotlin.math.exp(-1.5 * k / rate)).toInt().toShort() }
+                val period = rate / hz
+                val loopEnd = n - 10; val loopStart = (loopEnd - kotlin.math.round(kotlin.math.round(0.2 * rate / period) * period)).toInt()
+                Region(KIND_NOTE, root, if (i == 0) 0 else root - 1, if (i == roots.lastIndex) 127 else root + 1, 0, 0, 13f, loopStart, loopEnd, data)
+            } + Region(KIND_DEAD, 52, 0, 127, 0, 0, 0f, 0, 0, ShortArray(2000) { k -> ((k * 7919 % 2000) - 1000).toShort() })
+            return SampleBank(rate, regions.toTypedArray())
+        }
+        private fun Math_pow2(x: Double) = kotlin.math.exp(x * kotlin.math.ln(2.0))
+
+        private fun readFully(r: ByteReader, b: ByteArray, n: Int) {
+            var got = 0
+            while (got < n) { val k = r.read(b, got, n - got); require(k > 0) { "Sample-Bank ist abgeschnitten" }; got += k }
+        }
+        private fun u16(b: ByteArray, at: Int) = (b[at].toInt() and 0xFF) or ((b[at + 1].toInt() and 0xFF) shl 8)
+        private fun s32(b: ByteArray, at: Int) = (b[at].toInt() and 0xFF) or ((b[at + 1].toInt() and 0xFF) shl 8) or ((b[at + 2].toInt() and 0xFF) shl 16) or (b[at + 3].toInt() shl 24)
+    }
+}

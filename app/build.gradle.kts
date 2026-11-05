@@ -20,6 +20,8 @@ android {
     }
     buildFeatures { compose = true }
     testOptions { unitTests.isIncludeAndroidResources = true }
+    // The sample bank is read once at start; stored uncompressed it streams without inflating 29 MB.
+    androidResources { noCompress += "rwsb" }
     buildTypes {
         release {
             isMinifyEnabled = true

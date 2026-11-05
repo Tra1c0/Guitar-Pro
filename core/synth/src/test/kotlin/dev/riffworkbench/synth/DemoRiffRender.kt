@@ -55,11 +55,16 @@ class DemoRiffRender {
             Track(id(), "Gitarre R", guitar, staff(guitarBars.map { bars -> bars.map { it.copy(id = id(), notes = it.notes.map { n -> n.copy(id = id(), velocity = 92) }) } }), SoundAssignment(presetId = "rw.guitar.highgain"), ChannelMix(volume = 0.76, pan = 0.55)),
             Track(id(), "Bass", bass, staff(bassBars), SoundAssignment(presetId = "rw.bass.pick"), ChannelMix(volume = 0.8)),
             Track(id(), "Drums", InstrumentDefinition(InstrumentKind.PERCUSSION, emptyList(), emptyList(), midiProgram = 0), staff(drumBars), mix = ChannelMix(volume = 0.85))))
-        val out = File("build/reports/audio/riff-demo.wav").apply { parentFile.mkdirs() }
-        out.outputStream().buffered().use { stream ->
-            val r = OfflineMixdown().render(project, RenderOptions(sampleRate = 48_000, bitDepth = 16, tailSeconds = 2.0), { bytes, o, l -> stream.write(bytes, o, l) })
-            assertTrue(r.toString(), r is Outcome.Success)
-            println("demo: ${(r as Outcome.Success).value}")
+        val bankFile = generateSequence(File("").absoluteFile) { it.parentFile }.map { File(it, "app/src/main/assets/banks/guitar-emily-di.rwsb") }.firstOrNull { it.isFile }
+        val bank = bankFile?.inputStream()?.buffered()?.use { input -> SampleBank.read { b, o, l -> input.read(b, o, l) } }
+        for ((name, b) in listOf("riff-demo-modelled" to null, "riff-demo-sampled" to bank)) {
+            if (name.endsWith("sampled") && b == null) continue
+            val out = File("build/reports/audio/$name.wav").apply { parentFile.mkdirs() }
+            out.outputStream().buffered().use { stream ->
+                val r = OfflineMixdown(bank = b).render(project, RenderOptions(sampleRate = 48_000, bitDepth = 16, tailSeconds = 2.0), { bytes, o, l -> stream.write(bytes, o, l) })
+                assertTrue(r.toString(), r is Outcome.Success)
+                println("$name: ${(r as Outcome.Success).value}")
+            }
         }
     }
 }

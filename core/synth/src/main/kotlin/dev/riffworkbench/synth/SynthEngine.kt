@@ -32,7 +32,8 @@ class EngineProgram private constructor(
 
 internal enum class ChannelKind { STRING, DRUMS, KEYS }
 
-internal class Channel(val kind: ChannelKind, val stringTone: StringTone, val keysMode: KeysMode, val effects: Array<Effect>, maxBlock: Int) {
+internal class Channel(val kind: ChannelKind, val stringTone: StringTone, val keysMode: KeysMode, val effects: Array<Effect>, maxBlock: Int,
+                       /** Electric guitar: played from the sample bank when one is installed. */ val sampled: Boolean = false, val sampleGain: Float = 1f) {
     val left = FloatArray(maxBlock)
     val right = FloatArray(maxBlock)
     val stereo = kind == ChannelKind.DRUMS
@@ -53,7 +54,7 @@ class ChannelRack internal constructor(internal val channels: Array<Channel>, in
                     else -> ChannelKind.KEYS
                 }
                 val chain = TonePresets.effectiveChain(track).mapNotNull { Effects.create(it, sampleRate, maxBlock) }.toTypedArray()
-                Channel(kind, TonePresets.stringTone(preset), TonePresets.keysMode(preset), chain, maxBlock)
+                Channel(kind, TonePresets.stringTone(preset), TonePresets.keysMode(preset), chain, maxBlock, kind == ChannelKind.STRING && TonePresets.isSampledGuitar(preset), TonePresets.sampleGain(preset))
             }.toTypedArray()
             val master = if (includeMasterFx) (project.mix.master.effects.mapNotNull { Effects.create(it, sampleRate, maxBlock) } + Limiter(sampleRate)).toTypedArray() else emptyArray()
             return ChannelRack(channels, master, signature(project) + includeMasterFx)
@@ -83,8 +84,13 @@ class MixState internal constructor(internal val gains: FloatArray, internal val
  * The real-time renderer. All methods must be called from one thread (the audio thread or an offline loop).
  * After construction, [render] performs no allocation, I/O or locking.
  */
-class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024) {
+class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val bank: SampleBank? = null) {
+    val hasBank: Boolean get() = bank != null
     private val strings = Array(72) { StringVoice(sampleRate) }
+    /** Sampled electric-guitar strings (only allocated with a bank): 8 tracks x 7 strings plus release tails. */
+    private val samples = Array(if (bank != null) 96 else 0) { SampleVoice(sampleRate) }
+    private val sampleMap = IntArray(MAX_TRACKS * 16) { -1 }
+    private val roundRobin = IntArray(MAX_TRACKS * 16)
     private val drums = Array(48) { DrumVoice(sampleRate) }
     private val keys = Array(48) { KeysVoice(sampleRate) }
     private val clicks = Array(6) { ClickVoice(sampleRate) }
@@ -167,9 +173,11 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024) {
 
     fun releaseAll(fast: Boolean) {
         for (v in strings) v.release(fast)
+        for (v in samples) v.release(fast)
         for (v in keys) v.release(fast)
         if (fast) for (v in drums) v.choke()
         stringMap.fill(-1)
+        sampleMap.fill(-1)
     }
 
     fun render(out: FloatArray, frames: Int) {
@@ -227,6 +235,7 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024) {
         val now = clock + offset
         var used = 0
         for (v in strings) if (v.active) { val ch = r.channels.getOrNull(v.track); if (ch == null) v.kill() else { v.render(ch.left, offset, count, now); ch.idleBlocks = 0; used++ } }
+        for (v in samples) if (v.active) { val ch = r.channels.getOrNull(v.track); if (ch == null) v.kill() else { v.render(ch.left, offset, count, now); ch.idleBlocks = 0; used++ } }
         for (v in keys) if (v.active) { val ch = r.channels.getOrNull(v.track); if (ch == null) v.kill() else { v.render(ch.left, offset, count, now); ch.idleBlocks = 0; used++ } }
         for (v in drums) if (v.active) { val ch = r.channels.getOrNull(v.track); if (ch == null) v.kill() else { v.render(ch.left, ch.right, offset, count, now); ch.idleBlocks = 0; used++ } }
         for (v in clicks) if (v.active) v.render(masterL, masterR, offset, count, mix.metronome.coerceAtLeast(0.6f))
@@ -280,6 +289,23 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024) {
             ChannelKind.STRING -> {
                 if (t >= MAX_TRACKS) return
                 val key = t * 16 + (note.string ?: 15).coerceIn(0, 15)
+                val b = bank
+                if (b != null && ch.sampled && note.harmonic == null) {
+                    val existing = sampleMap[key]
+                    if (existing >= 0) {
+                        val v = samples[existing]
+                        if (v.active && v.track == t && note.attack == AttackKind.LEGATO && !v.releasing) { v.legato(note, now, endClock, ch.sampleGain); return }
+                        // A new pick on the same string stops the old vibration at once (no damping noise).
+                        if (v.active && v.track == t) v.release(fast = true)
+                    }
+                    stringMap[key].let { if (it >= 0 && strings[it].active && strings[it].track == t) strings[it].release(fast = true) }
+                    val index = allocate(samples, { it.active }, { it.releasing }, { it.startClock })
+                    samples[index].kill()
+                    samples[index].start(note, t, b, now, endClock, roundRobin[key]++ and 0xFFFF, ch.sampleGain)
+                    sampleMap[key] = index
+                    return
+                }
+                sampleMap[key].let { if (it >= 0 && samples[it].active && samples[it].track == t) samples[it].release(fast = true) }
                 val existing = stringMap[key]
                 if (existing >= 0) {
                     val v = strings[existing]

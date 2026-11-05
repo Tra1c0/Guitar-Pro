@@ -76,6 +76,10 @@ object TonePresets {
         "rw.bass.finger" -> StringTone(0.42f, 8.0, 0.22, 0.45f, 0.02f, 0.95f)
         else -> StringTone(0.15f, 5.0, 0.14, 0.15f, 0.03f, 0.65f)
     }
+    /** Electric guitar presets play the bundled DI samples (when a bank is installed); acoustic and bass stay modelled. */
+    internal fun isSampledGuitar(preset: TonePreset) = preset.id == "rw.guitar.highgain" || preset.id == "rw.guitar.crunch" || preset.id == "rw.guitar.clean"
+    /** Level of the DI samples relative to the modelled string, so amp drive and mix balance stay where they were. */
+    internal fun sampleGain(preset: TonePreset): Float = when (preset.id) { "rw.guitar.highgain" -> 1.5f; "rw.guitar.crunch" -> 1.5f; else -> 1.75f }
     internal fun keysMode(preset: TonePreset): KeysMode = when (preset.id) {
         "rw.keys.epiano" -> KeysMode.EPIANO; "rw.keys.organ" -> KeysMode.ORGAN; "rw.keys.pad" -> KeysMode.PAD; "rw.keys.lead" -> KeysMode.LEAD; else -> KeysMode.PIANO
     }

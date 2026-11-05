@@ -8,7 +8,7 @@ import kotlin.math.roundToLong
  * C-RENDER: the same compiler, engine and mix graph as live playback, rendered faster than real time.
  * Every stem starts at frame 0 of the unfolded route and has the same length, so DAW imports line up.
  */
-class OfflineMixdown(private val compiler: ScorePlaybackCompiler = ScorePlaybackCompiler()) {
+class OfflineMixdown(private val compiler: ScorePlaybackCompiler = ScorePlaybackCompiler(), private val bank: SampleBank? = null) {
     fun framesFor(project: Project, options: RenderOptions): Outcome<Long> = when (val plan = compiler.compileNow(project, options.sampleRate)) {
         is Outcome.Failure -> plan
         is Outcome.Success -> Outcome.Success(plan.value.totalFrames + (options.tailSeconds.coerceIn(0.0, 30.0) * options.sampleRate).roundToLong())
@@ -21,7 +21,7 @@ class OfflineMixdown(private val compiler: ScorePlaybackCompiler = ScorePlayback
         val total = plan.totalFrames + (options.tailSeconds.coerceIn(0.0, 30.0) * options.sampleRate).roundToLong()
         if (total <= 0) return Outcome.Failure(FailureCode.VALIDATION, "Nichts zu rendern", contractId = "C-RENDER")
         val block = 1024
-        val engine = SynthEngine(options.sampleRate, block)
+        val engine = SynthEngine(options.sampleRate, block, bank)
         engine.installRack(ChannelRack.build(project, options.sampleRate, block, includeMasterFx = options.includeMasterFx && soloTrack == null))
         engine.setMix(MixState.from(project, 0f, soloTrack))
         engine.install(EngineProgram.prepare(plan))

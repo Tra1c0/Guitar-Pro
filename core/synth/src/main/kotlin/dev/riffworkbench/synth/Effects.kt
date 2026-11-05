@@ -69,25 +69,29 @@ internal class Overdrive(sr: Int, drive: Double, tone: Double, levelDb: Double) 
     override fun reset() { hump.reset(); hump2.reset(); lp.reset(); lp2.reset() }
 }
 
-/** Two-stage tube-style preamp, 2x oversampled around the waveshapers, followed by a tone stack. Mono. */
+/**
+ * Tube-style preamp: up to three cascaded gain stages (one for clean, two for crunch, three for high gain), each an
+ * asymmetric soft clipper with coupling high-pass and Miller-style low-pass between stages, run at 4x sample rate so
+ * high gain does not alias. Then a tone stack and a gently saturating power stage with presence. Mono.
+ */
 internal class AmpSim(sr: Int, maxBlock: Int, gain: Double, bass: Double, mid: Double, treble: Double, presence: Double, levelDb: Double) : Effect {
-    private val tight = Biquad().apply { highPass(95.0, 0.7, sr) }
-    private val push = Biquad().apply { peak(800.0, 0.8, 3.0 + gain * 6.0, sr) }
-    private val up1 = Biquad().apply { lowPass(sr * 0.45, 0.541, sr * 2) }
-    private val up2 = Biquad().apply { lowPass(sr * 0.45, 1.307, sr * 2) }
-    private val down1 = Biquad().apply { lowPass(sr * 0.45, 0.541, sr * 2) }
-    private val down2 = Biquad().apply { lowPass(sr * 0.45, 1.307, sr * 2) }
-    private val inter = Biquad().apply { highPass(60.0, 0.7, sr * 2) }
+    private val os = 4
+    private val tight = Biquad().apply { highPass(70.0 + gain * 60.0, 0.7, sr) }
+    private val push = Biquad().apply { peak(750.0, 0.8, 2.0 + gain * 6.0, sr) }
+    private val up = Array(3) { i -> Biquad().apply { lowPass(sr * 0.45, doubleArrayOf(0.518, 0.707, 1.932)[i], sr * os) } }
+    private val down = Array(3) { i -> Biquad().apply { lowPass(sr * 0.45, doubleArrayOf(0.518, 0.707, 1.932)[i], sr * os) } }
+    private val stages = when { gain > 0.68 -> 3; gain > 0.3 -> 2; else -> 1 }
+    private val couple = Array(3) { Biquad().apply { highPass(if (it == 0) 25.0 else 90.0 + 40.0 * gain, 0.6, sr * os) } }
+    private val miller = Array(3) { Biquad().apply { lowPass(if (it == 0) 11000.0 else 7000.0 - 2500.0 * gain, 0.6, sr * os) } }
+    private val stageGain = FloatArray(3) { i -> when (i) { 0 -> Dsp.dbToGain(2.0 + gain * 30.0); 1 -> Dsp.dbToGain(4.0 + gain * 16.0); else -> Dsp.dbToGain(gain * 14.0) }.toFloat() }
+    private val bias = floatArrayOf(0.18f, -0.12f, 0.08f)
+    private val biasOut = FloatArray(3) { Dsp.softClip(bias[it]) }
     private val low = Biquad().apply { lowShelf(110.0, bass, sr) }
-    private val mids = Biquad().apply { peak(650.0, 0.7, mid - 2.0 * gain, sr) }
+    private val mids = Biquad().apply { peak(650.0, 0.7, mid - 2.5 * gain, sr) }
     private val high = Biquad().apply { highShelf(3200.0, treble, sr) }
-    private val pres = Biquad().apply { peak(4800.0, 0.9, presence, sr) }
-    private val drive = Dsp.dbToGain(4.0 + gain * 44.0).toFloat()
-    private val secondStage = gain > 0.45
-    private val stage2 = (1.5 + gain * 2.0).toFloat()
-    private val output = (Dsp.dbToGain(levelDb) * (if (gain > 0.3) 0.55 else 0.9)).toFloat()
-    private val bias = 0.12f
-    private val biasOffset = Dsp.softClip(bias)
+    private val pres = Biquad().apply { peak(4500.0, 0.8, presence, sr) }
+    private val reso = Biquad().apply { peak(95.0, 1.0, 1.5 + 1.5 * gain, sr) }
+    private val output = (Dsp.dbToGain(levelDb) * (if (gain > 0.3) 0.8 else 1.5)).toFloat()
     private val dc = DcBlocker()
     override fun process(left: FloatArray, right: FloatArray?, n: Int) {
         processChannel(left, n)
@@ -95,43 +99,43 @@ internal class AmpSim(sr: Int, maxBlock: Int, gain: Double, bass: Double, mid: D
     }
     private fun processChannel(buf: FloatArray, n: Int) {
         for (i in 0 until n) {
-            val x = push.process(tight.process(buf[i])) * drive
-            // Zero-stuffed 2x upsampling (gain 2 compensates the inserted zero).
+            val x = push.process(tight.process(buf[i]))
             var acc = 0f
-            for (phase in 0 until 2) {
-                val u = up2.process(up1.process(if (phase == 0) x * 2f else 0f))
-                var y = Dsp.softClip(u + bias) - biasOffset
-                if (secondStage) y = Dsp.softClip(inter.process(y) * stage2)
-                val d = down2.process(down1.process(y))
-                if (phase == 1) acc = d
+            for (phase in 0 until os) {
+                // Zero-stuffed upsampling; the gain os compensates the inserted zeros.
+                var u = if (phase == 0) x * os else 0f
+                for (f in up) u = f.process(u)
+                for (s in 0 until stages) {
+                    u = Dsp.softClip(couple[s].process(u) * stageGain[s] + bias[s]) - biasOut[s]
+                    u = miller[s].process(u)
+                }
+                for (f in down) u = f.process(u)
+                if (phase == 0) acc = u
             }
-            buf[i] = pres.process(high.process(mids.process(low.process(dc.process(acc))))) * output
+            val t = pres.process(high.process(mids.process(low.process(dc.process(acc)))))
+            // Power stage: mild saturation and speaker-resonance bump.
+            buf[i] = reso.process(Dsp.softClip(t * 1.4f) * 0.72f) * output
         }
     }
-    override fun reset() { listOf(tight, push, up1, up2, down1, down2, inter, low, mids, high, pres).forEach { it.reset() }; dc.reset() }
+    override fun reset() { (listOf(tight, push, low, mids, high, pres, reso) + up + down + couple + miller).forEach { it.reset() }; dc.reset() }
 }
 
 private fun System_arraycopy(from: FloatArray, to: FloatArray, n: Int) { for (i in 0 until n) to[i] = from[i] }
 
-/** Speaker-cabinet approximation: 0 = 4x12 closed, 1 = 2x12, 2 = 1x12 open back, 3 = bass 8x10, 4 = bypass. */
-internal class Cabinet(sr: Int, private val model: Int) : Effect {
-    private val chainL = build(sr)
-    private val chainR = build(sr)
-    private fun build(sr: Int): Array<Biquad> = when (model) {
-        4 -> emptyArray()
-        3 -> arrayOf(Biquad().apply { highPass(38.0, 0.7, sr) }, Biquad().apply { peak(80.0, 1.0, 3.0, sr) }, Biquad().apply { peak(900.0, 0.8, -2.0, sr) }, Biquad().apply { lowPass(4200.0, 0.7, sr) }, Biquad().apply { lowPass(5500.0, 0.6, sr) })
-        2 -> arrayOf(Biquad().apply { highPass(85.0, 0.6, sr) }, Biquad().apply { peak(130.0, 1.0, 1.5, sr) }, Biquad().apply { peak(2700.0, 1.2, 2.5, sr) }, Biquad().apply { lowPass(6200.0, 0.75, sr) }, Biquad().apply { lowPass(7800.0, 0.6, sr) })
-        1 -> arrayOf(Biquad().apply { highPass(80.0, 0.7, sr) }, Biquad().apply { peak(120.0, 1.1, 2.5, sr) }, Biquad().apply { peak(1900.0, 1.0, -2.5, sr) }, Biquad().apply { peak(3500.0, 1.2, 2.5, sr) }, Biquad().apply { lowPass(5600.0, 0.8, sr) }, Biquad().apply { lowPass(7200.0, 0.6, sr) })
-        else -> arrayOf(Biquad().apply { highPass(75.0, 0.7, sr) }, Biquad().apply { peak(110.0, 1.2, 3.5, sr) }, Biquad().apply { peak(1600.0, 0.9, -3.0, sr) }, Biquad().apply { peak(3800.0, 1.3, 2.5, sr) }, Biquad().apply { lowPass(5200.0, 0.85, sr) }, Biquad().apply { lowPass(6800.0, 0.6, sr) })
-    }
+/**
+ * Speaker cabinet as convolution with an own designed impulse response ([CabinetIr]): 0 = 4x12 closed, 1 = 2x12,
+ * 2 = 1x12 open back, 3 = bass 8x10, 4 = bypass. [customIr] (a user-imported IR) replaces the designed one.
+ */
+internal class Cabinet(sr: Int, private val model: Int, customIr: FloatArray? = null) : Effect {
+    private val ir = customIr ?: if (model == 4) null else CabinetIr.design(model, sr)
+    private val l = ir?.let { PartitionedConvolver(it) }
+    private val r = ir?.let { PartitionedConvolver(it) }
     override fun process(left: FloatArray, right: FloatArray?, n: Int) {
-        if (chainL.isEmpty()) return
-        for (i in 0 until n) {
-            var l = left[i]; for (f in chainL) l = f.process(l); left[i] = l
-            if (right != null) { var r = right[i]; for (f in chainR) r = f.process(r); right[i] = r }
-        }
+        val cl = l ?: return
+        cl.process(left, n)
+        if (right != null) r!!.process(right, n)
     }
-    override fun reset() { chainL.forEach { it.reset() }; chainR.forEach { it.reset() } }
+    override fun reset() { l?.reset(); r?.reset() }
 }
 
 internal class Eq3(sr: Int, private val low: Double, private val mid: Double, private val high: Double, private val midHz: Double) : Effect {
