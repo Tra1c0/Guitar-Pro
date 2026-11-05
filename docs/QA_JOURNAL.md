@@ -86,4 +86,16 @@ Methoden (anders als Zyklus 1): (a) seed-basierte, modellbasierte Zufallstests: 
 
 **Bekannt, nicht geändert (Design oder geringe Relevanz, dokumentiert):** Einfügen von Takten auf eine Spur mit weniger Saiten verwirft Noten auf fehlenden Saiten (beabsichtigte Saitenverschiebung, Test `pasteBetweenSixAndSevenStringTracksShiftsStrings`) — es fehlt nur ein Hinweis. Nicht gemeldete Kleinverluste: MusicXML fasst Pedal-Hi-Hat 37/46 zu 44 zusammen, Spurname „Bass“ überschreibt Gitarrenprogramm, Triolen-Export erzeugt unnötige `duration_mismatch`-Hinweise, DEAD/PULL_OFF auf Drum-Noten fallen weg; GP7 macht aus reinen Velocity-Änderungen `Dynamic`-Artikulationen; MIDI führt zwei Drum-Spuren zusammen. `SetRepeat` mit Alternativenden, die alle Takte ausschließen, wird von der Wiedergabe ausdrücklich abgelehnt (beabsichtigt, `RouteCompilerTest`).
 
-Ergebnis Zyklus 2: **7 + 2 Defekte bestätigt und repariert** → nicht defektfrei.
+**Audio: Messung und Stresstest (Teil von Zyklus 2, `AudioStressRegressionTest`, rot → grün):**
+
+| # | Defekt |
+|---|---|
+| A1 | Riesige, aber endliche Tonhöhe (ungeprüfte `cents` in einer Datei, z. B. `Pitch(60, 100000)`) ließ den Render-Thread der Sample-Stimme endlos hängen. Ursache war der Loop-Wrap aus der Reparatur in Zyklus 1 (`while`-Schleife bei Positionen um 1e24). Jetzt: Schrittweite begrenzt, Wrap per Modulo, Compiler begrenzt die klingende Tonhöhe auf −24…151. |
+| A2 | Ein nicht-endlicher Notenparameter (NaN-Vibrato, Kurve, Tonhöhe, Drum-Gain/Pan) machte den ganzen Mix sekundenlang NaN und den Kanal dauerhaft unbrauchbar. Compiler ersetzt NaN-Vibrato, Engine überspringt solche Noten. |
+| A3 | Tempoänderung im Loop: Reprogram und Loop wurden getrennt gepostet. Ein Block dazwischen sprang zum alten Loop-Start und zählte einen falschen Trainer-Durchgang (statistisch 10 von 300). Reprogram trägt jetzt die Loop-Grenzen. |
+| A4 | Tempoänderung oder Bearbeitung während des Einzählens brach das Einzählen ab. |
+| A5 | (gering) Allokation je `play()` durch ein Default-`LongArray(0)` → gemeinsame Konstante. Restallokationen bei `Reprogram` (≈ 120 B, Positionsabbildung) und `Preview` (≈ 12 B, geboxtes `Long?`) bleiben bewusst; beide laufen nur auf Benutzeraktion. |
+
+Messwerte (Desktop-JVM, nicht Telefon): 0 Byte Allokation pro 10 000 Render-Blöcke über alle Presets, Effektarten, Cabinet-Modelle, Clips, Preview, Seek, Loop, Rack-Tausch (auch mit `-XX:-DoEscapeAnalysis`). Extreme Effektparameter (0, ±1e9, NaN, ±∞) und Noten (MIDI 0/127, Bends ±4800, 1000-Noten-Akkorde, Tempo 1e-9…1e300 BPM) liefern endliche Ausgabe ≤ 0,73. 10 simulierte Minuten 8-Spur-Stresstest: Median 0,48–0,55 ms, P99 ≈ 0,8–1,06 ms bei 4 ms Budget, ≤ 38 Stimmen, Heap ohne Wachstum, nach Pause 0 Stimmen. 30-s-Nebenläufigkeitstest (6 Coroutinen, 13 424 Operationen, echter Render-Thread): 0 Ausnahmen, kein Deadlock, konsistenter Endzustand. Verdacht (b) „Poller geht beim Neustart verloren“ in 592 Versuchen nicht reproduziert (theoretisch µs-Fenster, nicht geändert).
+
+Ergebnis Zyklus 2: **7 + 2 + 5 Defekte bestätigt und repariert** → nicht defektfrei.
