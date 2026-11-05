@@ -127,3 +127,33 @@ Methoden (neu gegenüber Zyklus 1–2): (a) simulierte Abstürze an jedem Schrit
 **Bekannt, nicht geändert (dokumentiert):** Zwei `FileProjectRepository`-Instanzen auf demselben Verzeichnis verlieren CONFLICTs (App erzeugt genau eine; Mehrprozess als unverifiziert dokumentiert). Sind beide Heads unlesbar, wird nicht nach intakten `revision-*.json` gesucht (dokumentiertes Verhalten in PROJECT_FORMAT.md). Keine automatische Bereinigung alter Revisionen/Waisen (dokumentiert für Phase 1). Sehr dichte Einzeltakte bleiben breiter als die Seite (Mindeststauchung 0,5; in der App horizontal scrollbar, im PDF abgeschnitten). Sehr hohe Noten (Transponieren +48) werden in Standardnotation über dem System gezeichnet; Bends auf der letzten Note ragen über das Ende hinaus. Einzeltakte mit > 2000 Noten skalieren superlinear (4096 Noten: 0,7 s). Pinch-Zoom-Zeitverhalten in `ScoreView` nicht testbar.
 
 Ergebnis Zyklus 3: **≈ 20 Defekte bestätigt und repariert** → nicht defektfrei. Nächste Zyklen müssen andere Fehlerklassen untersuchen.
+
+### Zyklus 4 — Orakelbasierte Semantik der Wiedergabe und numerische Referenzmessungen (DSP)
+
+Methoden (neu): (a) unabhängiges Referenz-Orakel für Route, Timing und Artikulationen gegen den Compiler: 3000 zufällige Routen (Wiederholungen ×2–4, Volten, D.C./D.S., al Fine/al Coda), 700 Partituren mit 16 316 Notenbeginnen und 3119 Takten, 600 Linien mit Bindungen/Staccato/Let Ring, Handfälle; (b) Genauigkeitsmessungen mit synthetischen Signalen (Stimmgerät, Resampler, WAV-Encoder/-Decoder, Wellenform), 2322 WAV-Header-Varianten und 12 000 mutierte Dateien; (c) eigene Analyse des ViewModel-Lebenszyklus.
+
+**Bestätigt und repariert — Wiedergabe (`PlaybackOracleRegressionTest`, `CountInRegressionTest`, rot → grün):**
+1. Volten 1.|2.|3. bzw. 1.3.|2. mit zweitaktigem Körper spielten Takte doppelt (Route `0 1 2 0 1 3 0 1 2 1 3 1 4 5` statt `0 1 2 0 1 3 0 1 4 5`; 1178 von 3000 Zufallsrouten falsch).
+2. Swing veränderte die Taktlänge bei 7/8, 3/8, 5/16 (alle Folgetakte verspätet).
+3. Bindung mit Hammer-on/Pull-off am Ziel: Folgenote wurde neu angeschlagen.
+4. Gebundener Akkord mit Strum am Ziel wurde erneut angeschlagen (5 statt 3 Noten).
+5. Tremolo/Triller verloren Bend-Kurve, Vibrato, Drum-Schlagart/Choke/Gain/Pan; mit Let Ring wurde bis zur nächsten Note weitergepickt (17 statt 5 Anschläge); Tremolo-Rate falsch an der Taktgrenze.
+6. Flageoletts ignorierten die Feinstimmung des Instruments.
+7. Metronom: Auftakte klickten ab Offset 0 mit Downbeat-Akzent; 6/16, 9/16, 12/16 wurden nicht als zusammengesetzte Takte gezählt.
+8. Einzähler übernahm die Zeitkarte des ersten Takts (Auftakt → 1 Klick, Fermate/Tempowechsel dehnten ihn). Jetzt ein regulärer Takt im Starttempo.
+
+**Bestätigt und repariert — DSP (`DspRegressionTest`, rot → grün):**
+1. Stimmgerät las hohe Töne zu hoch (E6 +10 Cent): Parabel auf der normierten YIN-Kurve. Nach dem Fix alle sauberen Töne B0–E6 bei 44,1/48/96 kHz innerhalb ±2 Cent.
+2. Schwaches, ratenabhängiges Anti-Alias-Filter: 5/10/13 kHz erzeugten sichere Fehlanzeigen. Jetzt feste Eckfrequenz und In-Band-Energieschwelle.
+3. WAV mit Datengröße 0 (nie gepatchter Header) wurde abgelehnt; `nBlockAlign` ignoriert (24 Bit in 4-Byte-Containern → falsche Werte und Framezahl).
+4. Wellenform-Dauer zählte den letzten Teil-Bucket voll.
+
+**Durch Analyse belegt und repariert (Android):** `WorkspaceViewModel.onCleared` startete das Stoppen des Stimmgeräts auf dem bereits abgebrochenen `viewModelScope` → wirkungslos. Test `clearingTheViewModelStopsTheTuner` (CI grün); der Rot-Nachweis beruht auf der Lifecycle-Reihenfolge (Scope wird vor `onCleared` geschlossen), nicht auf einem eigenen Lauf ohne Fix.
+
+**Bewusst nicht geändert (Design/Vertrag):** Linearer Resampler ohne Anti-Alias-Filter (Code und Vertrag sagen ausdrücklich „linear“; gemessen: −1,5 dB bei 10 kHz für 44,1→48, 96→48 faltet 30 kHz unbedämpft zurück). Ein Sinc-Resampler wäre eine Designänderung → offener Punkt. Clips stumm bei Tempo ≠ 1 (C-STRETCH), nur die ersten zwei Kanäle, zweiter Datenblock ignoriert, RF64/RIFX abgelehnt. Nach D.C./D.S. keine Wiederholungen (dokumentiert). 7/8 klickt in Achteln (Test `metronomeFollowsMeterGrouping`). Fehlt ein Tempo in Takt 1, gilt die erste Tempoangabe (nur Importe). Flageolett auf Bund 0 = 12. Bund. Staccato am Bindungsursprung wird nicht verschmolzen (widersprüchliche Notation).
+
+**Offen (bekannt, nicht repariert):** Swing in Auftakten (Raster müsste am Taktende verankert werden). Stimmgerät: synthetische Töne ohne/mit schwachem Grundton bei A5/C6 eine Oktave zu tief (echte Gitarrentöne haben starke Grundtöne); ein „heller“ E6 mit −10 dB Grundton wird durch die neue Energieschwelle nicht mehr angezeigt; reine Sinustöne 2,5–3 kHz (über dem Gitarrenbereich) werden als halbe Frequenz gelesen; Eingaberaten ≤ 22,05 kHz nicht nutzbar (App öffnet immer 48 kHz). Mixdown schneidet Referenzaudio am Partiturende hart ab (Klick, vermutlich beabsichtigt). `Wav.encode` wirft bei NaN (nicht erreichbar).
+
+**Ohne Befund:** Route nach Fix 3000/3000; Timing 16 316 Onsets und 3119 Takte innerhalb 1 Frame; Bindungen/Staccato/Let Ring 600/600; Stimmgerät-Latenz 70–85 ms, keine Anzeigen bei Stille/Rauschen; WAV-Decoder 2322 Varianten bit-exakt, 12 000 Mutationen ohne Ausnahme; WAV-Header aller Bittiefen/Raten/Kanäle korrekt; Clip-Sync sample-genau; Resampler-Chunking identisch zum Einmal-Lauf.
+
+Ergebnis Zyklus 4: **8 + 4 + 1 Defekte bestätigt und repariert** → nicht defektfrei.
