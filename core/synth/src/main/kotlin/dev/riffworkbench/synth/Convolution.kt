@@ -39,8 +39,8 @@ internal class Fft(val size: Int) {
 }
 
 /**
- * Uniformly partitioned overlap-save convolution (block [block], FFT 2x block). Adds [block] samples of latency
- * and costs O(log block) per sample independent of the IR length. Mono; one instance per channel side.
+ * Uniformly partitioned overlap-save convolution (block [block], FFT 2x block). Adds [block] samples of latency;
+ * per sample it costs O(log block) for the transforms plus O(IR length / block) for the spectral products. Mono.
  */
 internal class PartitionedConvolver(ir: FloatArray, private val block: Int = 64) {
     private val n = block * 2

@@ -91,7 +91,7 @@
     <string name="audio_import">Audioclip hinzufügen</string>
     <string name="sync_anchor">Sync-Anker setzen</string>
     <string name="waveform_pending">Wellenform und Sync-Editor folgen in Etappe C.</string>
-    <string name="mixer_hint">Lautstärke, Pan, Solo und Mute werden im Projekt gespeichert. Sie werden hörbar, sobald die Engine angebunden ist.</string>
+    <string name="mixer_hint">Lautstärke, Pan, Solo und Mute werden im Projekt gespeichert und sind sofort hörbar.</string>
     <string name="volume">Lautstärke</string>
     <string name="pan">Panorama</string>
     <string name="mute">Mute</string>
@@ -101,8 +101,8 @@
     <string name="tuning">Stimmung · tief nach hoch</string>
     <string name="capo">Capo pro Saite</string>
     <string name="fretboard">Griffbrett-Eingabe</string>
-    <string name="effect_hint">Palm-Mute und Dead Notes sind im einfachen Editor bearbeitbar. Weitere Techniken besitzen bereits eigene Datenmodelle.</string>
-    <string name="layout_hint">Die einfache TAB-Ansicht ist aktiv. Notensatz, Seitenlayout und weitere Darstellungsarten folgen mit dem Renderer.</string>
+    <string name="effect_hint">Techniken werden auf die gewählte Note angewendet und klingen in der Wiedergabe.</string>
+    <string name="layout_hint">TAB, Standardnotation und Rhythmus lassen sich ein- und ausblenden; der Zeilenumbruch folgt der Bildschirmbreite.</string>
     <string name="snapshot_name">Name des Schnappschusses</string>
     <string name="snapshot_create">Schnappschuss erstellen</string>
     <string name="restore">Wiederherstellen</string>
@@ -111,7 +111,7 @@
     <string name="dark_theme">Dunkles Design</string>
     <string name="strict_rhythm">Strikte Rhythmusprüfung</string>
     <string name="settings_hint">Diese Einstellungen werden lokal auf diesem Gerät gespeichert.</string>
-    <string name="strict_hint">Strikte Exportprüfung folgt mit den Fremdformat-Adaptern. Der Editor markiert unvollständige Takte bereits.</string>
+    <string name="strict_hint">Die strikte Prüfung ist noch nicht schaltbar; der Editor markiert unvollständige Takte bereits.</string>
     <string name="command_palette">Befehlspalette</string>
     <string name="shortcuts">Tastenkürzel</string>
     <string name="licenses">Lizenzen &amp; Herkunft</string>

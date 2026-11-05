@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.SharedFlow
 
 /**
  * YIN fundamental-frequency estimator (de Cheveigné & Kawahara 2002): difference function, cumulative mean
- * normalisation, absolute threshold and parabolic refinement. Allocation-free after construction.
+ * normalisation, absolute threshold and parabolic refinement. Fixed-size buffers; allocates one small result per call.
  */
 class YinPitchDetector(private val sampleRate: Int, private val window: Int = 1024, private val threshold: Float = 0.12f) {
     private val half = window / 2

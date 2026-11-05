@@ -91,7 +91,7 @@
     <string name="audio_import">Add audio clip</string>
     <string name="sync_anchor">Add sync anchor</string>
     <string name="waveform_pending">Waveform and sync editor follow in stage C.</string>
-    <string name="mixer_hint">Volume, pan, solo and mute are saved in the project. They become audible when the engine is connected.</string>
+    <string name="mixer_hint">Volume, pan, solo and mute are saved in the project and are audible right away.</string>
     <string name="volume">Volume</string>
     <string name="pan">Pan</string>
     <string name="mute">Mute</string>
@@ -101,8 +101,8 @@
     <string name="tuning">Tuning · low to high</string>
     <string name="capo">Capo per string</string>
     <string name="fretboard">Fretboard entry</string>
-    <string name="effect_hint">Palm mute and dead notes are editable in the basic editor. Other techniques already have dedicated data models.</string>
-    <string name="layout_hint">The basic TAB view is active. Engraving, page layout and other notation types follow with the renderer.</string>
+    <string name="effect_hint">Techniques apply to the selected note and are heard in playback.</string>
+    <string name="layout_hint">TAB, standard notation and rhythm can be shown or hidden; line breaks follow the screen width.</string>
     <string name="snapshot_name">Snapshot name</string>
     <string name="snapshot_create">Create snapshot</string>
     <string name="restore">Restore</string>
@@ -111,7 +111,7 @@
     <string name="dark_theme">Dark theme</string>
     <string name="strict_rhythm">Strict rhythm validation</string>
     <string name="settings_hint">These settings are stored locally on this device.</string>
-    <string name="strict_hint">Strict export validation follows with foreign-format adapters. The editor already flags incomplete bars.</string>
+    <string name="strict_hint">Strict validation cannot be switched on yet; the editor already flags incomplete bars.</string>
     <string name="command_palette">Command palette</string>
     <string name="shortcuts">Keyboard shortcuts</string>
     <string name="licenses">Licenses &amp; provenance</string>

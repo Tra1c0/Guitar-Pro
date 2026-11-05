@@ -159,8 +159,8 @@ import kotlin.math.roundToLong
     val clips = state.project.audio.clips
     ScrollPage(stringResource(R.string.audio), stringResource(R.string.audio_hint)) {
         Button(onClick = onImport, enabled = ui.busy == null && clips.size < 16) { Text(tr("Audiodatei importieren …", "Import audio file …")) }
-        Text(tr("WAV immer; MP3, AAC/M4A, Ogg und FLAC über die Decoder des Geräts. Bis 64 MB, wiedergegeben werden höchstens 10 Minuten. Die Datei bleibt privat im Projekt.",
-            "WAV always; MP3, AAC/M4A, Ogg and FLAC through the device decoders. Up to 64 MB, at most 10 minutes are played. The file stays private in the project."), style = MaterialTheme.typography.bodySmall)
+        Text(tr("WAV immer; MP3, AAC/M4A, Ogg und FLAC über die Decoder des Geräts. Bis 64 MiB, wiedergegeben werden höchstens 10 Minuten. Die Datei bleibt privat im Projekt.",
+            "WAV always; MP3, AAC/M4A, Ogg and FLAC through the device decoders. Up to 64 MiB, at most 10 minutes are played. The file stays private in the project."), style = MaterialTheme.typography.bodySmall)
         if (clips.isNotEmpty() && abs(practice.speed - 1.0) > 1e-9) Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium) {
             Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(tr("Referenz-Audio ist nur bei 100 % Tempo hörbar – Time-Stretch fehlt noch.", "Reference audio only sounds at 100 % speed – time-stretch is not implemented yet."), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)

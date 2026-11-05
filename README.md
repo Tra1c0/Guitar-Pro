@@ -1,6 +1,6 @@
 # RiffWorkbench
 
-Android-first Offline-Editor für TAB und Partitur mit eigenem Notensatz, eigener Klangerzeugung und Guitar-Pro-Austausch. Die App läuft komplett offline; es werden keine fremden Tabs, Soundbanks, RSE-Inhalte oder Impulsantworten mitgeliefert. Grundlage ist das [Briefing](docs/BRIEFING.md); welche Merkmale in welcher Tiefe fertig sind, steht in der [Paritätsmatrix](docs/PARITY.md).
+Android-first Offline-Editor für TAB und Partitur mit eigenem Notensatz, eigener Klangerzeugung und Guitar-Pro-Austausch. Die App läuft komplett offline; es werden keine fremden Tabs, RSE-Inhalte oder Impulsantworten mitgeliefert; einzige mitgelieferte Klangbank sind die CC0-lizenzierten DI-Gitarrensamples Karoryfer Emilyguitar (siehe [DEPENDENCIES](docs/DEPENDENCIES.md)). Grundlage ist das [Briefing](docs/BRIEFING.md); welche Merkmale in welcher Tiefe fertig sind, steht in der [Paritätsmatrix](docs/PARITY.md).
 
 ## Was die App kann
 

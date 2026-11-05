@@ -462,7 +462,7 @@ class WorkspaceViewModel(
     fun importAudio(bytes: ByteArray, fileName: String?) { viewModelScope.launch {
         val decoder = services.audioDecoder; val assets = services.assets
         if (decoder == null || assets == null) { showNotice("Referenz-Audio ist in dieser Umgebung nicht verfügbar"); return@launch }
-        if (bytes.size > MAX_AUDIO_BYTES) { showNotice("Die Audiodatei ist größer als 64 MB"); return@launch }
+        if (bytes.size > MAX_AUDIO_BYTES) { showNotice("Die Audiodatei ist größer als 64 MiB"); return@launch }
         mutable.value = mutable.value.copy(busy = "Audio prüfen", busyProgress = null)
         try {
             val info = when (val r = decoder.probe(bytes)) { is Outcome.Failure -> { showNotice(r.message); return@launch }; is Outcome.Success -> r.value }

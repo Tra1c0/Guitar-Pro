@@ -2,7 +2,7 @@
 
 Die Testergebnisse stehen in `docs/VERIFICATION.json`; sie werden von `tools/collect_validation.py` aus den tatsächlichen JUnit-XML-Berichten eines vollständigen CI-Laufs erzeugt. Die CI archiviert die Gradle-, Lint- und JUnit-Berichte als Artefakt `verification-reports` und die Debug-APK als `riffworkbench-debug-apk`. Ein erfolgreicher Build ist keine Geräte-, Hör- oder Desktop-Abnahme.
 
-Geprüfter Stand: **227 unterschiedliche Tests bestanden, 242 Ausführungen einschließlich Debug-/Release-Varianten; Build, Architekturprüfung und Android Lint ohne Fehler** (CI-Lauf 10 für Commit `24c72b5`, 4. November 2026). Der Quell-Fingerabdruck in `docs/VERIFICATION.json` entspricht dem Kotlin-Stand dieses Commits; spätere Commits haben nur Dokumentation geändert.
+Geprüfter Stand: **227 unterschiedliche Tests bestanden, 242 Ausführungen einschließlich Debug-/Release-Varianten; Build, Architekturprüfung und Android Lint ohne Fehler** (CI-Lauf 10 für Commit `24c72b5`, 4. November 2026). Der Quell-Fingerabdruck in `docs/VERIFICATION.json` entspricht dem Kotlin-Stand dieses Commits; seither hat die QA-Kampagne (Zweig `ccr-0b650dff-jnhups-qa`, siehe [QA_JOURNAL](QA_JOURNAL.md)) Code und Tests deutlich erweitert; maßgeblich ist dort der jeweils letzte grüne CI-Lauf. `VERIFICATION.json` ist bis zur nächsten Neuerzeugung veraltet.
 
 ## Automatisierte Prüfung
 
@@ -25,7 +25,7 @@ Die rein portablen Module (`core:*`, `adapter:*`, `data:local`) lassen sich auch
 | Speicher | ProjectStorageTest, NativeArchiveTest | Neustart, konkurrierende Revision, atomare Sichtbarkeit, Recovery, Snapshots, Assets, native Archive mit Pfad-, Größen- und Prüfsummenlimits |
 | Formate | CatalogTest, XmlTest, Gp*Test, Gpif*Test, Gpx*Test, Midi*Test, MusicXmlTest, AsciiTabExporterTest | Inhaltserkennung; GP3/4/5 gegen PyGuitarPro-Orakel samt Verlustliste, Trunkierung und Mutationen; GPIF-Rundreise, ZIP-/XML-Angriffe, GPX-Container; MIDI-, MusicXML- und ASCII-Abbildung; Export nach GP7/MIDI/MusicXML/ASCII und Reimport über den Katalog; jedes Präfix eines XML-Dokuments scheitert sauber |
 | ViewModels | AutosaveTest, ReferenceAudioTest, LibraryImportTest | Autosave, Retry und Snapshot-Rennen; Referenz-Audio importieren, ausrichten, entfernen, Undo; Fremdimport mit genau einer Herkunft und ohne verwaiste Assets |
-| App | ApplicationFlowTest | tatsächliche MainActivity auf Robolectric API 35 (Debug und Release): Projekt anlegen, Bund 12, Undo/Redo/Persistenz, alle 13 Bereiche, Funktionssuche, Drumgrid, Einstellungen, Tablet-Navigation |
+| App | ApplicationFlowTest | tatsächliche MainActivity auf Robolectric API 35 (Debug und Release): Projekt anlegen, Bund 12, Undo/Redo/Persistenz, alle Bereiche, Funktionssuche, Drumgrid, Einstellungen, Tablet-Navigation |
 | Architektur | verify_architecture.py | Modulrichtung, Zyklen, portabler Kern, vollständige Registerdimensionen, bekannte Routen/Verträge, aktuelle generierte Parität |
 
 Android Lint muss ohne Fehler bestehen. Hinweise auf neuere Bibliotheksversionen sind bei der bewusst gepinnten Toolchain erwartbar.
