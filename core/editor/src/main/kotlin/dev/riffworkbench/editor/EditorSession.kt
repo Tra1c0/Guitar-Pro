@@ -97,7 +97,9 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
     fun dispatch(command: EditorCommand): Outcome<Unit> = try {
         val before = state.value
         var after = apply(before.project, before.selection, command)
-        if (command == EditorCommand.Delete && after != before.project) after = Links.prune(after)
+        // Any edit that removes notes (delete, rest over a note, drum toggle) drops the links pointing at them, like Delete.
+        // Re-pitching one end of a tie stays rejected by the validator (deliberate: ties are never broken silently).
+        if (after != before.project) after = Links.prune(after)
         if (after == before.project) Outcome.Success(Unit) else {
             require(after.id == before.project.id) { "Projekt-ID darf nicht geändert werden" }
             require(before.project.revision < Long.MAX_VALUE) { "Revisionslimit erreicht" }

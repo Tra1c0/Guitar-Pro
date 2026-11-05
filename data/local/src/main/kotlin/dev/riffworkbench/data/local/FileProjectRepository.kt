@@ -18,6 +18,8 @@ import kotlinx.serialization.decodeFromString
 
 @Serializable internal data class ProjectHead(val revision: Long, val file: String, val sha256: String)
 
+private const val RECOVERED = "recovered"
+
 class FileProjectRepository(private val root: File) : ProjectRepository, SnapshotRepository {
     private val mutex = Mutex()
     private val mutable = MutableStateFlow<List<ProjectSummary>>(emptyList())
@@ -31,9 +33,9 @@ class FileProjectRepository(private val root: File) : ProjectRepository, Snapsho
         storageOutcome {
             val dir = File(projectsDir, id.value)
             val (head, recovered) = validHead(dir)
-            val project = readRevision(dir, head)
+            val project = readRevision(dir, head).let { it.copy(diagnostics = it.diagnostics.filterNot { d -> d.code == RECOVERED }) }
             require(project.id == id) { "Projekt-ID stimmt nicht mit dem Speicherort überein" }
-            if (recovered) project.copy(diagnostics = project.diagnostics + Diagnostic("recovered", "Letzte intakte Revision wiederhergestellt", severity = Severity.WARNING)) else project
+            if (recovered) project.copy(diagnostics = project.diagnostics + Diagnostic(RECOVERED, "Letzte intakte Revision wiederhergestellt", severity = Severity.WARNING)) else project
         }
     } }
     override suspend fun save(project: Project, expectedRevision: Long?): Outcome<Unit> = withContext(Dispatchers.IO) { mutex.withLock {
@@ -44,10 +46,14 @@ class FileProjectRepository(private val root: File) : ProjectRepository, Snapsho
             val existing = if (File(dir, "head.json").exists() || File(dir, "head.previous.json").exists()) validHead(dir).first else null
             require(if (expectedRevision == null) existing == null else existing?.revision == expectedRevision) { "CONFLICT: Gespeicherte Revision hat sich geändert" }
             require(existing == null || project.revision > existing.revision) { "CONFLICT: Revision muss steigen" }
-            val bytes = projectJson.encodeToString(project).toByteArray()
+            // The recovery notice belongs to this open, not to the music: never persist it.
+            val bytes = projectJson.encodeToString(project.copy(diagnostics = project.diagnostics.filterNot { it.code == RECOVERED })).toByteArray()
             require(bytes.size <= NativeArchiveLimits.MAX_ENTRY) { "RESOURCE_LIMIT: Projekt zu groß" }
             val head = ProjectHead(project.revision, "revision-${project.revision}.json", sha256(bytes))
-            atomicWrite(File(dir, head.file), bytes)
+            // After a fallback from a torn head the target name can still hold newer, intact work: keep it aside instead of overwriting.
+            val target = File(dir, head.file)
+            if (target.exists() && existing?.file != head.file) java.nio.file.Files.move(target.toPath(), File(dir, "orphan-${head.file.removeSuffix(".json")}-${UUID.randomUUID()}.json").toPath(), java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+            atomicWrite(target, bytes)
             if (existing != null) atomicWrite(File(dir, "head.previous.json"), projectJson.encodeToString(existing).toByteArray())
             atomicWrite(File(dir, "head.json"), projectJson.encodeToString(head).toByteArray())
             refreshIndex()

@@ -158,7 +158,7 @@ object ScoreLayouter {
             if (grid != null && grid > Fraction.ZERO) {
                 val beats = bar?.voices?.firstOrNull { it.index == r.editVoice }?.beats.orEmpty()
                 var o = Fraction.ZERO; var guard = 0
-                while (o < len && guard++ < 512) {
+                while (o < len && guard++ < 4096) { // 4096 = longest valid bar (64/1) on a 1/64 grid
                     val covered = beats.any { b -> o >= b.offset && o < b.offset + b.duration.length() && o != b.offset }
                     if (!covered && o !in offsets) offsets[o] = true
                     o += grid

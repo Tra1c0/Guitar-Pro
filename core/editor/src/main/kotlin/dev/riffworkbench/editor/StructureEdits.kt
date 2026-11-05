@@ -244,7 +244,7 @@ internal object TrackEdits {
         }) }) }) }
         require(problems.isEmpty()) { "Umstimmen nicht möglich: ${problems.distinct().take(3).joinToString("; ")}" + if (problems.size > 3) " …" else "" }
         val notation = if (instrument.kind == InstrumentKind.PERCUSSION) setOf(NotationKind.PERCUSSION) else if (newFretted) setOf(NotationKind.TAB) else setOf(NotationKind.STANDARD)
-        val updated = track.copy(instrument = instrument, staves = staves.map { if (oldFretted != newFretted) it.copy(notation = notation) else it })
+        val updated = track.copy(instrument = instrument, staves = staves.map { if (oldFretted != newFretted || (old.kind == InstrumentKind.PERCUSSION) != (instrument.kind == InstrumentKind.PERCUSSION)) it.copy(notation = notation) else it })
         return p.copy(tracks = p.tracks.map { if (it.id == id) updated else it })
     }
 }
