@@ -30,6 +30,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
+class PendingExports {
+    var bytes: dev.riffworkbench.model.ExportResult? = null
+    var stream: Pair<dev.riffworkbench.feature.workspace.ExportTarget, dev.riffworkbench.feature.workspace.WorkspaceViewModel>? = null
+    var pdf: dev.riffworkbench.feature.workspace.WorkspaceViewModel? = null
+}
+
 open class RiffApplication : Application() {
     lateinit var container: AppContainer; private set
     override fun onCreate() { super.onCreate(); container = AppContainer(this) }
@@ -39,6 +45,10 @@ open class RiffApplication : Application() {
 class AppContainer(application: Application) {
     private val root = File(application.filesDir, "workbench")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /** Outlives activity recreation (rotation, dark mode): long document writes must not be cancelled with the UI. */
+    val backgroundScope: CoroutineScope get() = scope
+    /** Export jobs waiting for the system file picker; kept here so a rotation while the picker is open does not drop them. */
+    val pendingExports = PendingExports()
     val ids = IdSource { EntityId(UUID.randomUUID().toString()) }
     val projects = FileProjectRepository(root)
     val assets = FileAssetStore(File(root, "assets"))

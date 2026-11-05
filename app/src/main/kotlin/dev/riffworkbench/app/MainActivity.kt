@@ -52,30 +52,30 @@ object AppRoutes {
     val nav = rememberNavController()
     val scope = rememberCoroutineScope()
     var notice by remember { mutableStateOf<String?>(null) }
-    var pendingExport by remember { mutableStateOf<ExportResult?>(null) }
-    var pendingStream by remember { mutableStateOf<Pair<ExportTarget, WorkspaceViewModel>?>(null) }
-    var pendingPdf by remember { mutableStateOf<WorkspaceViewModel?>(null) }
+    val pending = container.pendingExports
+    var pendingExport by pending::bytes
+    var pendingStream by pending::stream
+    var pendingPdf by pending::pdf
+    val success = context.getString(dev.riffworkbench.ui.components.R.string.export_success)
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         val result = pendingExport; pendingExport = null
-        if (uri != null && result != null) scope.launch { when (val write = container.documents.write(uri, result.bytes)) {
-            is Outcome.Failure -> notice = write.message
-            is Outcome.Success -> notice = context.getString(dev.riffworkbench.ui.components.R.string.export_success)
-        } }
+        if (uri != null && result != null) container.backgroundScope.launch { val write = container.documents.write(uri, result.bytes)
+            withContext(Dispatchers.Main) { notice = if (write is Outcome.Failure) write.message else success }
+        }
         else if (uri != null) notice = "Export nach Prozessneustart bitte erneut starten."
     }
     val streamLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri: Uri? ->
         val job = pendingStream; pendingStream = null
-        if (uri != null && job != null) scope.launch {
-            when (val r = container.documents.stream(uri) { sink -> job.second.renderAudio(job.first, sink) }) {
-                is Outcome.Failure -> notice = r.message
-                is Outcome.Success -> notice = context.getString(dev.riffworkbench.ui.components.R.string.export_success)
-            }
+        // Rendering a long mix takes seconds to minutes: run it outside the composition so a rotation does not truncate the file.
+        if (uri != null && job != null) container.backgroundScope.launch {
+            val r = container.documents.stream(uri) { sink -> job.second.renderAudio(job.first, sink) }
+            withContext(Dispatchers.Main) { notice = if (r is Outcome.Failure) r.message else success }
         }
     }
     val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri: Uri? ->
         val vm = pendingPdf; pendingPdf = null
         val project = vm?.currentProject()
-        if (uri != null && project != null) scope.launch {
+        if (uri != null && project != null) container.backgroundScope.launch {
             val r = container.documents.stream(uri) { sink ->
                 withContext(Dispatchers.Default) {
                     val out = object : java.io.OutputStream() {
@@ -86,7 +86,7 @@ object AppRoutes {
                 }
                 Outcome.Success(Unit)
             }
-            notice = if (r is Outcome.Failure) r.message else context.getString(dev.riffworkbench.ui.components.R.string.export_success)
+            withContext(Dispatchers.Main) { notice = if (r is Outcome.Failure) r.message else success }
         }
     }
     LaunchedEffect(container) { when (val result = container.settings.load()) { is Outcome.Failure -> notice = result.message; is Outcome.Success -> Unit } }
