@@ -29,14 +29,26 @@ class ConfigurationMatrixTest {
         compose.onNodeWithTag("fret-0").assertIsDisplayed()
         compose.onNodeWithTag("fret-5").assertIsDisplayed().performClick()
         compose.waitForIdle()
-        compose.onNodeWithTag("nav-practice").assertIsDisplayed().performClick()
+        if (compose.onAllNodesWithTag("nav-more").fetchSemanticsNodes().isNotEmpty()) {
+            // Phone layout: bottom pill bar and the "more" sheet.
+            compose.onNodeWithTag("nav-practice").assertIsDisplayed().performClick()
+            compose.waitForIdle()
+            compose.onNodeWithTag("nav-more").assertIsDisplayed().performClick()
+            compose.waitForIdle()
+            compose.onNodeWithTag("page-diagnostics").performScrollTo().performClick()
+        } else {
+            // >= 840 dp (landscape phone, tablet): navigation rail; it scrolls when the height is small.
+            compose.onAllNodesWithText(diagnosticsTitle).onFirst().performScrollTo().performClick()
+        }
         compose.waitForIdle()
-        compose.onNodeWithTag("nav-more").assertIsDisplayed().performClick()
-        compose.onNodeWithTag("page-diagnostics").performScrollTo().assertIsDisplayed()
+        compose.onAllNodesWithText(diagnosticsTitle).onFirst().assertExists()
+        compose.onAllNodesWithText(stressTitle).onFirst().performScrollTo().assertIsDisplayed()
     }
+    private var diagnosticsTitle = "Audio-Diagnose"
+    private var stressTitle = "Stresstest"
 
     @Test @Config(sdk = [35], qualifiers = "en-rUS-w411dp-h891dp", application = CleanTestApplication::class)
-    fun englishPhone() = mainFlow("Create")
+    fun englishPhone() { diagnosticsTitle = "Audio diagnostics"; stressTitle = "Stress test"; mainFlow("Create") }
 
     @Test @Config(sdk = [35], qualifiers = "de-rDE-w320dp-h568dp", application = CleanTestApplication::class)
     fun smallPhone() = mainFlow("Anlegen")
