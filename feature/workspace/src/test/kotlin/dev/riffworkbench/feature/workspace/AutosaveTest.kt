@@ -109,4 +109,21 @@ class AutosaveTest {
         assertEquals(0L, repo.stored.revision)
         assertNotNull(vm.state.value.notice)
     } }
+    @Test fun clearingTheViewModelStopsTheTuner() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val stopped = java.util.concurrent.CountDownLatch(1)
+        val tuner = object : Tuner {
+            override val readings = kotlinx.coroutines.flow.MutableSharedFlow<TuningReading>()
+            override suspend fun start(inputDeviceId: String?) = Outcome.Success(Unit)
+            override suspend fun stop(): Outcome<Unit> { stopped.countDown(); return Outcome.Success(Unit) }
+        }
+        val repo = Repository(ProjectFactory(ids).create("Tuner"))
+        val vm = WorkspaceViewModel(repo.stored.id, repo, Snapshots(), exchange, settings, PendingAudioServices(), ids, WorkspaceServices(tuner = tuner), background = StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore(); store.put("test", vm)
+        try {
+            advanceUntilIdle(); vm.startTuner(); runCurrent()
+            store.clear()
+            assertTrue("microphone left open after the workspace was closed", stopped.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        } finally { Dispatchers.resetMain() }
+    }
 }
