@@ -232,3 +232,21 @@ Methode (neu): öffentliche Testkorpora, nur lokal verwendet, nicht im Repo: alp
 **Nicht geändert (dokumentiert):** TuxGuitar-Dead-Notes (`<play><mute>straight</mute>` bzw. x-Notenkopf auf der zusammengeführten Notationszeile) verlieren DEAD ohne Verlustmeldung — herstellerspezifisch und mehrdeutig („straight“ ist in MusicXML ein Blechbläser-Dämpfer). MIDI-Bank in MusicXML, Tonhöhen-Note in Schlagzeugpart (→ Drum 60) und untypisierter `<creator>` ohne Verlustmeldung (gering). Volten-Lesart bei „repeat-close-alternate-endings“ weicht von alphaTab ab (Takt ohne Klammer wird in jedem Durchgang gespielt — Standardlesart, nicht als Defekt gewertet). Übervolle GP-Takte werden mit Verlustmeldung gekürzt; GP6-Drum-Element/Variation mit Verlustmeldung verworfen. MusicXML-Teile ohne `<divisions>` werden typisiert abgelehnt (alphaTab erbt sie vom vorigen Teil).
 
 Ergebnis Zyklus 8: **7 Defektklassen (9 Einzelbefunde) bestätigt und repariert** → nicht defektfrei.
+
+### Zyklus 9 — Export-Konformität gegen unabhängige Prüfer
+
+Methode (neu): 984 Projekte (Fixtures, Werks-/Stress-Projekte, 27 handgebaute Feature-Projekte, 300 generierte, 643 importierte Korpusdateien) in alle Formate exportiert und mit **fremden** Werkzeugen geprüft: MusicXML gegen das offizielle 4.0-XSD (lokal, ohne DTD-Abruf) plus semantische Regeln (Dauern pro Stimme/Takt, Tie-/Tuplet-Paare, TAB-Tonhöhe = Stimmung + Kapo + Bund); MIDI mit `mido` und eigenem SMF-Scanner (Onsets gegen den Playback-Plan ±1 ms, Note-on/off-Paare, RPN vor Bends, Kanal 10); WAV mit Pythons `wave`/`soundfile`; GP7 mit `zipfile` und ElementTree (CRC, referenzielle Integrität) sowie den Leseregeln von alphaTabs `GpifParser`; ASCII-Ausrichtung; SVG mit lxml.
+
+**Bestätigt und repariert (`ExportConformanceRegressionTest`, rot → grün):**
+1. MusicXML: Pausen in Lücken wurden in Teilwerte zerlegt, deren Raster `divisions` nicht abdeckte → `<duration>0</duration>` (XSD-Fehler, 21 Dateien).
+2. XML-Writer ließ U+FFFE/U+FFFF und einzelne Surrogate durch, CDATA filterte gar nicht → MusicXML/GP7 nicht wohlgeformt (u. a. Steuerzeichen aus GP3–5-Titeln).
+3. GP7: Vorschlagsnoten auf unbundierten Spuren nur mit `<Midi>`, ohne Octave/Tone → von alphaTab/GP als Tonhöhe 0 gelesen (17 echte Korpusdateien).
+4. GP7: Haupt-Kapo war der häufigste statt der niedrigste Wert → Teilkapo unter dem Hauptkapo, eine Saite 2 Halbtöne zu hoch.
+5. MIDI: drei gleiche Tonhöhen auf einem Kanal → doppeltes Note-on und verwaistes Note-off.
+6. MusicXML verwarf weitere Vorschläge einer Note still → jetzt Verlustmeldung `grace_multiple`.
+
+**Bewusst nicht geändert / Einschränkungen:** GP7 füllt die Lücke am Stimmende nicht mit Pausen (vom bestehenden `GpifRoundTripTest` so festgelegt; Guitar Pro markiert solche Takte evtl. als unvollständig). MIDI-Zeiten von Trillern/Tremolo/Vorschlägen in Swing-Takten weichen bis 83 ms vom Playback ab (Ornamente auf dem geraden Tick-Raster berechnet). 32-Bit-Float-WAV ohne `cbSize`/`fact`-Chunk (alle getesteten Leser akzeptieren es; der 44-Byte-Header ist im Code an mehreren Stellen vorausgesetzt). 24-Bit-WAV als `WAVE_FORMAT_PCM` statt `EXTENSIBLE` (verbreitet akzeptiert). alphaTab ignoriert `SecondaryTuplet` und `PartialCapoFret` (Leser-Einschränkung). Ein ungeklärter Fall (Seed 60): zwei gleiche Noten mit Rasgueado auf einem 7/320-Beat werden im MIDI zusammengefasst, im Playback nicht.
+
+**Ohne Befund:** XSD 979/984 (die 5 Fälle oben), MIDI 959/959 parsebar, Onsets 955/959 innerhalb 1 ms (Rest: Swing-Ornamente), GP7-ZIP 984/984 sauber, referenzielle Integrität überall, ASCII 984/984, SVG 502/502, WAV 86/86 identisch mit `soundfile`.
+
+Ergebnis Zyklus 9: **6 Defekte bestätigt und repariert** → nicht defektfrei.
