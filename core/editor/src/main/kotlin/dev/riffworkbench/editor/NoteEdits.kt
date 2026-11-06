@@ -65,6 +65,35 @@ internal object NoteEdits {
         note.copy(articulations = if (toggle && existing == a) removed else removed + a)
     }
 
+    /** [EditorCommand.EditNotesInBars]: every note of the selected track and voice (first staff) in [ids]. */
+    fun editNotesInBars(p: Project, s: Selection, ids: List<EntityId>, edit: NoteEdit): Project {
+        val bars = ids.toSet()
+        require(bars.isNotEmpty() && bars.all { id -> p.measures.any { it.id == id } }) { "Takt fehlt" }
+        val t = track(p, s)
+        val staff = t.staves.firstOrNull() ?: throw IllegalArgumentException("Spur ohne Notensystem")
+        val targets = staff.bars.filter { it.measureId in bars }.flatMap { b -> b.voices.filter { it.index == s.voice }.flatMap { v -> v.beats.flatMap { it.notes } } }
+        require(targets.isNotEmpty()) { "Im Bereich gibt es keine Noten" }
+        val transform: (Note) -> Note = when (edit) {
+            is NoteEdit.Apply -> {
+                val slot = Articulations.slot(edit.articulation)
+                val remove = edit.toggle && targets.all { edit.articulation in it.articulations }
+                ({ note -> val kept = note.articulations.filterNot { Articulations.slot(it) == slot || Articulations.slot(it) in Articulations.conflicts(edit.articulation) }
+                    note.copy(articulations = if (remove) note.articulations.filterNot { Articulations.slot(it) == slot } else kept + edit.articulation) })
+            }
+            is NoteEdit.Clear -> ({ note -> note.copy(articulations = note.articulations.filterNot { Articulations.slot(it) == edit.slot }) })
+            is NoteEdit.Velocity -> { require(edit.velocity in 1..127) { "Velocity muss zwischen 1 und 127 liegen" }; ({ note -> note.copy(velocity = edit.velocity) }) }
+        }
+        return p.copy(tracks = p.tracks.map { tr ->
+            if (tr.id != t.id) tr else tr.copy(staves = tr.staves.mapIndexed { i, st ->
+                if (i != 0) st else st.copy(bars = st.bars.map { bar ->
+                    if (bar.measureId !in bars) bar else bar.copy(voices = bar.voices.map { v ->
+                        if (v.index != s.voice) v else v.copy(beats = v.beats.map { b -> if (b.notes.isEmpty()) b else b.copy(notes = b.notes.map(transform)) })
+                    })
+                })
+            })
+        })
+    }
+
     fun clearArticulation(p: Project, s: Selection, slot: String): Project = updateSelectedNotes(p, s) { note, _ -> note.copy(articulations = note.articulations.filterNot { Articulations.slot(it) == slot }) }
 
     fun setVelocity(p: Project, s: Selection, velocity: Int): Project {

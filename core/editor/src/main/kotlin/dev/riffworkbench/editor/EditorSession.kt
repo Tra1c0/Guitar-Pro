@@ -17,6 +17,14 @@ data class Selection(val trackId: EntityId, val measureId: EntityId, val voice: 
 enum class EditScope { NOTE, BEAT, MEASURES, TRACK }
 data class EditorState(val project: Project, val selection: Selection, val canUndo: Boolean = false, val canRedo: Boolean = false, val diagnostics: List<Diagnostic> = emptyList())
 
+/** Note-level change for [EditorCommand.EditNotesInBars]. */
+sealed interface NoteEdit {
+    /** Like [EditorCommand.ApplyArticulation]; with [toggle] it is removed only when every target note already has it. */
+    data class Apply(val articulation: Articulation, val toggle: Boolean = true) : NoteEdit
+    data class Clear(val slot: String) : NoteEdit
+    data class Velocity(val velocity: Int) : NoteEdit
+}
+
 sealed interface EditorCommand {
     data class PutNote(val fret: Int? = null, val midiNote: Int? = null, val duration: WrittenDuration = WrittenDuration(), val marks: Set<NoteMark> = emptySet()) : EditorCommand
     data class ToggleDrum(val midiNote: Int, val duration: WrittenDuration = WrittenDuration()) : EditorCommand
@@ -43,6 +51,12 @@ sealed interface EditorCommand {
     /** Adds the articulation to the selected note(s); replaces one of the same kind; with [toggle] an equal one is removed. */
     data class ApplyArticulation(val articulation: Articulation, val toggle: Boolean = true) : EditorCommand
     data class ClearArticulation(val slot: String) : EditorCommand
+    /**
+     * Range edit (Zyklus 23): [edit] applies to every note of the selected track and voice in the bars [ids] (the visible
+     * bar range) as one undo step. Fails without notes there. Cursor commands (ApplyArticulation, …) keep acting on the
+     * cursor note only.
+     */
+    data class EditNotesInBars(val ids: List<EntityId>, val edit: NoteEdit) : EditorCommand
     /** GP-style: the selected note becomes tied from the previous note on the same string (and takes its pitch). */
     data object ToggleTie : EditorCommand
     data class SetVelocity(val velocity: Int) : EditorCommand
@@ -194,6 +208,10 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
             NoteEdits.applyArticulation(p, s, c.articulation, c.toggle)
         }
         is EditorCommand.ClearArticulation -> NoteEdits.clearArticulation(p, s, c.slot)
+        is EditorCommand.EditNotesInBars -> {
+            ((c.edit as? NoteEdit.Apply)?.articulation as? Articulation.Vibrato)?.let { require(it.rateHz.isFinite() && it.rateHz in 0.1..20.0 && it.depthCents in 0..1200) { "Vibrato-Werte ungültig" } }
+            NoteEdits.editNotesInBars(p, s, c.ids, c.edit)
+        }
         EditorCommand.ToggleTie -> NoteEdits.toggleTie(p, s, ids)
         is EditorCommand.SetVelocity -> NoteEdits.setVelocity(p, s, c.velocity)
         is EditorCommand.MoveToString -> NoteEdits.moveToString(p, s, c.string)
@@ -257,6 +275,7 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
             val clips = p.audio.clips.filterNot { it.id == c.id }
             p.copy(audio = p.audio.copy(clips = clips, assets = p.audio.assets.filter { a -> clips.any { it.asset == a.hash } }))
         }
+        is EditorCommand.ToggleDrum -> drumToggle(p, s, c)
         else -> updateBeat(p, s, createIfMissing = c != EditorCommand.Delete) { beat, track, existed ->
             when (c) {
                 is EditorCommand.PutNote -> {
@@ -278,12 +297,6 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
                     beat.copy(notes = beat.notes.filterNot { if (note.string != null) it.string == note.string else it.pitch.midiNumber == note.pitch.midiNumber } + note, duration = if (existed) beat.duration else c.duration, explicitRest = false)
                 }
                 is EditorCommand.PutRest -> beat.copy(notes = emptyList(), explicitRest = true, duration = if (existed) beat.duration else c.duration)
-                is EditorCommand.ToggleDrum -> {
-                    require(track.instrument.kind == InstrumentKind.PERCUSSION && c.midiNote in 0..127)
-                    val notes = if (beat.notes.any { it.pitch.midiNumber == c.midiNote }) beat.notes.filterNot { it.pitch.midiNumber == c.midiNote }
-                        else beat.notes + Note(ids.next(), Pitch(c.midiNote))
-                    beat.copy(notes = notes, duration = if (existed) beat.duration else c.duration, explicitRest = notes.isEmpty())
-                }
                 EditorCommand.Delete -> {
                     val remaining = if (track.instrument.tuning.isNotEmpty()) beat.notes.filterNot { it.string == s.string } else emptyList()
                     beat.copy(notes = remaining, explicitRest = remaining.isEmpty())
@@ -299,6 +312,35 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
                 }
                 else -> beat
             }
+        }
+    }
+
+    /**
+     * Drum step grid (Zyklus 23, „über 16tel nicht nutzbar“): a hit on a finer grid slot that lies inside an existing beat
+     * (a 1/16 groove refined to 1/32) shortens that beat to end at the slot instead of failing with an overlap; the new hit
+     * gets the grid duration, shortened to the room before the next beat. Hits keep their ids, the covering beat keeps its notes.
+     */
+    private fun drumToggle(p: Project, s: Selection, c: EditorCommand.ToggleDrum): Project {
+        val track = NoteEdits.track(p, s)
+        require(track.instrument.kind == InstrumentKind.PERCUSSION && c.midiNote in 0..127)
+        val voice = NoteEdits.selectedVoice(p, s)
+        val beats = voice?.beats.orEmpty()
+        var project = p
+        var duration = c.duration
+        if (beats.none { it.offset == s.offset }) {
+            val m = p.measures.firstOrNull { it.id == s.measureId } ?: throw IllegalArgumentException("Takt fehlt")
+            CursorSteps.covering(beats, s.offset)?.let { cover ->
+                val shorter = Durations.exact(s.offset + cover.offset * Fraction.of(-1), cover.duration.tuplets)
+                    ?: throw IllegalArgumentException("Schlag liegt innerhalb eines Beats, der sich dort nicht teilen lässt – Raster wechseln")
+                project = NoteEdits.mapVoice(project, s) { v, _, _ -> v.copy(beats = v.beats.map { if (it.id == cover.id) it.copy(duration = shorter) else it }) }
+            }
+            val end = beats.filter { it.offset > s.offset }.minOfOrNull { it.offset } ?: NoteEdits.capacity(m)
+            duration = Durations.fitting(c.duration, end + s.offset * Fraction.of(-1)) ?: c.duration
+        }
+        return updateBeat(project, s) { beat, _, existed ->
+            val notes = if (beat.notes.any { it.pitch.midiNumber == c.midiNote }) beat.notes.filterNot { it.pitch.midiNumber == c.midiNote }
+                else beat.notes + Note(ids.next(), Pitch(c.midiNote))
+            beat.copy(notes = notes, duration = if (existed) beat.duration else duration, explicitRest = notes.isEmpty())
         }
     }
 
