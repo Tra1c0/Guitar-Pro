@@ -41,6 +41,21 @@ Branch: `ccr-0b650dff-jnhups-qa`, per Fast-Forward gespiegelt nach `ccr-0b650dff
 - [ ] Langer Hall endet im Export hart nach 2 s Ausklang (≈ −82 dBFS)
 - [x] Übersteuerte Exporte melden sich jetzt (Qa22ExportClipNoticeTest): die Exportmeldung nennt jede übersteuerte Datei mit Sample-Zahl. Stems sind unabhängig vom Master-Fader (Qa22TransitionPinchLoudnessTest.stemsDoNotDependOnTheMasterFader, rot davor: Clean-Stem bei Master 1,0 +3,1 dBFS, 72 geclippt); kein Fader-Paar kann einen Stem mehr übersteuern
 
+## Schritt 2 (später, noch nicht umsetzen): gesampeltes Schlagzeug
+Heutige Drums sind rein synthetisch (core/synth OtherVoices.kt `DrumVoice`), klingen laut Nutzer nicht gut. Vom Nutzer genannte Kandidaten (seine Lizenzprüfung; beim Umsetzen Lizenztext und Herkunft selbst verifizieren und in docs/DEPENDENCIES.md eintragen):
+- AVL Black Pearl — CC BY-SA 3.0, kommerziell erlaubt. Pflichten: Namensnennung; ShareAlike gilt für die Samples und daraus abgeleitete Bänke (umgewandelte Bank unter CC BY-SA weitergeben, Lizenzhinweis in App/Assets).
+- MuldjordKit — CC BY 4.0, kommerziell erlaubt. Pflicht: Namensnennung.
+- FreePats GM — GPL v3+ mit Ausnahme (Ausnahme-Wortlaut prüfen: ob eingebettete Samples die App nicht unter GPL stellen).
+Technik: vorhandene Sample-Infrastruktur (RWSB, SampleVoice) nutzen; Velocity-Layer, Round Robins, Hi-Hat-Choke offen/geschlossen, GM-Mapping; APK-Größe beachten; danach Drum-Pegel und Erster-Schlag-Tests (Qa19DrumLevelTest, Qa19DrumFirstHitTest) neu einstellen. Download aus dieser Umgebung ggf. blockiert → Nutzer lädt Dateien hoch oder gibt den Host frei.
+
+## Zyklus 23 (läuft): Nutzer-Gerätebefunde UI
+- P0 Effekte/Notenwerte werden zufällig auf andere Noten geschrieben (nach Bereichs-Operationen)
+- P1 Bereichsauswahl: Aufheben markiert zufällig andere Bereiche, danach „buggt alles“
+- P1 Raster feiner als 16tel praktisch nicht nutzbar
+- P1 Flackern: diverse Menüs, Drei-Punkte-Menüs extrem, gezoomte Partitur bei Play
+- P1 Meldungen erscheinen auch in Drei-Punkte-Menüs, müssen manuell geschlossen werden und schieben das Layout → sollen überlagern und von selbst verschwinden
+- UX Partitur größer; Zoom standardmäßig aus, nur per Einstellung aktivierbar (Nutzer hatte „größer“ gemeint, nicht „kompakter“)
+
 ## Risiken (nie als bestanden ausgeben)
 Keine Geräte-, Latenz- und Hörtests in dieser Umgebung: erster Schlag auf echtem Android, Unterläufe/Thermik, ART-Allokationen/CPU am Telefon (nur JVM-Desktop gemessen), Klang von Clean/Crunch/High-Gain-Trims (0,3/0,28/0,6), Drum-Trim 0,5, Pinch-Mischpegel, Gesten/Haptik/Pinch auf Hardware, TalkBack (inkl. neuer Viewport-Semantik am Notenbild), PDF nur nachgestellt (nicht mit Android PdfDocument), kein Fremd-DAW-Import der Stems.
 Bank-Grenze: Flatwound-DI-Aufnahme, E2 trocken ohne Energie > 2 kHz — „glasklarer“ Clean nur mit anderer (lizenzierter) Aufnahme oder Hörentscheidung über Höhenanhebung. Natural Harmonics sind modelliert (keine Flageolett-Samples).
