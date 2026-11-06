@@ -13,8 +13,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -164,7 +162,8 @@ import kotlin.math.roundToLong
     val practice by vm.practice.collectAsStateWithLifecycle()
     // Only the reason: the whole transport state changes on every poll while playing and recomposed the page with its
     // clip sliders 30 times a second (QA 23).
-    val transportReason by remember(vm) { vm.transport.state.map { it.reason }.distinctUntilChanged() }.collectAsStateWithLifecycle(vm.transport.state.value.reason)
+    val transport = vm.transport.state.collectAsStateWithLifecycle()
+    val transportReason by remember(transport) { derivedStateOf { transport.value.reason } }
     val ui by vm.state.collectAsStateWithLifecycle()
     val clips = state.project.audio.clips
     ScrollPage(stringResource(R.string.audio), stringResource(R.string.audio_hint)) {

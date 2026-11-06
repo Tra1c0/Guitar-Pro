@@ -24,8 +24,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import dev.riffworkbench.editor.Articulations
 import dev.riffworkbench.editor.EditScope
 import dev.riffworkbench.editor.EditorCommand
@@ -57,7 +55,8 @@ class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget
     val ui by vm.state.collectAsStateWithLifecycle()
     // Only the status (play/pause icon): the position changes on every transport poll (~30 Hz) and recomposed the whole
     // workspace, open sheets and menus included, while playing (QA 23). Parts that show the position read it themselves.
-    val status by remember(vm) { vm.transport.state.map { it.status }.distinctUntilChanged() }.collectAsStateWithLifecycle(vm.transport.state.value.status)
+    val transport = vm.transport.state.collectAsStateWithLifecycle()
+    val status by remember(transport) { derivedStateOf { transport.value.status } }
     var route by rememberSaveable { mutableStateOf(initialPage.route) }
     var moreOpen by rememberSaveable { mutableStateOf(false) }
     val page = WorkspacePage.entries.first { it.route == route }
