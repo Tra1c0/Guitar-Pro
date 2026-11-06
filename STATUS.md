@@ -4,8 +4,8 @@ Fortsetzung nach Pausen: dieses Dokument + `docs/QA_JOURNAL.md` lesen, dann beim
 Branch: `ccr-0b650dff-jnhups-qa`, per Fast-Forward gespiegelt nach `ccr-0b650dff-jnhups`. Android-Builds/Tests nur auf GitHub Actions; lokal JVM-Harness für die portablen Module.
 
 ## Stand
-- Letzter grüner CI-Lauf: 8e5ab38 (Lauf 42205433832, Build + `check` + Lint + Robolectric, APK-Artefakt `riffworkbench-debug-apk`). Vorher grün: babba9a, eb82763, 2acce85, 1eec164, d9c3c09, 7ed6d80, 2b8a1d7, 64b495b.
-- Lokale JVM-Suite (portable Module): 603/603 grün auf 8e5ab38.
+- Letzter grüner CI-Lauf: 9579316 (Lauf 42272758760, Build + `check` + Lint + Robolectric, APK-Artefakt `riffworkbench-debug-apk`). Vorher grün: e2c2cb4, 8e5ab38, babba9a, eb82763, 2acce85, 1eec164, d9c3c09, 7ed6d80, 2b8a1d7, 64b495b.
+- Lokale JVM-Suite (portable Module): 620/620 grün auf 9579316 (+ ViewModel-Shim 59/59).
 - Zyklus 18 abgeschlossen (siehe QA_JOURNAL): Sample-Bank v2 (Feinstimmung/Pegel), Gain-Staging, Transport-Startfixes, Seek-Poller-Race, Startmarke/Zum-Anfang, ViewportScroll, Taktangabe-Sheet (Long-Press), Standard 1×4/4 + E-Standard, Umstimmen mit Konfliktplan.
 - Zyklus 19 gemergt (64b495b, JVM 549/549, CI grün): Long-Press-Bereichsauswahl mit Haptik, Drum-Pegel/erster Hit/Raster, Gitarren-Artikulationen (Natural/Pinch Harmonics, Palm-Mute-Klangfarbe), Live = Offline bitidentisch, zwei Start-Races im Transport (PLAYING→PAUSED-Flackern, Ansicht sprang).
 
@@ -48,7 +48,7 @@ Heutige Drums sind rein synthetisch (core/synth OtherVoices.kt `DrumVoice`), kli
 - FreePats GM — GPL v3+ mit Ausnahme (Ausnahme-Wortlaut prüfen: ob eingebettete Samples die App nicht unter GPL stellen).
 Technik: vorhandene Sample-Infrastruktur (RWSB, SampleVoice) nutzen; Velocity-Layer, Round Robins, Hi-Hat-Choke offen/geschlossen, GM-Mapping; APK-Größe beachten; danach Drum-Pegel und Erster-Schlag-Tests (Qa19DrumLevelTest, Qa19DrumFirstHitTest) neu einstellen. Download aus dieser Umgebung ggf. blockiert → Nutzer lädt Dateien hoch oder gibt den Host frei.
 
-## Zyklus 23 (läuft): Nutzer-Gerätebefunde UI
+## Zyklus 23 (gemergt, CI grün 9579316): Nutzer-Gerätebefunde UI — alle Punkte behoben laut Tests, Gerätebestätigung offen
 - P0 Effekte/Notenwerte werden zufällig auf andere Noten geschrieben (nach Bereichs-Operationen)
 - P1 Bereichsauswahl: Aufheben markiert zufällig andere Bereiche, danach „buggt alles“
 - P1 Raster feiner als 16tel praktisch nicht nutzbar
@@ -61,4 +61,4 @@ Keine Geräte-, Latenz- und Hörtests in dieser Umgebung: erster Schlag auf echt
 Bank-Grenze: Flatwound-DI-Aufnahme, E2 trocken ohne Energie > 2 kHz — „glasklarer“ Clean nur mit anderer (lizenzierter) Aufnahme oder Hörentscheidung über Höhenanhebung. Natural Harmonics sind modelliert (keine Flageolett-Samples).
 
 ## Nächster Schritt
-Autonom lösbare P0/P1-Befunde sind abgearbeitet (Zyklen 18–22). Als Nächstes braucht es Gerätebefunde des Nutzers: APK aus Lauf 42205433832 installieren, A/B-WAVs aus Zyklus 22 anhören, Diagnose-Zähler (Unterläufe/Überläufe) nach dem ersten Play eines frischen Prozesses ablesen, Hörtest Clean/Crunch/HG mit Open/PM/Dead/Harmonics/Pinch/Legato, Bereichsauswahl/Haptik und Pinch-Zoom am Telefon. Danach P2 oder Klangfeinschliff nach Gehör. Branch `ccr-0b650dff-jnhups` per Fast-Forward auf denselben Stand wie `ccr-0b650dff-jnhups-qa` gebracht.
+Autonom lösbare P0/P1-Befunde sind abgearbeitet (Zyklen 18–22). Als Nächstes braucht es Gerätebefunde des Nutzers: APK aus Lauf 42272758760 installieren, A/B-WAVs aus Zyklus 22 anhören, Diagnose-Zähler (Unterläufe/Überläufe) nach dem ersten Play eines frischen Prozesses ablesen, Hörtest Clean/Crunch/HG mit Open/PM/Dead/Harmonics/Pinch/Legato, Bereichsauswahl/Haptik und Pinch-Zoom am Telefon. Danach P2 oder Klangfeinschliff nach Gehör. Branch `ccr-0b650dff-jnhups` per Fast-Forward auf denselben Stand wie `ccr-0b650dff-jnhups-qa` gebracht.
