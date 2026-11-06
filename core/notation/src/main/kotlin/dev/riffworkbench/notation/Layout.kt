@@ -51,6 +51,8 @@ data class LayoutRequest(
 
 data class MeasureBox(val measureId: EntityId, val index: Int, val system: Int, val x: Float, val contentX: Float, val width: Float, val top: Float, val bottom: Float)
 data class Column(val measureId: EntityId, val measureIndex: Int, val offset: Fraction, val x: Float, val width: Float, val system: Int, val virtual: Boolean)
+/** What a tap or a note drag on the score addresses: bar, beat position, string (TAB) and the hit note, if any. */
+data class ScoreHit(val measureId: EntityId, val offset: Fraction, val string: Int?, val noteId: EntityId?)
 data class NoteBox(val noteId: EntityId, val measureId: EntityId, val offset: Fraction, val voice: Int, val string: Int?, val x: Float, val y: Float, val w: Float, val h: Float)
 /**
  * Hit region of a drawn time signature (bar 1, every signature change and the courtesy repeat at the start of a wrapped
@@ -59,6 +61,9 @@ data class NoteBox(val noteId: EntityId, val measureId: EntityId, val offset: Fr
 data class SignatureBox(val measureId: EntityId, val index: Int, val system: Int, val x: Float, val y: Float, val w: Float, val h: Float, val courtesy: Boolean)
 class SystemBox(val index: Int, val top: Float, val bottom: Float, val x0: Float, val x1: Float, val staffTop: Float, val staffBottom: Float, val tabTop: Float, val tabBottom: Float,
                 /** y of each string index (0 = lowest string) in TAB, empty without TAB. */ val stringY: FloatArray)
+
+/** Minimum horizontal finger travel (layout units) before a dragged note changes its column, see [ScoreLayout.dropTarget]. */
+const val DRAG_MIN_TRAVEL = 12f
 
 class ScoreLayout(val width: Float, val height: Float, val glyphs: List<Glyph>, val measures: List<MeasureBox>, val columns: List<Column>, val notes: List<NoteBox>, val systems: List<SystemBox>,
                   val signatures: List<SignatureBox> = emptyList()) {
@@ -124,6 +129,39 @@ class ScoreLayout(val width: Float, val height: Float, val glyphs: List<Glyph>, 
         val measure = measureAt(x, y) ?: return null
         return columns.filter { it.measureId == measure.measureId }.minByOrNull { abs(it.x - x) }
     }
+    /**
+     * Tap target (Zyklus 23, fine grids): the beat column whose anchor is nearest to x in the bar under the finger. A note
+     * box under the finger wins when it belongs to that column or its centre is at least as close as that column's anchor,
+     * so a fret number still selects its own beat where boxes overlap a neighbour (Qa15), but the empty 1/32 or 1/64 slot
+     * right next to a wide number "12" is reachable (before, any box under the finger won and the entry overwrote the note).
+     */
+    fun tapAt(x: Float, y: Float): ScoreHit? {
+        val note = notes.filter { x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h }.minByOrNull { abs(it.x + it.w / 2 - x) }
+        val column = columnAt(x, y)
+        if (note != null && (column == null || (note.measureId == column.measureId && note.offset == column.offset) || abs(note.x + note.w / 2 - x) <= abs(column.x - x)))
+            return ScoreHit(note.measureId, note.offset, note.string ?: stringAt(y), note.noteId)
+        return column?.let { ScoreHit(it.measureId, it.offset, stringAt(y), null) }
+    }
+
+    /**
+     * Drop target of a note drag (Zyklus 23, P0 "notes moved unnoticed"): measured from the dragged note's own centre moved
+     * by the finger travel ([dx], [dy] in layout units), not from where the finger touched the box. The column changes only
+     * after [minTravel] horizontally (or when the finger reaches another system), the string only after ¾ of the string
+     * spacing; null when the drop is the note's own place, so a slip while tapping the selected note moves nothing.
+     */
+    fun dropTarget(note: NoteBox, fromString: Int?, dx: Float, dy: Float, minTravel: Float = DRAG_MIN_TRAVEL): ScoreHit? {
+        val cx = note.x + note.w / 2; val cy = note.y + note.h / 2
+        val home = systemAt(cy); val there = systemAt(cy + dy)
+        val sameSystem = home != null && there != null && home.index == there.index
+        val stringY = home?.stringY
+        val spacing = if (stringY != null && stringY.size > 1) abs(stringY[0] - stringY[1]) else 20f
+        val column: Pair<EntityId, Fraction> = if (sameSystem && abs(dx) < minTravel) note.measureId to note.offset
+            else (columnAt(cx + dx, cy + dy) ?: return null).let { it.measureId to it.offset }
+        val string = if (sameSystem && abs(dy) < spacing * 0.75f) fromString else stringAt(cy + dy) ?: fromString
+        if (column.first == note.measureId && column.second == note.offset && string == fromString) return null
+        return ScoreHit(column.first, column.second, string, null)
+    }
+
     /** String index nearest to y in the system's TAB, or null outside the TAB staff. */
     fun stringAt(y: Float): Int? {
         val system = systemAt(y) ?: return null
@@ -222,6 +260,12 @@ object ScoreLayouter {
                     val covered = beats.any { b -> o >= b.offset && o < b.offset + b.duration.length() && o != b.offset }
                     if (!covered && o !in offsets) offsets[o] = true
                     o += grid
+                }
+                // Zyklus 23: the slot right after a beat of the edited voice is tappable also when it is no grid multiple
+                // (after a dotted value or a tuplet the next free grid column lay beyond it, so the gap could not be hit).
+                for (b in beats) {
+                    val end = b.offset + b.duration.length()
+                    if (end < len && end !in offsets && beats.none { c -> end > c.offset && end < c.offset + c.duration.length() }) offsets[end] = true
                 }
             }
             val sorted = offsets.keys.sorted()

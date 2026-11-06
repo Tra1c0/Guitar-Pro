@@ -121,8 +121,9 @@ fun ScoreCanvas(
     val currentOnRangeEnd by rememberUpdatedState(onRangeEnd)
     // Long-press range: started by the tap detector's long press, followed bar by bar by the range tracker below.
     val range = remember { RangeDrag() }
-    // Finger position (viewport px) while a selected note is dragged.
+    // Finger position (viewport px) while a selected note is dragged, and the drop target it would commit (null: none).
     var dragAt by remember { mutableStateOf<Offset?>(null) }
+    var dragDrop by remember { mutableStateOf<ScoreCursor?>(null) }
     // Cursor geometry of the last cursor-effect run: a relayout that keeps the cursor in place must not move the view.
     var lastCursorKey by remember { mutableStateOf<ViewportScroll.CursorKey?>(null) }
     // Zoom last set by a pinch: a factor change that comes from the fingers keeps the focus point (ViewportScroll.cursor).
@@ -238,11 +239,9 @@ fun ScoreCanvas(
                 val l = currentLayout ?: return@detectTapGestures
                 val x = (pos.x + offsetX) / currentFactor
                 val y = (pos.y + offsetY) / currentFactor
-                val note = l.notes.firstOrNull { x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h }
-                // A hit fret number selects its own beat, even where compressed note boxes overlap the neighbouring column.
-                if (note != null) { currentOnTap(ScoreTap(note.measureId, note.offset, note.string ?: l.stringAt(y), note.noteId)); return@detectTapGestures }
-                val column = l.columnAt(x, y) ?: return@detectTapGestures
-                currentOnTap(ScoreTap(column.measureId, column.offset, l.stringAt(y), null))
+                // Nearest column; a fret number wins where it is the closer target (ScoreLayout.tapAt, JVM-tested in core:notation).
+                val hit = l.tapAt(x, y) ?: return@detectTapGestures
+                currentOnTap(ScoreTap(hit.measureId, hit.offset, hit.string, hit.noteId))
             }
         }
         .pointerInput(Unit) {
@@ -261,20 +260,24 @@ fun ScoreCanvas(
                 var last = down.position
                 while (true) {
                     val event = awaitPointerEvent()
-                    if (event.changes.count { it.pressed } > 1) { dragAt = null; return@awaitEachGesture }   // pinch: zoom as before
-                    val change = event.changes.firstOrNull { it.id == down.id } ?: run { dragAt = null; return@awaitEachGesture }
+                    if (event.changes.count { it.pressed } > 1) { dragAt = null; dragDrop = null; return@awaitEachGesture }   // pinch: zoom as before
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: run { dragAt = null; dragDrop = null; return@awaitEachGesture }
                     // A cancelled gesture (system gesture, parent intercept) arrives as an already consumed release: abandon it.
-                    if (!change.pressed) { if (change.isConsumed) { dragAt = null; return@awaitEachGesture }; break }
+                    if (!change.pressed) { if (change.isConsumed) { dragAt = null; dragDrop = null; return@awaitEachGesture }; break }
                     if (!dragging && (change.position - down.position).getDistance() > viewConfiguration.touchSlop) dragging = true
                     // While dragging, following the playback pauses like after a pan, so the score does not move under the finger.
-                    if (dragging) { change.consume(); last = change.position; dragAt = last; userScrolled() }
+                    if (dragging) {
+                        change.consume(); last = change.position; dragAt = last; userScrolled()
+                        // Zyklus 23: the target is the note's own place moved by the finger travel, with a dead zone
+                        // (ScoreLayout.dropTarget), so a slip while tapping the selected note does not move it.
+                        dragDrop = l.dropTarget(note, fromString, (last.x - down.position.x) / currentFactor, (last.y - down.position.y) / currentFactor)
+                            ?.let { ScoreCursor(it.measureId, it.offset, it.string) }
+                    }
                 }
                 if (!dragging) return@awaitEachGesture
-                dragAt = null
-                val x = (last.x + offsetX) / currentFactor; val y = (last.y + offsetY) / currentFactor
-                val column = l.columnAt(x, y) ?: return@awaitEachGesture
-                val string = l.stringAt(y) ?: fromString
-                currentOnMove?.invoke(ScoreTap(note.measureId, note.offset, fromString, note.noteId), ScoreTap(column.measureId, column.offset, string, null))
+                dragAt = null; dragDrop = null
+                val target = l.dropTarget(note, fromString, (last.x - down.position.x) / currentFactor, (last.y - down.position.y) / currentFactor) ?: return@awaitEachGesture
+                currentOnMove?.invoke(ScoreTap(note.measureId, note.offset, fromString, note.noteId), ScoreTap(target.measureId, target.offset, target.string ?: fromString, null))
             }
         }
         .pointerInput(Unit) {
@@ -314,11 +317,8 @@ fun ScoreCanvas(
                 val x0 = offsetX / factor; val x1 = (offsetX + size.width) / factor
                 // Selection overlay below the notes; without a playhead the cursor is the start marker (▶ cap).
                 cursor?.let { c -> drawCursor(nc, l, c, overlay, startMarker = playhead == null) }
-                // Drop target while dragging a note.
-                dragAt?.let { d ->
-                    val x = (d.x + offsetX) / factor; val y = (d.y + offsetY) / factor
-                    l.columnAt(x, y)?.let { col -> drawCursor(nc, l, ScoreCursor(col.measureId, col.offset, l.stringAt(y) ?: cursor?.string), overlay) }
-                }
+                // Drop target while dragging a note (none inside the dead zone: the note stays).
+                dragDrop?.let { target -> drawCursor(nc, l, target, overlay) }
                 // Cull by system first (y), then by x inside the painter: off-screen systems cost nothing per frame.
                 val y0 = offsetY / factor; val y1 = (offsetY + size.height) / factor
                 l.systems.forEachIndexed { i, sys -> if (sys.bottom >= y0 - 40f && sys.top <= y1 + 40f) painter.draw(nc, l.glyphsBySystem[i], x0, x1) }
