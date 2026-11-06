@@ -152,6 +152,25 @@ data class PlaybackPlan(
         if (!orNearest || spans.isEmpty()) return null
         return spans[position.routeIndex.coerceIn(0, spans.lastIndex)].startFrame
     }
+
+    /**
+     * [frame] of [old] expressed in this plan: the same result as `old.positionAt(frame)?.let { frameFor(it, orNearest = true) }`
+     * (same 1/3840 quantisation, same bar/pass lookup), -1 where that is null. Allocates nothing - the render thread maps the
+     * playhead with it when a recompiled plan arrives (QA cycle 20: the object path allocated ~100 bytes per edit/speed change).
+     */
+    fun frameFromPlan(old: PlaybackPlan, frame: Long): Long {
+        val from = old.spanAt(frame) ?: return -1
+        val offset = from.offsetAt(frame.toDouble()).coerceIn(0.0, from.length.toDouble())
+        // Fraction.of(ticks, 3840).toDouble() is the correctly rounded quotient of the same rational: identical bits.
+        val position = kotlin.math.floor(offset * 3840).toLong().coerceAtLeast(0) / 3840.0
+        val id = from.measureId
+        var span = spans.getOrNull(from.routeIndex)?.takeIf { it.measureId == id }
+        if (span == null) for (i in spans.indices) { val s = spans[i]; if (s.measureId == id && s.occurrence == from.occurrence) { span = s; break } }
+        if (span == null) for (i in spans.indices) { val s = spans[i]; if (s.measureId == id) { span = s; break } }
+        if (span != null) return kotlin.math.round(span.frameAt(position)).toLong()
+        if (spans.isEmpty()) return -1
+        return spans[from.routeIndex.coerceIn(0, spans.lastIndex)].startFrame
+    }
 }
 data class TransportState(val status: TransportStatus = TransportStatus.UNAVAILABLE, val position: PlaybackOccurrence? = null, val sample: SamplePosition? = null, val underruns: Long = 0, val reason: String? = "Audio-Engine nicht verbunden", val speed: Double = 1.0, val loop: LoopRange? = null, val countingIn: Boolean = false, val latencyMs: Double? = null)
 enum class TransportStatus { UNAVAILABLE, STOPPED, PREPARING, PLAYING, PAUSED, INTERRUPTED, FAILED }

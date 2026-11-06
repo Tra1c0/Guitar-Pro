@@ -80,6 +80,11 @@ interface AudioSink {
     fun write(buffer: FloatArray, frames: Int): Int
     /** Sink frame currently leaving the speaker, extrapolated to now; null when the device gives no timestamp. */
     fun presentedFrame(): Long?
+    /**
+     * [presentedFrame] for the render thread: -1 when the device gives no timestamp. The nullable Long boxes on every
+     * call; a real-time sink overrides this without boxing (QA cycle 20, no allocation on the audio thread).
+     */
+    fun presentedFrameOrNegative(): Long = presentedFrame() ?: -1L
     fun underruns(): Long = 0
     fun close()
 }

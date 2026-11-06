@@ -210,17 +210,21 @@ class RealtimeHost(
                 is HostCommand.Preview -> {
                     e.preview(c.note)
                     // Note-on response: command queue delay plus the audio already queued in front of this block.
-                    val queued = (written - (s.presentedFrame() ?: (written - f.latencyFrames))).coerceAtLeast(0)
+                    // presentedFrameOrNegative(): the nullable presentedFrame() boxes a Long on this thread.
+                    val presented = s.presentedFrameOrNegative()
+                    val queued = (written - (if (presented >= 0) presented else written - f.latencyFrames)).coerceAtLeast(0)
                     noteOnNanos = (System.nanoTime() - c.postedNanos) + queued * 1_000_000_000L / f.sampleRate
                 }
                 is HostCommand.Clips -> e.installClips(c.clips)
                 is HostCommand.Reprogram -> {
-                    val target = c.mapFrom?.positionAt(e.position)?.let { pos -> c.program.plan.frameFor(pos, orNearest = true) }
+                    // Same mapping as mapFrom.positionAt(..) + frameFor(.., orNearest = true), without allocating (QA cycle 20).
+                    val mapFrom = c.mapFrom
+                    val target = if (mapFrom != null) c.program.plan.frameFromPlan(mapFrom, e.position) else -1L
                     val wasPlaying = e.playing
                     e.install(c.program); programs++
                     if (c.loopStart != -2L) e.setLoop(c.loopStart, c.loopEnd)
                     // During a count-in the engine is "playing" but must keep counting: only move the start point.
-                    if (target != null) { if (wasPlaying && !e.countingIn) e.play(target) else e.seek(target) }
+                    if (target >= 0) { if (wasPlaying && !e.countingIn) e.play(target) else e.seek(target) }
                 }
             }
         }

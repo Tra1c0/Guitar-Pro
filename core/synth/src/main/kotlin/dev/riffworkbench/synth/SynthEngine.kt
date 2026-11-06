@@ -160,7 +160,9 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
     fun installRack(next: ChannelRack) {
         val old = rack
         if (old === next) return
-        val compatible = old != null && old.channels.size == next.channels.size && old.channels.indices.all { old.channels[it].voiceSignature == next.channels[it].voiceSignature }
+        // Plain index loop: `indices.all { }` allocated an IntRange and its iterator on the audio thread (QA cycle 20).
+        var compatible = old != null && old.channels.size == next.channels.size
+        if (compatible) for (t in next.channels.indices) if (old!!.channels[t].voiceSignature != next.channels[t].voiceSignature) { compatible = false; break }
         if (!compatible) { releaseAll(fast = true); rack = next; return }
         for (t in next.channels.indices) {
             val a = old!!.channels[t]; val b = next.channels[t]
