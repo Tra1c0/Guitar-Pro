@@ -39,6 +39,8 @@ class WorkspaceViewModel(
     val practice = mutablePractice.asStateFlow()
     private val mutableView = MutableStateFlow(ViewOptions())
     val view = mutableView.asStateFlow()
+    /** App settings the workspace UI reads (QA 23: pinch zoom on/off). */
+    val appSettings: StateFlow<AppSettings> get() = settings.settings
     private val mutableLayout = MutableStateFlow<ScoreLayout?>(null)
     val layout: StateFlow<ScoreLayout?> = mutableLayout.asStateFlow()
     private val mutableTuner = MutableStateFlow(TunerState())

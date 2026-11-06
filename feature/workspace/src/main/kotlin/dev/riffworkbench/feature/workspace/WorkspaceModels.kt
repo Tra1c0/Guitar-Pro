@@ -45,6 +45,17 @@ data class ViewOptions(
     val viewportWidthDp: Float = 400f,
 )
 
+/**
+ * How long a notice stays before it closes itself (QA 23: notices lay over the UI and close on their own). 4 s for a short
+ * text, 50 ms more per character for longer ones, at most 10 s; TalkBack may lengthen it further (TransientNotice). A failed
+ * save is not timed: its notice keeps "Erneut versuchen" until the user acts.
+ */
+object NoticeTiming {
+    const val SHORT_MILLIS = 4_000L
+    const val MAX_MILLIS = 10_000L
+    fun millis(text: String): Long = (SHORT_MILLIS + 50L * (text.length - 40).coerceAtLeast(0)).coerceAtMost(MAX_MILLIS)
+}
+
 data class TunerState(val running: Boolean = false, val reading: TuningReading? = null, val error: String? = null)
 
 /** Optional collaborators; tests pass none. The composition root wires real implementations. */

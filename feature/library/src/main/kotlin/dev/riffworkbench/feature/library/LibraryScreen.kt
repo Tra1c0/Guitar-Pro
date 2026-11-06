@@ -49,7 +49,6 @@ import dev.riffworkbench.ui.components.R
                 } }
                 item { BigTitle(stringResource(R.string.library), if (en) "${projects.size} ${if (projects.size == 1) "project" else "projects"} · offline" else "${projects.size} ${if (projects.size == 1) "Projekt" else "Projekte"} · offline", Modifier.padding(horizontal = 8.dp), size = 30) }
                 error?.let { message -> item { Banner(message, true) { vm.showError(null) } } }
-                notice?.let { message -> item { Banner(message, false, vm::dismissNotice) } }
                 if (busy) item { LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) }
                 items(issues) { issue -> NoticeCard(issue.message, true) }
                 if (creating) item { CreateCard(title, { title = it.take(200) }, busy, onCreate = { creating = false; vm.create(title, onOpen); title = "" }, onCancel = { creating = false }) }
@@ -85,6 +84,12 @@ import dev.riffworkbench.ui.components.R
                 centerIcon = TabinoIcons.Plus, centerLabel = stringResource(R.string.new_project), onCenter = { creating = true }, centerTag = "nav-new",
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp),
             )
+        }
+        // Information (e.g. "Noch kein Projekt") lies over the list above the navigation bar and closes itself (QA 23); it was
+        // a list item that pushed the cards down. Errors keep their banner with a close button.
+        notice?.let { message ->
+            TransientNotice(message, 5_000L, { if (vm.notice.value == message) vm.dismissNotice() },
+                Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(start = 12.dp, end = 12.dp, bottom = 92.dp))
         }
     }
     confirmDelete?.let { project -> AlertDialog(onDismissRequest = { confirmDelete = null },

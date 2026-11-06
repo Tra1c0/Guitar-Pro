@@ -24,6 +24,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import dev.riffworkbench.editor.Articulations
 import dev.riffworkbench.editor.EditScope
 import dev.riffworkbench.editor.EditorCommand
@@ -53,16 +55,20 @@ class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget
 @Composable fun WorkspaceScreen(vm: WorkspaceViewModel, onBack: () -> Unit, onExport: (ExportResult) -> Unit, onSettings: () -> Unit, initialPage: WorkspacePage = WorkspacePage.EDITOR,
                                 exportActions: ExportActions = ExportActions(onExport, {}, {})) {
     val ui by vm.state.collectAsStateWithLifecycle()
-    val transport by vm.transport.state.collectAsStateWithLifecycle()
+    // Only the status (play/pause icon): the position changes on every transport poll (~30 Hz) and recomposed the whole
+    // workspace, open sheets and menus included, while playing (QA 23). Parts that show the position read it themselves.
+    val status by remember(vm) { vm.transport.state.map { it.status }.distinctUntilChanged() }.collectAsStateWithLifecycle(vm.transport.state.value.status)
     var route by rememberSaveable { mutableStateOf(initialPage.route) }
     var moreOpen by rememberSaveable { mutableStateOf(false) }
     val page = WorkspacePage.entries.first { it.route == route }
     val keyboardFocus = remember { FocusRequester() }
-    val playing = transport.status == TransportStatus.PLAYING
-    val paused = transport.status == TransportStatus.PAUSED
+    val playing = status == TransportStatus.PLAYING
+    val paused = status == TransportStatus.PAUSED
+    ProbeComposition("WorkspaceScreen")
     LaunchedEffect(ui.editor?.project?.id) { if (ui.editor != null) runCatching { keyboardFocus.requestFocus() } }
     val textEditing = remember { mutableStateOf(false) }
-    CompositionLocalProvider(LocalTextEditing provides textEditing) {
+    val noticeSheets = remember { mutableIntStateOf(0) }
+    CompositionLocalProvider(LocalTextEditing provides textEditing, LocalNoticeSheets provides noticeSheets) {
     BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val wide = maxWidth >= 840.dp
         Row(Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -70,12 +76,8 @@ class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget
             // Shortcuts act on the score, not on text being typed (Space, Ctrl+Z/C/V in a name field belong to the field).
             Column(Modifier.weight(1f).fillMaxHeight().focusRequester(keyboardFocus).onPreviewKeyEvent { event -> !textEditing.value && handleKey(vm, page, event) }.focusable()) {
                 TopBar(vm, ui, onBack)
-                ui.notice?.let { notice -> NoticeRow(vm, ui, notice) }
-                ui.busy?.let { label -> Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)) {
-                    Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    val p = ui.busyProgress
-                    if (p != null) LinearProgressIndicator(progress = { p }, modifier = Modifier.fillMaxWidth()) else LinearProgressIndicator(Modifier.fillMaxWidth())
-                } }
+                // Notice and progress lie over the page instead of taking rows above it (QA 23): a row appearing or going
+                // moved every control below it and resized the score canvas, which re-ran its scroll rules.
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when {
                         ui.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -100,6 +102,8 @@ class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget
                             }
                         }
                     }
+                    ui.busy?.let { label -> BusyOverlay(label, ui.busyProgress) }
+                    PageNoticeOverlay(vm, ui)
                 }
                 if (!wide) PillNavBar(
                     items = listOf(
@@ -120,8 +124,24 @@ class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget
         }
     }
     }
-    if (moreOpen) ModalBottomSheet(onDismissRequest = { moreOpen = false }, containerColor = MaterialTheme.colorScheme.surface) {
-        MorePages(page, onPick = { route = it.route; moreOpen = false }, onSettings = { moreOpen = false; onSettings() })
+    CompositionLocalProvider(LocalNoticeSheets provides noticeSheets) {
+        if (moreOpen) ModalBottomSheet(onDismissRequest = { moreOpen = false }, containerColor = MaterialTheme.colorScheme.surface) {
+            Box(Modifier.fillMaxWidth()) {
+                MorePages(page, onPick = { route = it.route; moreOpen = false }, onSettings = { moreOpen = false; onSettings() })
+                SheetNoticeOverlay(vm)
+            }
+        }
+    }
+}
+
+/** Progress of a long operation (export/render) over the top of the page content (QA 23: it was a row that moved the page). */
+@Composable private fun BoxScope.BusyOverlay(label: String, progress: Float?) {
+    // No Surface: touches pass through to the page below.
+    Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
+        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 6.dp)
+        .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (progress != null) LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth()) else LinearProgressIndicator(Modifier.fillMaxWidth())
     }
 }
 
@@ -143,18 +163,9 @@ class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget
     }
 }
 
-@Composable private fun NoticeRow(vm: WorkspaceViewModel, ui: WorkspaceState, notice: String) {
-    Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).semantics { liveRegion = LiveRegionMode.Polite }) {
-        Row(Modifier.padding(start = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(notice, Modifier.weight(1f).padding(vertical = 8.dp), color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
-            if (ui.saveStatus == SaveStatus.FAILED) TextButton(onClick = vm::retrySave) { Text(stringResource(R.string.retry)) }
-            IconButton(onClick = { vm.showNotice(null) }) { Icon(TabinoIcons.Close, stringResource(R.string.dismiss), Modifier.size(18.dp)) }
-        }
-    }
-}
-
 /** Grid of every other area, colour-coded like the design's library cards. */
 @Composable private fun MorePages(current: WorkspacePage, onPick: (WorkspacePage) -> Unit, onSettings: () -> Unit) {
+    ProbeComposition("MorePages")
     // The whole sheet content scrolls (title, tiles, settings), so every tile and the settings button stay reachable on a
     // short phone and at large font sizes without a nested scroll area. A plain two-column grid: ~10 tiles, all composed
     // (QA 21: a lazy grid with weight/heightIn left the settings button 0 dp high on a 640-dp phone, and its off-screen
