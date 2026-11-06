@@ -17,7 +17,9 @@ import org.junit.Test
  * FakeSink) → SynthEngine; Export: OfflineMixdown. Drums sind bis auf das Rauschen deterministisch (Seed hängt vom
  * Plan-Frame ab), daher Toleranz 1 dB für 0–50 ms und 2 dB je Teilfenster; ein verschluckter Hit verliert > 20 dB.
  */
-class Qa19DrumFirstHitTest {
+open class Qa19DrumFirstHitTest {
+    /** Kit under test: null = the synthetic kit (fallback); Qa24SampledDrumFirstHitTest runs every check with the sampled kit. */
+    protected open val drumKit: DrumKit? get() = null
     companion object {
         const val SR = 48_000
         const val BLOCK = 256
@@ -53,8 +55,8 @@ class Qa19DrumFirstHitTest {
     private inner class Rig(idleStop: Double = 1000.0) {
         val sinks = ArrayList<FakeSink>()
         val sink: FakeSink get() = sinks.last()
-        val host = RealtimeHost({ FakeSink(SR, BLOCK, LATENCY).also { it.capture = true; sinks += it } }, threadStarter = { _, _ -> Thread {} }, idleStopSeconds = idleStop, bankProvider = { null })
-        val t = EngineTransport(host, pollMillis = 5)
+        val host = RealtimeHost({ FakeSink(SR, BLOCK, LATENCY).also { it.capture = true; sinks += it } }, threadStarter = { _, _ -> Thread {} }, idleStopSeconds = idleStop, bankProvider = { null }, drumKitProvider = { drumKit })
+        val t = EngineTransport(host, pollMillis = 5, drumKitProvider = { drumKit })
         fun render(blocks: Int) { repeat(blocks) { host.renderBlock() } }
         fun settle(blocks: Int = 1) { render(blocks); Thread.sleep(40) }
         fun mark() = sink.captured.size
@@ -170,7 +172,7 @@ class Qa19DrumFirstHitTest {
     @Test fun liveAndExportAgreeOnTheFirstDrumHit() = runBlocking {
         val p = project()
         val bytes = java.io.ByteArrayOutputStream()
-        assertTrue(OfflineMixdown(ScorePlaybackCompiler(), null).render(p, RenderOptions(sampleRate = SR, bitDepth = 32, tailSeconds = 0.0), { b, o, l -> bytes.write(b, o, l) }) is Outcome.Success)
+        assertTrue(OfflineMixdown(ScorePlaybackCompiler(), null, drumKit).render(p, RenderOptions(sampleRate = SR, bitDepth = 32, tailSeconds = 0.0), { b, o, l -> bytes.write(b, o, l) }) is Outcome.Success)
         val data = bytes.toByteArray()
         val x = FloatArray(QUARTER * 2) { i -> val o = 44 + i * 8; Float.fromBits((data[o].toInt() and 0xFF) or ((data[o + 1].toInt() and 0xFF) shl 8) or ((data[o + 2].toInt() and 0xFF) shl 16) or (data[o + 3].toInt() shl 24)) }
         val rig = Rig()

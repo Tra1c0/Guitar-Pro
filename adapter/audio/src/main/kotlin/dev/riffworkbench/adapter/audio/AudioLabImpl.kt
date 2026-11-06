@@ -80,7 +80,7 @@ class EngineAudioLab(
 ) : AudioLab {
     override fun stats(): AudioStats? = transport.stats()?.let { s ->
         AudioStats(s.sampleRate, s.blockFrames, s.blocks, s.budgetMicros, s.renderMedianMicros, s.renderP99Micros, s.renderMaxMicros, s.overruns, s.underruns,
-            s.outputLatencyMs, s.noteOnLatencyMs, s.voices, s.hasSamples, s.deviceName)
+            s.outputLatencyMs, s.noteOnLatencyMs, s.voices, s.hasSamples, s.deviceName, s.hasDrumSamples)
     }
 
     override suspend fun stressTest(seconds: Int, onSample: (StressSample) -> Unit): Outcome<StressReport> {
@@ -115,7 +115,7 @@ class EngineAudioLab(
         return buildString {
             appendLine("Audio-Stresstest · ${samples.size} s · 8 Gitarrenspuren (High Gain/Crunch, PM, Akkorde, 32tel, Bends, Slides)")
             last?.let { s ->
-                appendLine("Gerät: ${s.deviceName} · ${s.sampleRate} Hz · Block ${s.blockFrames} Frames (Budget ${"%.0f".format(s.budgetMicros)} µs) · Samples ${if (s.hasSamples) "an" else "aus"}")
+                appendLine("Gerät: ${s.deviceName} · ${s.sampleRate} Hz · Block ${s.blockFrames} Frames (Budget ${"%.0f".format(s.budgetMicros)} µs) · Samples ${if (s.hasSamples) "an" else "aus"} · Schlagzeug-Samples ${if (s.hasDrumSamples) "an" else "aus"}")
                 appendLine("Renderzeit pro Block: Median ${"%.0f".format(med.sorted().getOrElse(med.size / 2) { 0.0 })} µs, P99 max ${"%.0f".format(p99.maxOrNull() ?: 0.0)} µs, Maximum ${"%.0f".format(s.renderMaxMicros)} µs")
                 appendLine("Auslastung (Median/Budget): ${"%.0f".format(100 * (med.sorted().getOrElse(med.size / 2) { 0.0 }) / s.budgetMicros)} %")
                 appendLine("Überläufe (Block länger als Budget): ${s.overruns - (start?.overruns ?: 0)} · Underruns (Gerät): ${s.underruns - (start?.underruns ?: 0)}")
