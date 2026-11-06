@@ -83,6 +83,12 @@ internal class SampleVoice(private val sampleRate: Int) {
     /** Share of the full (uncombed) note right after the pick; the thumb/finger reaches the node within a few ms. */
     private var combOnset = 0f
     private val combOnsetDecay = exp(-1.0 / (0.006 * sampleRate)).toFloat()
+    /**
+     * The kept series builds up over ~12 ms (QA cycle 22), after the pick's click: with the series lifted and tilted, building it
+     * as fast as the full note fades put the click through the comb on top of the full note (Clean v127 pinch stems clipped).
+     */
+    private val combBuildDecay = exp(-1.0 / (0.012 * sampleRate)).toFloat()
+    private var combBuildRest = 1f
     private val combBuf = FloatArray(2048)
     private var combPos = 0
     private var combPeriod = 100.0
@@ -102,9 +108,11 @@ internal class SampleVoice(private val sampleRate: Int) {
     /**
      * [harmonic] > 1 plays a harmonic of the fretted note: the note's sounding pitch is that overtone, the voice plays the
      * fretted pitch below it through the harmonic comb, scaled by [combGain] with [combBleed] of the full note mixed in.
-     * [combTilt] (0..1) tilts the kept overtone series by +6 dB/octave, unity at the harmonic itself (a pinch is picked
-     * next to the bridge: partials fall off as 1/k instead of the ~1/k^2 of the recorded pluck). [overtoneFloor] is the
-     * least share of the note's power the comb keeps (see [SampleBank.Region.overtoneShare]); 0 = the recorded share.
+     * [combTilt] (0..1) tilts the kept overtone series by +6 dB/octave at the same power (a pinch is picked next to the
+     * bridge: partials fall off as 1/k instead of the ~1/k^2 of the recorded pluck, and the pick's energy is only
+     * redistributed, see [SampleBank.Region.overtoneTiltGain]). [overtoneFloor] is the least share of the note's power the
+     * comb keeps (see [SampleBank.Region.overtoneShare]); 0 = the recorded share. The kept series builds up over ~12 ms
+     * while the full note fades (6 ms), as the thumb or finger settles on the node after the pick.
      */
     fun start(note: ScheduledNote, track: Int, bank: SampleBank, clock: Long, endClock: Long, roundRobin: Int, gain: Float,
               harmonic: Int = 1, combGain: Float = 1f, combBleed: Float = 0f, combTilt: Float = 0f, overtoneFloor: Float = 0f) {
@@ -121,7 +129,7 @@ internal class SampleVoice(private val sampleRate: Int) {
         configure(note, gain)
         combN = if (note.dead) 1 else harmonic.coerceIn(1, 8)
         this.combGain = combGain; this.combBleed = combBleed; this.combTilt = combTilt; combPrev = 0f; combTiltGain = 1f
-        if (combN > 1) { baseMidi -= 12.0 * ln(combN.toDouble()) / ln(2.0); combBuf.fill(0f); combPos = 0; combOnset = 1f - combBleed }
+        if (combN > 1) { baseMidi -= 12.0 * ln(combN.toDouble()) / ln(2.0); combBuf.fill(0f); combPos = 0; combOnset = 1f - combBleed; combBuildRest = 1f }
         val key = Math_round(baseMidi)
         dead = note.dead
         region = if (dead && bank.deadNotes.isNotEmpty()) bank.deadNotes[(roundRobin + key) % bank.deadNotes.size] else bank.note(key, layerFor(note.velocity, bank.layers), roundRobin)
@@ -134,6 +142,9 @@ internal class SampleVoice(private val sampleRate: Int) {
         val share = region!!.overtoneShare
         if (combN > 1 && overtoneFloor > 0f && combN < share.size && share[combN] > 0f && share[combN] < overtoneFloor)
             this.combGain *= sqrt(overtoneFloor / share[combN]).coerceAtMost(MAX_OVERTONE_LIFT)
+        // The pick position only redistributes the pick's energy over the partials: the tilted series keeps the power of the untilted one.
+        val tilt = region!!.overtoneTiltGain
+        if (combN > 1 && combTilt > 0f && combN < tilt.size && tilt[combN] > 0f) this.combGain *= 1f + combTilt * (tilt[combN] - 1f)
         // Slight start offset per round robin and per string keeps fast repetitions and unisons on two strings from being
         // the identical waveform (the engine also seeds the round robin by string).
         pos = (roundRobin % 3) * 0.0004 * bank.sampleRate + (if (string >= 0) string * 0.00015 * bank.sampleRate else 0.0)
@@ -335,9 +346,12 @@ internal class SampleVoice(private val sampleRate: Int) {
         val full = combBleed + combOnset
         combOnset = ftz(combOnset * combOnsetDecay)
         var mean = sum / combN
-        // First difference, scaled to unity gain at the harmonic: +6 dB/octave over the kept series.
+        // First difference, scaled to unity gain at the harmonic: +6 dB/octave over the kept series (power-normalised in start()).
         if (combTilt > 0f) { val d = (mean - combPrev) * combTiltGain; combPrev = mean; mean += combTilt * (d - mean) }
-        return ftz(mean * combGain + x * full)
+        // The kept series builds up while the full note fades (it used to be added on top of the full note at once).
+        combBuildRest = ftz(combBuildRest * combBuildDecay)
+        val build = 1f - combBuildRest
+        return ftz(mean * combGain * build + x * full)
     }
 
     private fun cubic(d: ShortArray, p: Double): Float {

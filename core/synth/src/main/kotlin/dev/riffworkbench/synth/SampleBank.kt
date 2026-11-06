@@ -36,12 +36,18 @@ class SampleBank private constructor(val sampleRate: Int, internal val regions: 
          * weak pinch/artificial harmonic (the high DI notes have their 3rd partial 20-33 dB under the fundamental).
          */
         internal var overtoneShare: FloatArray = NO_SHARE
+        /** Amplitude factor that gives the +6 dB/octave tilted series (pinch, see SampleVoice) the power of the untilted one, n = 2..6. */
+        internal var overtoneTiltGain: FloatArray = NO_SHARE
 
         companion object {
             private val NO_SHARE = FloatArray(0)
 
-            /** Power share of the comb of [n] copies spaced a 1/[n] period of the region's root apart (the voice's harmonic comb). */
-            fun overtoneShares(r: Region, sampleRate: Int): FloatArray {
+            /**
+             * Power share of the comb of n copies spaced a 1/n period of the region's root apart (the voice's harmonic comb) at
+             * index n, and in [tiltGain] the amplitude factor that keeps that power once the series is tilted by a first
+             * difference normalised to unity at the n-th partial.
+             */
+            fun overtoneShares(r: Region, sampleRate: Int, tiltGain: FloatArray): FloatArray {
                 val hz = 440.0 * Math_pow2((r.root + r.fineTuneCents / 100.0 - 69.0) / 12.0)
                 val period = sampleRate / hz
                 val from = maxOf((0.03 * sampleRate).toInt(), period.toInt() + 2)
@@ -51,7 +57,8 @@ class SampleBank private constructor(val sampleRate: Int, internal val regions: 
                 var full = 0.0
                 for (i in from until to) { val v = r.data[i].toDouble(); full += v * v }
                 for (n in 2..6) {
-                    var e = 0.0
+                    var e = 0.0; var et = 0.0; var prev = Double.NaN
+                    val diffGain = 0.5 / kotlin.math.sin(Math.PI * n / period).coerceAtLeast(1e-3)
                     for (i in from until to) {
                         var sum = 0.0
                         for (m in 0 until n) {
@@ -60,8 +67,11 @@ class SampleBank private constructor(val sampleRate: Int, internal val regions: 
                             sum += r.data[k] + (r.data[k + 1] - r.data[k]) * f
                         }
                         val y = sum / n; e += y * y
+                        if (!prev.isNaN()) { val d = (y - prev) * diffGain; et += d * d }
+                        prev = y
                     }
                     out[n] = if (full > 0) (e / full).toFloat() else 0f
+                    tiltGain[n] = if (et > 0) sqrt(e / et).toFloat() else 1f
                 }
                 return out
             }
@@ -111,7 +121,7 @@ class SampleBank private constructor(val sampleRate: Int, internal val regions: 
         notes = Array(128) { key -> Array(layers) { layer -> regions.filter { it.kind == KIND_NOTE && it.layer == layer && key in it.loKey..it.hiKey }.sortedBy { it.rr }.toTypedArray() } }
         releases = Array(128) { key -> regions.filter { it.kind == KIND_RELEASE && key in it.loKey..it.hiKey }.sortedBy { it.rr }.toTypedArray() }
         deadNotes = regions.filter { it.kind == KIND_DEAD }.toTypedArray()
-        for (r in regions) if (r.kind == KIND_NOTE) r.overtoneShare = Region.overtoneShares(r, sampleRate)
+        for (r in regions) if (r.kind == KIND_NOTE) { val tilt = FloatArray(7); r.overtoneShare = Region.overtoneShares(r, sampleRate, tilt); r.overtoneTiltGain = tilt }
         require(notes.all { k -> k.all { it.isNotEmpty() } }) { "Sample-Bank deckt nicht alle Tonhöhen ab" }
     }
 
