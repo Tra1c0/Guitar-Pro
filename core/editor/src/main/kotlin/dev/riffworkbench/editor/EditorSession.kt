@@ -176,7 +176,8 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
             val measure = Measure(ids.next(), c.signature)
             p.copy(measures = p.measures + measure, tracks = p.tracks.map { t -> t.copy(staves = t.staves.map { staff -> staff.copy(bars = staff.bars + ProjectFactory(ids).bar(measure.id)) }) })
         }
-        is EditorCommand.SetSignature -> p.copy(measures = p.measures.map { if (it.id == c.measureId) it.copy(signature = c.signature) else it })
+        // Like the other per-bar commands: a missing bar fails ("Takt fehlt") instead of a silent no-op (QA 20 F6).
+        is EditorCommand.SetSignature -> StructureEdits.updateMeasure(p, c.measureId) { it.copy(signature = c.signature) }
         is EditorCommand.SetMix -> {
             require(c.mix.volume.isFinite() && c.mix.volume in 0.0..1.0 && c.mix.pan.isFinite() && c.mix.pan in -1.0..1.0)
             requireFiniteEffects(c.mix.effects)

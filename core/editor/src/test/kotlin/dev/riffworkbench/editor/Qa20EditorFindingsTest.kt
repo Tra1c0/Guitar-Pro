@@ -10,6 +10,9 @@ import org.junit.Test
  * F5: deleting the bar(s) under the cursor (the long-press range → "Takt löschen") put the cursor into bar 1 and kept the
  * old beat offset there: the view jumped to the start of the piece (ViewportScroll follows the cursor) and the next Play
  * started at bar 1 instead of the place where the user was working.
+ *
+ * F6: SetSignature for a bar that no longer exists (repeatLast after the bar was deleted) reported Success without any
+ * change — a silent no-op; every other per-bar command (key, feel, tempo, repeat) fails with "Takt fehlt".
  */
 class Qa20EditorFindingsTest {
     private var n = 0
@@ -48,5 +51,16 @@ class Qa20EditorFindingsTest {
         assertTrue(e.dispatch(EditorCommand.DeleteMeasures(e.state.value.selection.measureRange(e.state.value.project))) is Outcome.Success)
         assertEquals("cursor on the new last bar (bar 2)", bar2, e.state.value.selection.measureId)
         assertEquals(Fraction.ZERO, e.state.value.selection.offset)
+    }
+
+    @Test fun f6_signatureForAMissingBarFailsInsteadOfASilentSuccess() {
+        val e = session(2)
+        val doomed = e.bar(1)
+        assertTrue(e.dispatch(EditorCommand.SetSignature(doomed, TimeSignature(3, 4))) is Outcome.Success)
+        assertTrue(e.dispatch(EditorCommand.DeleteMeasures(listOf(doomed))) is Outcome.Success)
+        val before = e.state.value
+        val r = e.dispatch(EditorCommand.SetSignature(doomed, TimeSignature(7, 8)))   // e.g. "Wiederholen" of the last command
+        assertTrue("SetSignature on a deleted bar must fail, was $r", r is Outcome.Failure)
+        assertEquals(before, e.state.value)
     }
 }
