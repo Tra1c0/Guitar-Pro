@@ -62,7 +62,14 @@ class EngineTransport(
     /** Bumped by every pause()/stop(); a play() that was requested before cannot start afterwards. Guarded by [haltLock]. */
     private var haltEpoch = 0L
     /** Play was posted but the render thread has not started yet: its snapshot still shows the old, non-playing position. */
-    @Volatile private var starting = false
+    /**
+     * The Play (its [postedPlays] number) whose first block the render thread has not produced yet; 0 when none. Only the
+     * poller ends a start phase, and only by compare-and-set on the number it judged: a poll that decided "this start is
+     * over" for one Play and was descheduled before writing must not end the next Play's start (QA cycle 20: PLAYING fell
+     * to PAUSED for a poll right after play(), under CPU load).
+     */
+    private val startingPlay = java.util.concurrent.atomic.AtomicLong(0L)
+    private val starting: Boolean get() = startingPlay.get() != 0L
     @Volatile private var startingSince = 0L
     /** Halt epoch when the caller began preparing this play (togglePlay compiles in prepare() while the output is open). */
     /** Number of pause()/stop() calls so far; lets callers (stress test) notice an external halt between its passes. */
@@ -286,7 +293,7 @@ class EngineTransport(
             halted = null
             // Count and timestamp first: a poll that sees `starting` must also see both (all volatile), or it ends the start phase
             // at once (stale count, or the 1-s timeout measured from the previous start) and downgrades PLAYING to PAUSED.
-            postedPlays++; startingSince = System.nanoTime(); starting = true
+            postedPlays++; startingSince = System.nanoTime(); startingPlay.set(postedPlays)
             val live = host.post(HostCommand.Play(from, countIn, clicks))
             place(mutable.value.copy(sample = SamplePosition(from, current.sampleRate), position = current.positionAt(from)))
             trainerPasses = 0; lastLoops = snap.loopsCompleted
@@ -299,14 +306,14 @@ class EngineTransport(
             restarting = true
             try {
                 if (synchronized(haltLock) { haltEpoch != epoch }) return@withLock Outcome.Success(Unit)
-                val f = ensureHost() ?: run { starting = false; return@withLock unavailable("C-AUDIO", "Audioausgabe konnte nicht geöffnet werden") }
-                installLocked(p, f.sampleRate, forceRack = true).let { if (it is Outcome.Failure) { starting = false; return@withLock it } }
-                val again = plan ?: run { starting = false; return@withLock unavailable("C-SEQUENCER") }
+                val f = ensureHost() ?: run { startingPlay.set(0L); return@withLock unavailable("C-AUDIO", "Audioausgabe konnte nicht geöffnet werden") }
+                installLocked(p, f.sampleRate, forceRack = true).let { if (it is Outcome.Failure) { startingPlay.set(0L); return@withLock it } }
+                val again = plan ?: run { startingPlay.set(0L); return@withLock unavailable("C-SEQUENCER") }
                 val target = if (again.sampleRate == current.sampleRate) from else current.positionAt(from)?.let { again.frameFor(it, orNearest = true) } ?: 0L
                 val (countIn2, clicks2) = countIn(again, target)
                 synchronized(haltLock) {
                     if (haltEpoch != epoch) return@withLock Outcome.Success(Unit)
-                    postedPlays++; startingSince = System.nanoTime(); starting = true
+                    postedPlays++; startingSince = System.nanoTime(); startingPlay.set(postedPlays)
                     host.post(HostCommand.Play(target, countIn2, clicks2))
                     place(mutable.value.copy(sample = SamplePosition(target, again.sampleRate), position = again.positionAt(target)))
                     publish(TransportStatus.PLAYING, null)
@@ -323,7 +330,7 @@ class EngineTransport(
             // The published status may lag one poll behind a play that was just posted: ask the engine as well.
             // …but not right after stop(): the engine reports playing until the stop's Pause has been rendered.
             val running = halted != TransportStatus.STOPPED && (mutable.value.status == TransportStatus.PLAYING || starting || host.snapshot().let { it.playing || it.countingIn })
-            starting = false
+            startingPlay.set(0L)
             if (running) { halted = TransportStatus.PAUSED; host.post(HostCommand.Pause); publish(TransportStatus.PAUSED, null) }
         }
         return Outcome.Success(Unit)
@@ -331,7 +338,7 @@ class EngineTransport(
 
     override suspend fun stop(): Outcome<Unit> = synchronized(haltLock) {
         haltEpoch++
-        starting = false
+        startingPlay.set(0L)
         pendingSeek = null
         atEnd = false
         restartFromTop = true
@@ -505,7 +512,8 @@ class EngineTransport(
                 val held = halted
                 // (An `ended` flag left over from the previous run is not an answer; give up after 1 s if the thread never starts.
                 // While play() reopens a host that stopped itself in the block its Play went into, the dead snapshot is not an answer either.)
-                if (starting && (snap.plays >= postedPlays || (!snap.running && !restarting) || System.nanoTime() - startingSince > 1_000_000_000L)) starting = false
+                val judged = startingPlay.get()
+                if (judged != 0L && (snap.plays >= judged || (!snap.running && !restarting) || System.nanoTime() - startingSince > 1_000_000_000L)) startingPlay.compareAndSet(judged, 0L)
                 val status = when {
                     held != null -> held
                     // Until the first block of the new playback the snapshot is stale: keep PLAYING and the seek position.
