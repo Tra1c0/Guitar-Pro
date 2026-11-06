@@ -188,6 +188,41 @@ class Qa20ScoreHeaderLayoutTest {
     }
 
     /**
+     * (3) Keine Ansichtssprünge (Bericht 1 §4 „Ansicht springt“): Eingabe und Löschen von Noten (auch auf der hohen Saite
+     * unter „Riff A“/„♩ = 150“, als Akkord, punktiert), Hammer-on-/Pull-off-Bögen der hohen Saite und Triolen ändern weder
+     * die erste TAB-Linie noch Anfang/Ende irgendeines Systems. Ausgenommen sind (wie vor Zyklus 20) Bends und Effektzeilen
+     * (P.M., Akzente …), die ihren Platz im eigenen System bekommen.
+     */
+    @Test fun noteEntryDoesNotMoveAnySystem() {
+        val s = EditorSession(ProjectFactory(ids).create("Stabil"), ids)
+        repeat(3) { s.dispatch(EditorCommand.AddMeasure(TimeSignature(4, 4))) }
+        s.dispatch(EditorCommand.SetSection(s.state.value.project.measures[2].id, "Pre-Chorus"))
+        s.dispatch(EditorCommand.SetTempoAt(s.state.value.project.measures[2].id, 96.0))
+        s.note(1, Fraction.ZERO, 0, 3, d = 4); s.note(3, Fraction.ZERO, 2, 5, d = 4)
+        fun geometry(w: Float?): List<Triple<Float, Float, Float>> = editorLayout(s.state.value.project, w).systems.map { Triple(it.top, it.tabTop, it.bottom) }
+        val widths = listOf(null, 360f, 411f)
+        val reference = widths.associateWith { geometry(it) }
+        val failures = ArrayList<String>()
+        fun check(step: String) { for (w in widths) { val g = geometry(w); if (g != reference[w]) failures += "$step @${w ?: "∞"}: Systeme (top, tabTop, bottom) ${reference[w]} → $g" } }
+        val top = 5
+        s.note(0, Fraction.ZERO, top, 3); check("Bund der hohen Saite unter „Riff A“ (Takt 1, Schlag 1)")
+        s.note(0, Fraction.of(1, 8), top, 12); check("zweistelliger Bund der hohen Saite unter dem Tempo")
+        s.note(0, Fraction.ZERO, 4, 5); s.note(0, Fraction.ZERO, 3, 5); check("Akkord auf Schlag 1")
+        s.note(0, Fraction.of(1, 4), top, 5, marks = setOf(NoteMark.HAMMER_ON)); s.note(0, Fraction.of(3, 8), top, 7); check("Hammer-on der hohen Saite")
+        s.note(0, Fraction.ZERO, top, 3, marks = setOf(NoteMark.HAMMER_ON)); check("Hammer-on der hohen Saite unter „Riff A“/Tempo")
+        s.note(2, Fraction.ZERO, top, 8, marks = setOf(NoteMark.PULL_OFF)); s.note(2, Fraction.of(1, 8), top, 5); check("Pull-off unter „Pre-Chorus“/„♩ = 96“")
+        s.note(1, Fraction.of(1, 2), 1, 2, d = 4)
+        s.select(s.state.value.selection.copy(measureId = s.state.value.project.measures[1].id, offset = Fraction.of(1, 2), string = 1))
+        check(s.dispatch(EditorCommand.SetDuration(WrittenDuration(4, dots = 1))).let { "punktierte Viertel (${it::class.simpleName})" })
+        s.note(3, Fraction.of(1, 2), 1, 3, d = 8)
+        s.select(s.state.value.selection.copy(measureId = s.state.value.project.measures[3].id, offset = Fraction.of(1, 2), string = 1))
+        check(s.dispatch(EditorCommand.SetTuplet(TupletRatio(3, 2))).let { "Triole (${it::class.simpleName})" })
+        s.select(s.state.value.selection.copy(measureId = s.state.value.project.measures[0].id, offset = Fraction.ZERO, string = top))
+        s.dispatch(EditorCommand.Delete); check("Bund der hohen Saite gelöscht")
+        assertTrue(failures.joinToString("\n"), failures.isEmpty())
+    }
+
+    /**
      * (2a) Leerraum über dem ersten System. Vorher lag die erste TAB-Linie immer 24 Einheiten unter dem Systemanfang (Spur
      * 18 + pauschal 6 für Bünde der hohen Saite), bei y = 30 mit Rand 6 — auch ohne eine Note auf der hohen Saite.
      * Jetzt: direkt unter der Kopfspur (18), wenn keine Tinte über der hohen Saite ein Kopf-Label trifft.
