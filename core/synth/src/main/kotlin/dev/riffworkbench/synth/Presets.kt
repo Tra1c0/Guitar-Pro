@@ -87,12 +87,12 @@ object TonePresets {
     /**
      * Output trim of a sampled preset (QA cycle 22), applied after its effect chain while the sample bank plays it: equal track
      * volume gives equal loudness. Measured on a reference phrase (open chords, single notes, PM riff, power chords) at the master,
-     * ITU-R BS.1770-4 integrated: Clean -23.2, Crunch -17.0, High Gain -15.9 LUFS before (7.2 LU apart), -18.7 / -18.0 / -17.9 with
-     * these trims (High Gain includes the +0.5 LU of its pick attack). A level after the chain
-     * changes nothing of the preset's character (amp drive, THD, dynamics, ring-out); Clean is raised only as far as a v127 power
-     * chord stem keeps about 1 dB of headroom without the limiter, the others meet it. The modelled fallback (no bank) is untouched.
+     * ITU-R BS.1770-4 integrated: Clean -23.2, Crunch -17.0, High Gain -15.9 LUFS before (7.2 LU apart), -25.7 / -25.0 / -24.9 with
+     * these trims. Normalised downwards only: stems have no limiter, and Clean v127 chords at the highest track fader (1.0) reached
+     * +1.6 dBFS untrimmed; -2.5 dB keeps them at -0.9 dBFS, the others follow Clean. A level after the chain changes nothing of the
+     * preset's character (amp drive, THD, dynamics, ring-out). The modelled fallback (no bank) is untouched.
      */
-    internal fun outputTrimDb(preset: TonePreset): Double = when (preset.id) { "rw.guitar.highgain" -> -2.5; "rw.guitar.crunch" -> -1.0; "rw.guitar.clean" -> 4.5; else -> 0.0 }
+    internal fun outputTrimDb(preset: TonePreset): Double = when (preset.id) { "rw.guitar.highgain" -> -9.5; "rw.guitar.crunch" -> -8.0; "rw.guitar.clean" -> -2.5; else -> 0.0 }
     /** Modelled harmonics inside a sampled preset follow the sample trim, so a pinch harmonic sits ~3 dB under a picked note at the amp input. */
     internal fun harmonicGain(preset: TonePreset): Float = when (preset.id) { "rw.guitar.highgain" -> 0.45f; "rw.guitar.crunch" -> 0.2f; else -> 0.22f }
     internal fun keysMode(preset: TonePreset): KeysMode = when (preset.id) {
