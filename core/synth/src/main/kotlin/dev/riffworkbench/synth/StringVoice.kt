@@ -130,6 +130,9 @@ internal class StringVoice(private val sampleRate: Int) {
         targetBrightness = when {
             dead -> 0.75f
             palmMute -> (tone.brightness + 0.42f).coerceAtMost(0.9f)
+            // A natural harmonic is a pure, bell-like overtone (its own upper partials die first); pinched and artificial
+            // harmonics keep the bright loop of the picked string (QA cycle 19).
+            harmonic == HarmonicKind.NATURAL -> tone.brightness
             harmonic != null -> (tone.brightness * 0.5f)
             else -> tone.brightness
         }
@@ -147,15 +150,23 @@ internal class StringVoice(private val sampleRate: Int) {
         var soft = tone.excitationSoftness + (1f - v) * 0.25f
         if (attack == AttackKind.TAP || attack == AttackKind.LEGATO || attack == AttackKind.GRACE) soft += 0.15f
         if (attack == AttackKind.SLAP || attack == AttackKind.POP) soft -= 0.2f
-        if (harmonic != null) soft = maxOf(soft, 0.82f)
+        if (harmonic != null && harmonic != HarmonicKind.PINCH) soft = maxOf(soft, 0.82f)
         if (palmMute) soft += 0.1f
         soft = soft.coerceIn(0f, 0.95f)
         val pick = (period * tone.pickPosition).toInt().coerceIn(1, period - 1)
         var lp = 0f
         val start = (write - period) and mask
         // Raw burst, then pick-position comb (difference with a delayed copy), then softness low-pass.
-        for (i in 0 until period) buffer[(start + i) and mask] = noise.next()
-        for (i in period - 1 downTo pick) { val idx = (start + i) and mask; buffer[idx] = buffer[idx] - buffer[(start + i - pick) and mask] }
+        if (harmonic == HarmonicKind.NATURAL) {
+            // Natural harmonic (QA cycle 19): the string touched at the node vibrates in that overtone's series with the
+            // partial amplitudes of a pluck (~1/k^2): a triangle with its apex at 30 % of the period plus a little noise,
+            // so the overtone itself is the strongest partial (a noise burst made its 3rd-6th partials dominate).
+            val apex = 0.3 * period
+            for (i in 0 until period) buffer[(start + i) and mask] = (if (i < apex) i / apex else (period - i) / (period - apex)).toFloat() + 0.04f * noise.next()
+        } else {
+            for (i in 0 until period) buffer[(start + i) and mask] = noise.next()
+            for (i in period - 1 downTo pick) { val idx = (start + i) and mask; buffer[idx] = buffer[idx] - buffer[(start + i - pick) and mask] }
+        }
         var mean = 0f
         for (i in 0 until period) { val idx = (start + i) and mask; lp = (1f - soft) * buffer[idx] + soft * lp; buffer[idx] = lp; mean += lp }
         mean /= period
@@ -164,7 +175,7 @@ internal class StringVoice(private val sampleRate: Int) {
         val scale = 0.9f / peak
         for (i in 0 until period) buffer[(start + i) and mask] *= scale
         pickNoiseLeft = if (fresh && attack != AttackKind.LEGATO) (0.0025 * sampleRate).toInt() else 0
-        pickNoiseLevel = tone.pickNoise * v * if (dead) 2.2f else 1f
+        pickNoiseLevel = tone.pickNoise * v * if (dead) 2.2f else if (harmonic == HarmonicKind.PINCH) 3f else 1f
         if (attack == AttackKind.SLAP) pickNoiseLevel *= 2f
     }
 

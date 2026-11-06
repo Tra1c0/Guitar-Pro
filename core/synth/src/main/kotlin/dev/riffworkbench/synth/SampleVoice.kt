@@ -63,6 +63,25 @@ internal class SampleVoice(private val sampleRate: Int) {
     // Palm-mute / damping low-pass (two one-pole stages) with its own envelope.
     private var damp = false
     private var lpA = 0f
+    /** Palm-mute low-pass cutoff (Hz): opens at [lpCutStart] for the pick, then glides to [lpCutEnd] (QA cycle 19). */
+    private var lpCut = 2600.0
+    private var lpCutEnd = 2600.0
+    private val lpGlide = exp(-32.0 / (0.018 * sampleRate))
+    /**
+     * Harmonic comb (pinch / artificial harmonics, QA cycle 19): the thumb or finger at the node leaves only the partials
+     * that are multiples of [combN] (1 = off). The voice plays the fretted note and sums [combN] copies spaced a 1/[combN]
+     * period apart, which cancels every other partial exactly; pick attack, string noise and decay stay the recorded ones.
+     */
+    private var combN = 1
+    private var combGain = 0f
+    private var combBleed = 0f
+    /** Share of the full (uncombed) note right after the pick; the thumb/finger reaches the node within a few ms. */
+    private var combOnset = 0f
+    private val combOnsetDecay = exp(-1.0 / (0.006 * sampleRate)).toFloat()
+    private val combBuf = FloatArray(2048)
+    private var combPos = 0
+    private var combPeriod = 100.0
+    private var rootHz = 110.0
     private var lp1 = 0f
     private var lp2 = 0f
     private val curveFrames = LongArray(64)
@@ -75,7 +94,12 @@ internal class SampleVoice(private val sampleRate: Int) {
     private var rr = 0
     private var silentRun = 0
 
-    fun start(note: ScheduledNote, track: Int, bank: SampleBank, clock: Long, endClock: Long, roundRobin: Int, gain: Float) {
+    /**
+     * [harmonic] > 1 plays a harmonic of the fretted note: the note's sounding pitch is that overtone, the voice plays the
+     * fretted pitch below it through the harmonic comb, scaled by [combGain] with [combBleed] of the full note mixed in.
+     */
+    fun start(note: ScheduledNote, track: Int, bank: SampleBank, clock: Long, endClock: Long, roundRobin: Int, gain: Float,
+              harmonic: Int = 1, combGain: Float = 1f, combBleed: Float = 0f) {
         this.bank = bank
         this.track = track
         string = note.string ?: -1
@@ -87,12 +111,16 @@ internal class SampleVoice(private val sampleRate: Int) {
         oldRegion = null; xfade = 0f; relRegion = null
         lp1 = 0f; lp2 = 0f
         configure(note, gain)
-        val key = Math_round(note.soundingPitch)
+        combN = if (note.dead) 1 else harmonic.coerceIn(1, 8)
+        this.combGain = combGain; this.combBleed = combBleed
+        if (combN > 1) { baseMidi -= 12.0 * ln(combN.toDouble()) / ln(2.0); combBuf.fill(0f); combPos = 0; combOnset = 1f - combBleed }
+        val key = Math_round(baseMidi)
         dead = note.dead
         region = if (dead && bank.deadNotes.isNotEmpty()) bank.deadNotes[(roundRobin + key) % bank.deadNotes.size] else bank.note(key, layerFor(note.velocity, bank.layers), roundRobin)
         rootMidi = region!!.root
         fineTune = region!!.fineTuneCents.toDouble()
         regionGain = region!!.gain
+        rootHz = 440.0 * Dsp_pow2((rootMidi + fineTune / 100.0 - 69.0) / 12.0)
         // Slight start offset per round robin and per string keeps fast repetitions and unisons on two strings from being
         // the identical waveform (the engine also seeds the round robin by string).
         pos = (roundRobin % 3) * 0.0004 * bank.sampleRate + (if (string >= 0) string * 0.00015 * bank.sampleRate else 0.0)
@@ -109,6 +137,7 @@ internal class SampleVoice(private val sampleRate: Int) {
         this.endClock = endClock
         releasing = false; fade = 1f; fadeStep = 0f; silentRun = 0; relRegion = null
         configure(note, gain)
+        combN = 1
         level *= 0.72f
         val key = Math_round(note.soundingPitch)
         region = bank.note(key, layerFor(note.velocity, bank.layers), rr + 1)
@@ -132,8 +161,13 @@ internal class SampleVoice(private val sampleRate: Int) {
         // Palm mute: the hand damps the string within ~0.25 s and takes the top end off; darker when played softer.
         val t60 = when { note.dead -> 0.09; note.palmMute -> 0.32 * (110.0 / Dsp.midiToHz(note.soundingPitch)).coerceIn(0.6, 1.6); else -> 0.0 }
         envDecay = if (t60 > 0) exp(-6.9078 / (t60 * sampleRate)).toFloat() else 1f
-        val cutoff = if (note.palmMute) 700.0 + 1500.0 * v else 2600.0
-        lpA = exp(-2 * Math.PI * cutoff / sampleRate).toFloat()
+        // Palm mute (QA cycle 19): the pick still sounds bright, then within ~20 ms the hand leaves only the lowest partials;
+        // the cutoff follows the note (about the 3rd-6th partial), so the mute is darker than the open note at every pitch.
+        if (note.palmMute && !note.dead) {
+            lpCut = 2000.0 + 1500.0 * v
+            lpCutEnd = (Dsp.midiToHz(note.soundingPitch) * (2.0 + 3.0 * v)).coerceIn(250.0, 1200.0)
+        } else { lpCut = 2600.0; lpCutEnd = 2600.0 }
+        lpA = exp(-2 * Math.PI * lpCut / sampleRate).toFloat()
         curveCount = 0
         for (i in 0 until minOf(note.curve.size, curveFrames.size)) { curveFrames[i] = note.curve[i].frame; curveCents[i] = note.curve[i].cents.toFloat(); curveCount++ }
         val vib = note.vibrato
@@ -194,6 +228,13 @@ internal class SampleVoice(private val sampleRate: Int) {
                 if (!releasing && clock + i >= endClock) release(false)
                 tickRatio0 = ratioAt(age)
                 tickRatio1 = ratioAt(age + 32)
+                if (damp && lpCut != lpCutEnd) {
+                    lpCut = lpCutEnd + (lpCut - lpCutEnd) * lpGlide
+                    if (abs(lpCut - lpCutEnd) < 1.0) lpCut = lpCutEnd
+                    lpA = exp(-2 * Math.PI * lpCut / sampleRate).toFloat()
+                }
+                // One period of the played (fretted) note in output frames, following bends and vibrato.
+                if (combN > 1 && tickRatio0 > 0.0) combPeriod = ((bank?.sampleRate ?: sampleRate) / (rootHz * tickRatio0)).coerceIn(4.0, (combBuf.size - 4).toDouble() * combN / (combN - 1))
             }
             val chunk = minOf(32 - phase, count - i)
             val ratio0 = tickRatio0
@@ -216,6 +257,7 @@ internal class SampleVoice(private val sampleRate: Int) {
                 }
                 if (fadeStep > 0f) { fade -= fadeStep; if (fade < 0f) fade = 0f }
                 y *= fade
+                if (combN > 1) y = comb(y)
                 val rel = relRegion
                 if (rel != null) {
                     if (relPos < rel.frames - 2) { y += cubic(rel.data, relPos) * relGain; relPos += baseRatio } else relRegion = null
@@ -230,6 +272,27 @@ internal class SampleVoice(private val sampleRate: Int) {
             if (done) { silentRun += chunk; if (silentRun > 64) { active = false; region = null; oldRegion = null; return } } else silentRun = 0
             if (releasing && peak < 1e-6f && relRegion == null) { active = false; region = null; return }
         }
+    }
+
+    /**
+     * Harmonic comb: mean of [combN] copies spaced [combPeriod]/[combN] apart, times [combGain], plus the full note: all of
+     * it at the pick, fading (6 ms) to [combBleed] as the thumb or finger settles on the node.
+     */
+    private fun comb(x: Float): Float {
+        val size = combBuf.size
+        combBuf[combPos] = x
+        var sum = x
+        val step = combPeriod / combN
+        for (m in 1 until combN) {
+            val d = step * m
+            val di = floor(d).toInt(); val f = (d - di).toFloat()
+            val a = combBuf[(combPos - di + size) % size]; val b = combBuf[(combPos - di - 1 + 2 * size) % size]
+            sum += a + (b - a) * f
+        }
+        combPos = (combPos + 1) % size
+        val full = combBleed + combOnset
+        combOnset = ftz(combOnset * combOnsetDecay)
+        return ftz(sum / combN * combGain + x * full)
     }
 
     private fun cubic(d: ShortArray, p: Double): Float {
