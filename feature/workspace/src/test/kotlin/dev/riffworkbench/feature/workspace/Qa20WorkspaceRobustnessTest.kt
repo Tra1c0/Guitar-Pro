@@ -28,7 +28,7 @@ import org.junit.Test
  *         V3 after jumpToStart: cursor bar 1 beat 1, transport STOPPED; V4 Play starts at the cursor when STOPPED or when
  *         the cursor was navigated since the pause, otherwise resumes in the paused bar; V5 navigation moves the cursor
  *         as asked (PageUp/Down, string, also in range mode); V6 autosave: once idle, the repository holds the current
- *         revision without an explicit flush; V7 retune policy persisted.
+ *         revision without an explicit flush; V7 retune policy persisted; V8 layout covers every bar and the cursor.
  *         Defaults: 6 sequences × 40 steps (CI). Campaign: -Dqa20vm.n=200 -Dqa20vm.len=60 [-Dqa20vm.seed=…].
  *
  * Verified on the JVM through the lifecycle shim of the QA harness; UNVERIFIED with the real androidx lifecycle (CI).
@@ -268,6 +268,10 @@ class Qa20WorkspaceRobustnessTest {
             check(p.tracks.any { it.id == now.selection.trackId } && p.measures.any { it.id == now.selection.measureId }) { "selection points at a missing track/bar" }
             check(now.selection.rangeEnd == null || p.measures.any { it.id == now.selection.rangeEnd }) { "rangeEnd points at a missing bar" }
             check(ScoreValidator.validate(p).none { it.severity == Severity.ERROR }) { "project invalid" }
+            // V8 layout current: every bar laid out, the cursor has a position in it (taps and the playhead rely on it)
+            val layout = f.vm.layout.value
+            check(layout != null && layout.measures.map { it.measureId } == p.measures.map { it.id }) { "layout stale: ${layout?.measures?.size} of ${p.measures.size} bars" }
+            check(layout!!.xFor(now.selection.measureId, now.selection.offset) != null) { "cursor has no x in the layout" }
             // V6 autosave caught up without flush
             if (p.revision != revBefore || f.repo.stored.revision != p.revision) await("autosave of revision ${p.revision} (stored ${f.repo.stored.revision}, status ${f.vm.state.value.saveStatus})") { f.repo.stored.revision == editor(f).project.revision }
             check(f.vm.state.value.saveStatus == SaveStatus.SAVED) { "save status ${f.vm.state.value.saveStatus} after the autosave" }
