@@ -56,7 +56,8 @@ import dev.riffworkbench.ui.score.pitchName
     val track = state.project.tracks.first { it.id == state.selection.trackId }
     // Long press on a drawn time signature (or a tap on the bar info in the header): select that bar and open its sheet.
     val editSignature: (EntityId) -> Unit = { id ->
-        if (id != state.selection.measureId) vm.select(state.selection.copy(measureId = id, offset = Fraction.ZERO, rangeEnd = null))
+        // selectCell, not select: in range mode select() would only move the range end (Zyklus 23).
+        if (id != state.selection.measureId) vm.selectCell(state.selection.copy(measureId = id, offset = Fraction.ZERO, rangeEnd = null))
         signatureEditor = id.value
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {

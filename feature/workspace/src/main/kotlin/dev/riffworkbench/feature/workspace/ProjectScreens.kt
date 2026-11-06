@@ -43,7 +43,7 @@ import dev.riffworkbench.ui.score.pitchName
         HorizontalDivider()
         Text("${stringResource(R.string.measure)} ${index + 1}", style = MaterialTheme.typography.titleMedium)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            p.measures.forEachIndexed { i, m -> FilterChip(selected = m.id == state.selection.measureId, onClick = { vm.select(state.selection.copy(measureId = m.id, offset = Fraction.ZERO)) },
+            p.measures.forEachIndexed { i, m -> FilterChip(selected = m.id == state.selection.measureId, onClick = { vm.selectCell(state.selection.copy(measureId = m.id, offset = Fraction.ZERO)) },
                 label = { Text("${i + 1} · ${m.signature.numerator}/${m.signature.denominator}" + (p.sections.firstOrNull { it.measureId == m.id }?.let { " · ${it.label}" } ?: "")) }) }
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -116,21 +116,24 @@ import dev.riffworkbench.ui.score.pitchName
 @Composable fun DrumScreen(vm: WorkspaceViewModel, state: EditorState) {
     val track = state.project.tracks.firstOrNull { it.id == state.selection.trackId && it.instrument.kind == InstrumentKind.PERCUSSION }
         ?: state.project.tracks.firstOrNull { it.instrument.kind == InstrumentKind.PERCUSSION }
-    var grid by remember { mutableStateOf(16) }
+    // Zyklus 23: the grid is the entry duration (a local 1/16 default disagreed with it, so hits got another length than the
+    // cells and finer cells overlapped them); 1/8 T = 12, 1/16 T = 24 cells per whole note.
+    val input by vm.input.collectAsStateWithLifecycle()
+    val grid = input.duration.let { d -> if (d.tuplets.isNotEmpty()) d.denominator * 3 / 2 else d.denominator }
     ScrollPage(stringResource(R.string.drums), stringResource(R.string.stepgrid_hint)) {
         if (track == null) {
             NoticeCard(stringResource(R.string.no_drum_track))
             Button(onClick = { vm.command(EditorCommand.AddTrack(InstrumentKind.PERCUSSION)) }) { Text(stringResource(R.string.add_track)) }
         } else {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                state.project.measures.forEachIndexed { index, measure -> FilterChip(selected = measure.id == state.selection.measureId, onClick = { vm.select(state.selection.copy(trackId = track.id, measureId = measure.id, offset = Fraction.ZERO, string = 0)) }, label = { Text("${stringResource(R.string.measure)} ${index + 1}") }) }
+                state.project.measures.forEachIndexed { index, measure -> FilterChip(selected = measure.id == state.selection.measureId, onClick = { vm.selectCell(state.selection.copy(trackId = track.id, measureId = measure.id, offset = Fraction.ZERO, string = 0)) }, label = { Text("${stringResource(R.string.measure)} ${index + 1}") }) }
             }
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 (0..3).forEach { voice -> FilterChip(selected = voice == state.selection.voice, onClick = { vm.select(state.selection.copy(trackId = track.id, voice = voice, string = 0)) }, label = { Text("${stringResource(R.string.voice)} ${voice + 1}") }) }
             }
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(tr("Raster", "Grid"), style = MaterialTheme.typography.labelMedium)
-                listOf(8 to "1/8", 16 to "1/16", 32 to "1/32", 12 to "1/8 T", 24 to "1/16 T").forEach { (g, label) -> FilterChip(grid == g, { grid = g; vm.setGrid(if (g % 3 == 0) WrittenDuration(g / 3 * 2, tuplets = listOf(TupletRatio(3, 2))) else WrittenDuration(g)) }, label = { Text(label) }) }
+                listOf(8 to "1/8", 16 to "1/16", 32 to "1/32", 12 to "1/8 T", 24 to "1/16 T").forEach { (g, label) -> FilterChip(grid == g, { vm.setGrid(if (g % 3 == 0) WrittenDuration(g / 3 * 2, tuplets = listOf(TupletRatio(3, 2))) else WrittenDuration(g)) }, label = { Text(label) }) }
             }
             val measure = state.project.measures.first { it.id == state.selection.measureId }
             val beats = track.staves.first().bars.first { it.measureId == measure.id }.voices.first { it.index == state.selection.voice }.beats

@@ -81,9 +81,23 @@ class WorkspaceViewModel(
     } }
 
     // ------------------------------------------------------------------ selection and note entry
+    /**
+     * Explicit selection (score tap via [tap], menus, chips). In range mode a position change only moves the range end (the
+     * cursor stays the anchor), but a voice or track choice applies (Zyklus 23: the voice menu and the drum screen's chips
+     * went through here and were swallowed, so entries landed in the old voice/track).
+     */
     fun select(selection: Selection) {
         val s = session ?: return
-        val adjusted = if (input.value.rangeMode) s.state.value.selection.copy(rangeEnd = selection.measureId) else selection.copy(rangeEnd = null)
+        val current = s.state.value.selection
+        val requested = if (input.value.rangeMode) {
+            val moved = selection.measureId != current.measureId || selection.offset != current.offset
+            current.copy(trackId = selection.trackId, voice = selection.voice, string = if (selection.trackId != current.trackId) selection.string else current.string,
+                rangeEnd = if (moved) selection.measureId else current.rangeEnd)
+        } else selection.copy(rangeEnd = null)
+        // Never inside a beat of the edited voice (Zyklus 23): a column of another voice or a voice switch selects the beat
+        // that covers the position, so the next entry does not fail with an overlap.
+        val p = s.state.value.project
+        val adjusted = requested.copy(offset = CursorSteps.covering(voiceBeats(p, requested.trackId, requested.measureId, requested.voice), requested.offset)?.offset ?: requested.offset)
         try { s.select(adjusted) } catch (e: IllegalArgumentException) { return }
         noteNavigation()
         publish(); mutableInput.value = input.value.copy(buffer = "")
@@ -112,10 +126,11 @@ class WorkspaceViewModel(
         val moved = before == null || after == null || before.measureId != after.measureId || before.offset != after.offset
         if (transport.state.value.status == TransportStatus.PLAYING && (moved || !input.value.rangeMode)) seekToCursor()
     }
-    /** Moves the cursor to [selection] as given (no range-mode adjustment); false if it does not exist. */
+    /** Moves the cursor to [selection] (no range-mode adjustment; inside a beat of its voice: that beat's start); false if it does not exist. */
     private fun moveCursorTo(selection: Selection): Boolean {
         val s = session ?: return false
-        try { s.select(selection) } catch (e: IllegalArgumentException) { return false }
+        val beats = voiceBeats(s.state.value.project, selection.trackId, selection.measureId, selection.voice)
+        try { s.select(selection.copy(offset = CursorSteps.covering(beats, selection.offset)?.offset ?: selection.offset)) } catch (e: IllegalArgumentException) { return false }
         noteNavigation()
         publish(); mutableInput.value = input.value.copy(buffer = "")
         return true
@@ -139,7 +154,17 @@ class WorkspaceViewModel(
             selectCell(selection.copy(measureId = toMeasure, offset = toOffset, string = target))
     }
     fun selectRange(endMeasure: EntityId?) { session?.let { s -> runCatching { s.select(s.state.value.selection.copy(rangeEnd = endMeasure)) }; publish() } }
-    fun setRangeMode(enabled: Boolean) { mutableInput.value = input.value.copy(rangeMode = enabled); if (!enabled) selectRange(null) }
+    /**
+     * Range switch (Zyklus 23): on shows the cursor bar as range at once (the mode is visible on the score, taps then move
+     * the range end); off clears the range and ends a running long-press gesture, so no stale anchor drags the range later.
+     */
+    fun setRangeMode(enabled: Boolean) {
+        mutableInput.value = input.value.copy(rangeMode = enabled)
+        if (enabled) { val s = state.value.editor?.selection; if (s != null && s.rangeEnd == null) selectRange(s.measureId) }
+        else { rangeGesture.end(); selectRange(null) }
+    }
+    /** A bar range is visible (long press or range switch): effects target it, see [command]. */
+    private fun rangeActive(): Boolean = session?.state?.value?.selection?.rangeEnd != null
 
     /**
      * Langes Drücken auf einen Takt (Bericht 1 §5, [BarRangeGesture]): Anker = [measureId], genau dieser Takt ist
@@ -209,14 +234,15 @@ class WorkspaceViewModel(
         val before = input.value
         // The entry duration is the edit grid: set it before the command's relayout, and redraw also without a selected beat.
         mutableInput.value = input.value.copy(duration = duration)
-        if (selectedBeat(current) != null) { if (command(EditorCommand.SetDuration(duration)) is Outcome.Failure) { mutableInput.value = before; relayout() }; return }
+        // With a visible range the key sets the entry value only: the beat under the hidden cursor is not rewritten (Zyklus 23 P0).
+        if (selectedBeat(current) != null && !rangeActive()) { if (command(EditorCommand.SetDuration(duration)) is Outcome.Failure) { mutableInput.value = before; relayout() }; return }
         relayout()
     }
     fun setTuplet(ratio: TupletRatio?) {
         val current = state.value.editor ?: return
         val before = input.value
         mutableInput.value = input.value.copy(duration = input.value.duration.copy(tuplets = listOfNotNull(ratio)))
-        if (selectedBeat(current) != null) { if (command(EditorCommand.SetTuplet(ratio)) is Outcome.Failure) { mutableInput.value = before; relayout() }; return }
+        if (selectedBeat(current) != null && !rangeActive()) { if (command(EditorCommand.SetTuplet(ratio)) is Outcome.Failure) { mutableInput.value = before; relayout() }; return }
         relayout()
     }
     /**
@@ -226,6 +252,7 @@ class WorkspaceViewModel(
      */
     fun togglePalmMute() {
         val current = state.value.editor
+        if (rangeActive()) { command(EditorCommand.ApplyArticulation(Articulation.Mark(NoteMark.PALM_MUTE))); return }
         if (current == null || selectedNote(current) == null) { mutableInput.value = input.value.copy(palmMute = !input.value.palmMute); return }
         if (command(EditorCommand.ApplyArticulation(Articulation.Mark(NoteMark.PALM_MUTE))) is Outcome.Success)
             mutableInput.value = input.value.copy(palmMute = state.value.editor?.let { selectedNote(it) }?.articulations?.contains(Articulation.Mark(NoteMark.PALM_MUTE)) == true)
@@ -270,14 +297,17 @@ class WorkspaceViewModel(
         val current = state.value.editor ?: return
         val p = current.project; val s = current.selection; val index = p.measures.indexOfFirst { it.id == s.measureId }
         val step = selectedBeat(current)?.takeIf { direction > 0 }?.duration?.length() ?: input.value.duration.length()
-        val offset = s.offset + step * Fraction(direction.toLong())
         val length = p.measures[index].pickupLength ?: p.measures[index].signature.length()
+        // Zyklus 23: steps stop at beat starts and never end inside a beat (CursorSteps), also on 1/32, 1/64 and tuplet grids.
+        val beats = voiceBeats(p, s.trackId, p.measures[index].id, s.voice)
+        val offset = if (direction > 0) CursorSteps.forward(beats, s.offset, step) else if (s.offset > Fraction.ZERO) CursorSteps.backward(beats, s.offset, step) else Fraction(-1)
         val next = when {
             offset >= length && index < p.measures.lastIndex -> s.copy(measureId = p.measures[index + 1].id, offset = Fraction.ZERO)
             offset >= length -> { command(EditorCommand.AddMeasure(p.measures[index].signature), sameUndoStep); state.value.editor?.project?.measures?.getOrNull(index + 1)?.let { s.copy(measureId = it.id, offset = Fraction.ZERO) } ?: s }
             offset < Fraction.ZERO && index > 0 -> {
                 val previous = p.measures[index - 1]
-                s.copy(measureId = previous.id, offset = maxOf(Fraction.ZERO, (previous.pickupLength ?: previous.signature.length()) + input.value.duration.length() * Fraction(-1)))
+                val end = previous.pickupLength ?: previous.signature.length()
+                s.copy(measureId = previous.id, offset = CursorSteps.backward(voiceBeats(p, s.trackId, previous.id, s.voice), end, input.value.duration.length()))
             }
             offset < Fraction.ZERO -> s.copy(offset = Fraction.ZERO)
             else -> s.copy(offset = offset)
@@ -322,6 +352,8 @@ class WorkspaceViewModel(
         if (command(EditorCommand.ToggleDrum(midi, input.value.duration)) is Outcome.Success) previewSelected(midi)
     }
 
+    private fun voiceBeats(p: Project, track: EntityId, measure: EntityId, voice: Int): List<Beat> =
+        p.tracks.firstOrNull { it.id == track }?.staves?.firstOrNull()?.bars?.firstOrNull { it.measureId == measure }?.voices?.firstOrNull { it.index == voice }?.beats.orEmpty()
     fun selectedBeat(e: EditorState): Beat? = e.project.tracks.firstOrNull { it.id == e.selection.trackId }?.staves?.firstOrNull()?.bars?.firstOrNull { it.measureId == e.selection.measureId }
         ?.voices?.firstOrNull { it.index == e.selection.voice }?.beats?.firstOrNull { it.offset == e.selection.offset }
     fun selectedNote(e: EditorState): Note? {
@@ -355,12 +387,35 @@ class WorkspaceViewModel(
         val active = session ?: return Outcome.Failure(FailureCode.VALIDATION, "Projekt noch nicht geladen")
         val before = active.state.value.project.revision
         val cursor = active.state.value.selection
-        val result = active.dispatch(command, sameUndoStep)
+        val result = active.dispatch(addressed(active, command), sameUndoStep)
         if (result is Outcome.Failure) showNotice(result.message)
         else if (active.state.value.project.revision != before) { if (command !is EditorCommand.Replace && command !is EditorCommand.MoveNote) lastCommand = command; enqueueSave() }
         noteCursorMove(cursor)
         publish()
         return result
+    }
+    /**
+     * What a command addresses while a bar range is visible (Zyklus 23, P0 "effects/values rewritten on other notes"): note
+     * effects (articulations, marks, velocity) go to every note of the track and voice in the range, not to the cursor
+     * note, which a range-mode tap does not move and a long press puts on beat 1 of the anchor bar. Entry and beat commands
+     * act on the visible cursor and clear the range first. Without a range every command acts on the cursor as before.
+     */
+    private fun addressed(active: EditorSession, command: EditorCommand): EditorCommand {
+        val s = active.state.value.selection
+        if (s.rangeEnd == null) return command
+        val bars = s.measureRange(active.state.value.project)
+        fun cursorOnly(): EditorCommand { runCatching { active.select(s.copy(rangeEnd = null)) }; return command }
+        return when (command) {
+            is EditorCommand.ApplyArticulation -> EditorCommand.EditNotesInBars(bars, NoteEdit.Apply(command.articulation, command.toggle))
+            is EditorCommand.ToggleMark -> EditorCommand.EditNotesInBars(bars, NoteEdit.Apply(Articulation.Mark(command.kind)))
+            is EditorCommand.ClearArticulation -> EditorCommand.EditNotesInBars(bars, NoteEdit.Clear(command.slot))
+            is EditorCommand.SetVelocity -> EditorCommand.EditNotesInBars(bars, NoteEdit.Velocity(command.velocity))
+            is EditorCommand.PutNote, is EditorCommand.PutRest, EditorCommand.Delete, EditorCommand.DeleteBeat, is EditorCommand.InsertBeat,
+            EditorCommand.ToggleTie, is EditorCommand.MoveToString, is EditorCommand.SetFermata, is EditorCommand.SetStrum, is EditorCommand.SetText,
+            is EditorCommand.ToggleDrum, is EditorCommand.MoveNote, is EditorCommand.SetDuration, is EditorCommand.SetTuplet -> cursorOnly()
+            is EditorCommand.Transpose -> if (command.scope == EditScope.NOTE || command.scope == EditScope.BEAT) cursorOnly() else command
+            else -> command
+        }
     }
     fun repeatLast() { lastCommand?.let(::command) }
     fun undo() { val cursor = session?.state?.value?.selection; val result = session?.undo(); if (result is Outcome.Success) enqueueSave() else if (result is Outcome.Failure) showNotice(result.message); noteCursorMove(cursor); publish() }
