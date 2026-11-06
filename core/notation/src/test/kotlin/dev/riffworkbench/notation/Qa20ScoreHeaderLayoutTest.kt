@@ -150,11 +150,16 @@ class Qa20ScoreHeaderLayoutTest {
             l.systems.getOrNull(1)?.let { it.top - s0.top }, s0.bottom - inkBottom, l.height, l.systems.size, collisions(l))
     }
 
-    private fun cases(): List<Pair<String, ScoreLayout>> {
+    /** [compact]: Kompaktmodus des Editors (READ-Stil, nur TAB, ohne Eingaberaster; ebenfalls mit Chips gezeichnet). */
+    private fun cases(compact: Boolean = false): List<Pair<String, ScoreLayout>> {
         val fixtures = listOf("Standard leer" to ProjectFactory(ids).create("Leer"), "Standard + Noten" to standard(false), "Standard + Bends/Bögen" to standard(true),
             "Demo" to demo(), "Demo + Noten" to demoWithNotes())
-        return fixtures.flatMap { (name, p) -> listOf(null, 360f, 411f).map { w -> "$name @${w?.toInt() ?: "∞"}" to editorLayout(p, w) } }
+        return fixtures.flatMap { (name, p) -> listOf(null, 360f, 411f).map { w ->
+            "$name${if (compact) " kompakt" else ""} @${w?.toInt() ?: "∞"}" to (if (compact) compactLayout(p, w) else editorLayout(p, w))
+        } }
     }
+    private fun compactLayout(p: Project, width: Float?) =
+        ScoreLayouter.layout(LayoutRequest(p, 0, LayoutStyle.READ.copy(showTab = true, showStandard = false), width, null, 0, null, margin = editorMargin))
 
     @Test fun measureTheScoreHeader() {
         val ms = cases().map { (name, l) -> measure(name, l) }
@@ -169,13 +174,13 @@ class Qa20ScoreHeaderLayoutTest {
 
     /** (1) Kopf-Labels überlappen weder einander noch Bünde, Bögen, Bends, Effekte oder die Taktangabe. */
     @Test fun headerLabelsDoNotCollide() {
-        val failures = cases().flatMap { (name, l) -> collisions(l).map { "$name: $it" } }
+        val failures = (cases() + cases(compact = true)).flatMap { (name, l) -> collisions(l).map { "$name: $it" } }
         assertTrue("${failures.size} Kollisionen:\n" + failures.joinToString("\n"), failures.isEmpty())
     }
 
     /** Nichts wird oben abgeschnitten: alle Tinte liegt im Layout und im Band ihres Systems (Bögen/Bends über der hohen Saite). */
     @Test fun nothingLeavesTheTopOfItsSystem() {
-        for ((name, l) in cases()) for (b in boxes(l)) {
+        for ((name, l) in cases() + cases(compact = true)) for (b in boxes(l)) {
             assertTrue("$name: ${b.what} bei y=${b.y0} über dem Layout", b.y0 >= 0f)
             val s = l.systems.first { (b.y0 + b.y1) / 2 >= it.top && (b.y0 + b.y1) / 2 < it.bottom || it.index == l.systems.lastIndex }
             assertTrue("$name: ${b.what} bei y=${b.y0} über System ${s.index} (top ${s.top})", b.y0 >= s.top - 0.01f)
@@ -197,20 +202,25 @@ class Qa20ScoreHeaderLayoutTest {
     /**
      * (2b) Systemabstand nur so groß wie der Inhalt: unter dem Rhythmus (Hälse/Balken bei tabBottom + 31,2, Triolenziffern
      * bis + 42,7) blieben vorher 35,0 (ohne Triolen) bzw. 23,7 Einheiten bis zum Systemende (Rhythmusspur pauschal 40,4 +
-     * Abstand 26). Jetzt Rhythmus nach Inhalt + 14: Luft unten ≤ 15, System ohne Kopf-Kollision ≤ 184 (vorher 210,4).
+     * Abstand 26). Jetzt Rhythmus nach Inhalt + 14: Luft unten ≤ 15; Systemhöhen je Takt (umbrochen ein Takt pro System)
+     * mindestens 15 Einheiten kleiner als vorher, auch dort, wo Bünde unter „Riff A“/„Riff B“ die TAB etwas tiefer setzen.
      */
     @Test fun systemPitchFollowsTheContent() {
+        // Takt → Höhe vorher (Messung vor der Änderung, Journal Zyklus 20): 1 Bünde unter Abschnitt/Tempo, 2 Palm-Mute-Zeile, 3 wie 1, 4 Triolen.
+        val before = listOf(210.4f, 221.2f, 210.4f, 210.4f)
         for (w in listOf("360", "411")) {
             val l = layoutOf("Standard + Noten @$w")
+            assertEquals("ein Takt pro System", 4, l.systems.size)
             for (s in l.systems) {
                 val air = s.bottom - inkBottom(l, s)
-                assertTrue("@$w System ${s.index}: Luft unten $air (vorher 35,0)", air <= 15f)
-                assertTrue("@$w System ${s.index}: Höhe ${s.bottom - s.top} (vorher 210,4)", s.bottom - s.top <= 193f)
+                assertTrue("@$w System ${s.index}: Luft unten $air (vorher 35,0 bzw. 23,7 mit Triolen)", air <= 15f)
+                val bar = l.measures.single { it.system == s.index }.index
+                assertTrue("@$w Takt ${bar + 1}: Höhe ${s.bottom - s.top}, vorher ${before[bar]}", s.bottom - s.top <= before[bar] - 15f)
             }
-            val plain = l.systems.filter { s -> l.measures.filter { it.system == s.index }.all { it.index == 1 || it.index == 3 } } // Takte ohne Abschnitt/Tempo
-            assertTrue(plain.isNotEmpty())
-            for (s in plain) assertTrue("@$w System ${s.index}: Höhe ${s.bottom - s.top}, erwartet ≤ 184 (vorher 210,4)", s.bottom - s.top <= 184f)
         }
+        // Leeres Standardprojekt (Systemhöhe ohne Inhalt): vorher 210,4.
+        val empty = layoutOf("Standard leer @∞").systems[0]
+        assertTrue("Standard leer: Systemhöhe ${empty.bottom - empty.top} (vorher 210,4)", empty.bottom - empty.top <= 184f)
         // Ohne Umbruch (Standardansicht im Editor): 7-saitiges Demo vorher 246,4 Einheiten hoch.
         val demo = layoutOf("Demo @∞")
         assertTrue("Demo @∞: Layouthöhe ${demo.height} (vorher 246,4)", demo.height <= 222f)

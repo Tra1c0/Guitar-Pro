@@ -27,10 +27,30 @@ internal object BeamGroups {
 
 /** GP-style rhythm under the TAB staff: stems down, beams, flags, dots, rests and tuplet numbers. */
 internal object Rhythm {
+    private const val STEM = 20f
+    /** Tuplet number baselines below the stem ends (outer number, nested inner number) and their sizes. */
+    private const val TUPLET_Y = 10f
+    private const val TUPLET_SIZE = 8.5f
+    private const val NESTED_Y = 9f
+    private const val NESTED_SIZE = 8f
+
+    /**
+     * Depth of the rhythm ink below the lowest TAB string: stems and beams always (also for empty bars, so the first note
+     * does not move the next system), tuplet numbers only where the [bars] hold tuplets.
+     */
+    fun extent(style: LayoutStyle, bars: List<Bar>): Float {
+        val stemEnd = style.tabLine * 0.45f + STEM
+        var depth = stemEnd + 0.4f // beam: bottom - 2.2, 2.6 high
+        val beats = bars.asSequence().flatMap { it.voices }.flatMap { it.beats }
+        if (beats.any { it.duration.tuplets.isNotEmpty() }) depth = maxOf(depth, stemEnd + TUPLET_Y + TUPLET_SIZE * ScoreLayouter.DESCENT)
+        if (beats.any { it.duration.tuplets.size > 1 }) depth = maxOf(depth, stemEnd + TUPLET_Y + NESTED_Y + NESTED_SIZE * ScoreLayouter.DESCENT)
+        return depth
+    }
+
     fun draw(b: ScoreLayouter.Builder, sys: SystemBox, measure: Measure, v: Voice, ink: Ink, xFor: (Fraction) -> Float) {
         val style = b.styleOf()
         val top = sys.tabBottom + style.tabLine * 0.45f
-        val stem = 20f
+        val stem = STEM
         val bottom = top + stem
         val beats = v.beats.sortedBy { it.offset }
         // Rests and unbeamable notes first; beamable runs by beat group.
@@ -66,7 +86,7 @@ internal object Rhythm {
                 }
             }
         }
-        tuplets(b, beats, xFor, bottom + 10f, ink)
+        tuplets(b, beats, xFor, bottom + TUPLET_Y, ink)
     }
 
     fun dots(b: ScoreLayouter.Builder, x: Float, y: Float, d: WrittenDuration, ink: Ink) {
@@ -103,8 +123,8 @@ internal object Rhythm {
             while (e < beats.size && beats[e].duration.tuplets == t) { total += Fraction.of(1, beats[e].duration.denominator.toLong()) * Fraction.of(1, 1); if (total >= target) break; e++ }
             val last = e.coerceAtMost(beats.lastIndex)
             val x0 = xFor(beats[k].offset); val x1 = xFor(beats[last].offset)
-            b.add(TextGlyph((x0 + x1) / 2, y, "${t.last().actual}", 8.5f, ink, italic = true, bold = true))
-            if (t.size > 1) b.add(TextGlyph((x0 + x1) / 2, y + 9f, "${t.first().actual}", 8f, ink, italic = true))
+            b.add(TextGlyph((x0 + x1) / 2, y, "${t.last().actual}", TUPLET_SIZE, ink, italic = true, bold = true))
+            if (t.size > 1) b.add(TextGlyph((x0 + x1) / 2, y + NESTED_Y, "${t.first().actual}", NESTED_SIZE, ink, italic = true))
             k = last + 1
         }
     }

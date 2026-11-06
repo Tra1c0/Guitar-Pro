@@ -17,15 +17,22 @@ data class LayoutStyle(
     val showStandard: Boolean = false,
     val rhythmInTab: Boolean = true,
     val measurePadding: Float = 10f,
+    /** Space below systems without rhythm in the TAB (standard staff, TAB + standard), which may also hold stems and ties. */
     val systemGap: Float = 26f,
     /** Staff and string line width. The editor draws them heavier on the dark surface; READ (pages, SVG, PDF) keeps the fine 0.8. */
     val lineWidth: Float = 1.2f,
-    /** Height of the top lane (bar number, section, tempo, endings) above the staves. */
+    /**
+     * Minimum height of the top lane (bar number, section, tempo, endings, jump marks) above the staves. A TAB-only system
+     * without effect rows starts its top string right below the lane and moves it down only as far as the ink above the top
+     * string (fret chips, arcs, bends) needs where it meets a lane label (QA 20 / Partitur-Kopf).
+     */
     val numberLane: Float = 18f,
+    /** TAB with rhythm: space between the lowest rhythm ink (stems, beams, tuplet numbers) and the next system. */
+    val inkGap: Float = 14f,
 ) {
     companion object {
         val EDIT = LayoutStyle()
-        val READ = LayoutStyle(tabLine = 13f, staffSpace = 7f, fretText = 10.5f, column16 = 19f, measurePadding = 8f, systemGap = 20f, lineWidth = 0.8f, numberLane = 22f)
+        val READ = LayoutStyle(tabLine = 13f, staffSpace = 7f, fretText = 10.5f, column16 = 19f, measurePadding = 8f, systemGap = 20f, lineWidth = 0.8f, numberLane = 22f, inkGap = 12f)
     }
 }
 
@@ -353,6 +360,8 @@ object ScoreLayouter {
         fun drawSystem(si: Int, list: List<MeasureSpec>, top: Float, header: Float): Float {
             val laneTop = top
             var y = top + style.numberLane // measure numbers, sections, tempo, endings
+            // Bend headroom only in systems that hold a bend or whammy (it was reserved in every system of the track).
+            headroom = if (list.any { s -> s.bar?.voices?.any { v -> v.beats.any { bt -> bt.notes.any { n -> n.articulations.any { it is Articulation.Bend || it is Articulation.Whammy } } } } == true }) style.fretText * 1.8f else 0f
             val staffTop: Float; val staffBottom: Float
             if (showStandard) {
                 val (low, high) = Standard.range(this, list.mapNotNull { it.bar })
@@ -364,12 +373,14 @@ object ScoreLayouter {
             rows = effectRows(list)
             val effectsLane = if (showTab) rows.total * style.fretText * 0.72f + style.fretText * 0.4f + bendHeadroom() else 0f
             y += effectsLane
+            // TAB on top without effect rows: the top string sits right under the lane unless ink above it meets a label.
+            if (showTab && !showStandard && rows.total == 0) y = top + topLead(list)
             val tabTop = y
             val tabBottom = if (showTab) y + (strings - 1) * style.tabLine else y
             val stringY = if (showTab) FloatArray(strings) { s -> tabBottom - s * style.tabLine } else FloatArray(0)
             y = tabBottom
-            if (rhythmInTab) y += style.tabLine * 0.6f + 26f
-            y += style.systemGap
+            // Rhythm under the TAB: as deep as its ink (stems, beams, tuplet numbers), then the gap to the next system.
+            y += if (rhythmInTab) Rhythm.extent(style, list.mapNotNull { it.bar }) + style.inkGap else style.systemGap
             val x0 = r.margin; val x1 = list.last().x + list.last().width
             val system = SystemBox(si, laneTop, y, x0, x1, staffTop, staffBottom, tabTop, tabBottom, stringY)
             systems += system
@@ -420,11 +431,124 @@ object ScoreLayouter {
             }
             return labels.distinct()
         }
-        private val headroom: Float by lazy {
-            val anyBend = staff?.bars?.any { b -> b.voices.any { v -> v.beats.any { bt -> bt.notes.any { n -> n.articulations.any { it is Articulation.Bend || it is Articulation.Whammy } } } } } == true
-            if (anyBend) style.fretText * 1.8f else 0f
-        }
+        /** Bend headroom of the system being drawn (set by [drawSystem]). */
+        private var headroom = 0f
         fun bendHeadroom(): Float = headroom
+
+        // ---------------------------------------------------------------- top lane geometry
+        /** Horizontal extent of one top-lane item and its lowest ink below the system top. */
+        class LaneSpan(val x0: Float, val x1: Float, val bottom: Float)
+        /** Horizontal extent of ink above the top TAB string and how far it rises above the top string line. */
+        class AboveSpan(val x0: Float, val x1: Float, val rise: Float)
+
+        /**
+         * Distance from the system top to the top TAB string for a TAB-only system without effect rows: at least the lane,
+         * every item above the top string stays inside the system, and where such an item lies under a lane label (same x)
+         * the string moves down until the item clears the label by [LABEL_CLEAR].
+         */
+        fun topLead(list: List<MeasureSpec>): Float {
+            val lanes = list.flatMap { lane(it, 0f, 0f, emit = false) }
+            var lead = max(style.numberLane, (lanes.maxOfOrNull { it.bottom } ?: 0f) + LANE_AIR)
+            for (a in list.flatMap { aboveTab(it) }) {
+                lead = max(lead, a.rise + 1f)
+                for (l in lanes) if (a.x0 < l.x1 && l.x0 < a.x1) lead = max(lead, l.bottom + LABEL_CLEAR + a.rise)
+            }
+            return lead
+        }
+
+        /**
+         * Top lane of a bar (number, section, tempo, endings, jump marks) at [top]; draws it when [emit] and returns the
+         * extent of each item. [hookEnd]: lowest y of the ending bracket's hook (just above the first staff line).
+         */
+        fun lane(s: MeasureSpec, top: Float, hookEnd: Float, emit: Boolean): List<LaneSpan> {
+            val m = s.measure
+            val right = s.x + s.width
+            val spans = ArrayList<LaneSpan>(4)
+            val number = "${s.index + 1}"
+            if (emit) glyphs += TextGlyph(s.x + 3f, top + 9f, number, 8.5f, Ink.MUTED, Align.START)
+            spans += LaneSpan(s.x + 3f, s.x + 3f + TextMetrics.width(number, 8.5f), 9f + 8.5f * DESCENT)
+            var laneX = s.x + 16f
+            sectionByMeasure[m.id]?.let { sec ->
+                val w = TextMetrics.width(sec.label, 10f, true) + 10f
+                if (emit) {
+                    glyphs += RectGlyph(laneX, top + 1f, w, 14f, Ink.SECTION, fill = true, radius = 3f)
+                    glyphs += TextGlyph(laneX + w / 2, top + 11.5f, sec.label, 10f, Ink.ON_SECTION, bold = true)
+                }
+                spans += LaneSpan(laneX, laneX + w, 15f)
+                laneX += w + 6f
+            }
+            tempoByMeasure[m.id]?.forEach { t ->
+                val tx = if (t.position.offset == Fraction.ZERO) laneX else (xFor(s, t.position.offset) - 8f)
+                val text = "♩ = ${formatBpm(t.quarterNotesPerMinute)}"
+                if (emit) glyphs += TextGlyph(tx, top + 11f, text, 9.5f, Ink.TEXT, Align.START, bold = true)
+                val w = TextMetrics.width(text, 9.5f, true)
+                spans += LaneSpan(tx, tx + w, 11f + 9.5f * DESCENT)
+                laneX = tx + w + 6f
+            }
+            if (m.repeat.alternateEndings.isNotEmpty()) {
+                val y = top + 17f
+                val label = m.repeat.alternateEndings.sorted().joinToString(", ") + "."
+                if (emit) {
+                    glyphs += LineGlyph(s.x + 2f, y, right - 3f, y, 1f, Ink.TEXT)
+                    glyphs += LineGlyph(s.x + 2f, y, s.x + 2f, max(y + 1f, min(y + 6f, hookEnd)), 1f, Ink.TEXT)
+                    glyphs += TextGlyph(laneX, y - 2f, label, 9f, Ink.TEXT, Align.START, bold = true)
+                }
+                spans += LaneSpan(s.x + 1.5f, right - 2.5f, 17.5f)
+                laneX += TextMetrics.width(label, 9f, true) + 6f
+            }
+            var endX = right - 4f
+            m.navigation.forEach { nav ->
+                val label = when (nav.kind) { NavigationKind.DA_CAPO -> "D.C."; NavigationKind.DAL_SEGNO -> "D.S."; NavigationKind.SEGNO -> "Segno"; NavigationKind.TO_CODA -> "To Coda"; NavigationKind.CODA -> "Coda"; NavigationKind.FINE -> "Fine" }
+                val atEnd = nav.kind == NavigationKind.DA_CAPO || nav.kind == NavigationKind.DAL_SEGNO || nav.kind == NavigationKind.TO_CODA || nav.kind == NavigationKind.FINE
+                // Several marks in one bar: start marks continue the lane to the right, end marks stack leftwards from the barline.
+                val tw = TextMetrics.width(label, 9.5f, true)
+                val w = tw + 6f
+                val x = if (atEnd) endX else laneX
+                if (emit) glyphs += TextGlyph(x, top + 11f, label, 9.5f, Ink.ACCENT, if (atEnd) Align.END else Align.START, bold = true, italic = true)
+                spans += if (atEnd) LaneSpan(x - tw, x, 11f + 9.5f * DESCENT) else LaneSpan(x, x + tw, 11f + 9.5f * DESCENT)
+                if (atEnd) endX -= w else laneX += w
+            }
+            return spans
+        }
+
+        /**
+         * Ink of a bar that rises above the top TAB string, mirroring the drawing code: fret chips on the top string
+         * (GlyphPainter: 1.34 × size high, at least as wide as high), arcs with their H/P/sl. labels, bends with their
+         * amount labels and the repeat count. Effect rows are not included (systems with effect rows keep their lane).
+         */
+        fun aboveTab(s: MeasureSpec): List<AboveSpan> {
+            if (!showTab || strings == 0) return emptyList()
+            val out = ArrayList<AboveSpan>()
+            val bar = s.bar
+            if (bar != null) for (v in bar.voices) for (b in v.beats) {
+                val x = xFor(s, b.offset)
+                for (n in b.notes) {
+                    val string = n.string ?: continue
+                    if (string !in 0 until strings) continue
+                    val depth = (strings - 1 - string) * style.tabLine // top string line down to this string
+                    val (label, size) = fretText(n)
+                    val w = TextMetrics.width(label, size, true)
+                    val cw = max(w + size * 0.6f, size * 1.34f)
+                    if (size * 0.67f - depth > 0f) out += AboveSpan(x - cw / 2, x + cw / 2, size * 0.67f - depth)
+                    for ((nx, arcLabel) in arcsOf(s, v, b, n)) {
+                        val rise = style.tabLine * 0.45f + style.tabLine * 0.28f + (if (arcLabel != null) 2f + style.fretText * 0.55f * ASCENT else 0f) - depth
+                        if (rise > 0f) out += AboveSpan(x + 3f, nx - 3f, rise)
+                    }
+                    bendSpan(n, b, s, x)?.let { (startX, w2) ->
+                        val whammy = n.articulations.none { it is Articulation.Bend }
+                        val rise = style.fretText * 1.3f + max(6f + style.fretText * 0.6f * ASCENT, if (whammy) 4f + style.fretText * 0.55f * ASCENT else 0f)
+                        val x1 = max(startX + w2 + 11f, if (whammy) startX + TextMetrics.width("w/bar", style.fretText * 0.55f) else 0f)
+                        out += AboveSpan(startX - 10f, x1, rise)
+                    }
+                }
+            }
+            val count = s.measure.repeat.endCount
+            if (count != null && count > 2) {
+                val right = s.x + s.width
+                out += AboveSpan(right - 6f - TextMetrics.width("×$count", 10f, true), right - 6f, 4f + 10f * ASCENT)
+            }
+            return out
+        }
 
         // ---------------------------------------------------------------- measures
         fun drawMeasure(sys: SystemBox, s: MeasureSpec, first: Boolean, effectsTop: Float) {
@@ -447,36 +571,7 @@ object ScoreLayouter {
                 repeatDots(x + 9f, sys)
             }
             // Top lane: number, section, tempo, endings, navigation
-            glyphs += TextGlyph(s.x + 3f, sys.top + 9f, "${s.index + 1}", 8.5f, Ink.MUTED, Align.START)
-            var laneX = s.x + 16f
-            sectionByMeasure[m.id]?.let { sec ->
-                val w = TextMetrics.width(sec.label, 10f, true) + 10f
-                glyphs += RectGlyph(laneX, sys.top + 1f, w, 14f, Ink.SECTION, fill = true, radius = 3f)
-                glyphs += TextGlyph(laneX + w / 2, sys.top + 11.5f, sec.label, 10f, Ink.ON_SECTION, bold = true)
-                laneX += w + 6f
-            }
-            tempoByMeasure[m.id]?.forEach { t ->
-                val tx = if (t.position.offset == Fraction.ZERO) laneX else (xFor(s, t.position.offset) - 8f)
-                glyphs += TextGlyph(tx, sys.top + 11f, "♩ = ${formatBpm(t.quarterNotesPerMinute)}", 9.5f, Ink.TEXT, Align.START, bold = true)
-                laneX = tx + TextMetrics.width("♩ = ${formatBpm(t.quarterNotesPerMinute)}", 9.5f, true) + 6f
-            }
-            if (m.repeat.alternateEndings.isNotEmpty()) {
-                val y = sys.top + 17f
-                glyphs += LineGlyph(s.x + 2f, y, right - 3f, y, 1f, Ink.TEXT)
-                glyphs += LineGlyph(s.x + 2f, y, s.x + 2f, y + 6f, 1f, Ink.TEXT)
-                val label = m.repeat.alternateEndings.sorted().joinToString(", ") + "."
-                glyphs += TextGlyph(laneX, y - 2f, label, 9f, Ink.TEXT, Align.START, bold = true)
-                laneX += TextMetrics.width(label, 9f, true) + 6f
-            }
-            var endX = right - 4f
-            m.navigation.forEach { nav ->
-                val label = when (nav.kind) { NavigationKind.DA_CAPO -> "D.C."; NavigationKind.DAL_SEGNO -> "D.S."; NavigationKind.SEGNO -> "Segno"; NavigationKind.TO_CODA -> "To Coda"; NavigationKind.CODA -> "Coda"; NavigationKind.FINE -> "Fine" }
-                val atEnd = nav.kind == NavigationKind.DA_CAPO || nav.kind == NavigationKind.DAL_SEGNO || nav.kind == NavigationKind.TO_CODA || nav.kind == NavigationKind.FINE
-                // Several marks in one bar: start marks continue the lane to the right, end marks stack leftwards from the barline.
-                val w = TextMetrics.width(label, 9.5f, true) + 6f
-                glyphs += TextGlyph(if (atEnd) endX else laneX, sys.top + 11f, label, 9.5f, Ink.ACCENT, if (atEnd) Align.END else Align.START, bold = true, italic = true)
-                if (atEnd) endX -= w else laneX += w
-            }
+            lane(s, sys.top, (if (showStandard) sys.staffTop else sys.tabTop) - 1f, emit = true)
             // Time signature
             val showTime = s.showTime || first
             if (showTime) {
@@ -546,8 +641,7 @@ object ScoreLayouter {
                 if (string !in 0 until strings) continue
                 val y = sys.stringY[string]
                 val tiedTarget = isTieTarget(n)
-                val label = if (tiedTarget) "(${n.fret})" else fretLabel(n)
-                val size = if (tiedTarget) style.fretText * 0.8f else style.fretText
+                val (label, size) = fretText(n)
                 glyphs += TextGlyph(x, y + size * 0.36f, label, size, if (tiedTarget) Ink.MUTED else ink, halo = true, bold = !tiedTarget,
                     chip = if (tiedTarget) -1 else strings - 1 - string, chipOutline = label == "x")
                 val w = TextMetrics.width(label, size, true) + 4f
@@ -572,6 +666,8 @@ object ScoreLayouter {
             }
         }
 
+        /** Fret label and text size as drawn in the TAB: tie targets are smaller and in parentheses. */
+        fun fretText(n: Note): Pair<String, Float> = if (isTieTarget(n)) "(${n.fret})" to style.fretText * 0.8f else fretLabel(n) to style.fretText
         fun isTieTarget(n: Note): Boolean = tieTargets.contains(n.id)
         val tieTargets: Set<EntityId> by lazy { staff?.bars?.flatMap { b -> b.voices.flatMap { v -> v.beats.flatMap { bt -> bt.notes.flatMap { it.links.filter { l -> l.kind == LinkKind.TIE }.map { l -> l.target } } } } }.orEmpty().toSet() }
 
@@ -593,7 +689,6 @@ object ScoreLayouter {
                     SlideKind.SHIFT, SlideKind.LEGATO -> if (nx != null && next != null) {
                         val up = next.third.pitch.midiNumber > n.pitch.midiNumber
                         glyphs += LineGlyph(x + halfText, y + if (up) d else -d, nx - halfText, y + if (up) -d else d, 1.3f, ink)
-                        if (slide.kind == SlideKind.LEGATO) arc(x, nx, y - style.tabLine * 0.45f, ink, "sl.")
                     }
                     SlideKind.INTO_FROM_BELOW -> glyphs += LineGlyph(x - halfText - 10f, y + d * 2, x - halfText, y, 1.3f, ink)
                     SlideKind.INTO_FROM_ABOVE -> glyphs += LineGlyph(x - halfText - 10f, y - d * 2, x - halfText, y, 1.3f, ink)
@@ -601,12 +696,24 @@ object ScoreLayouter {
                     SlideKind.OUT_UP -> glyphs += LineGlyph(x + halfText, y, x + halfText + 12f, y - d * 2, 1.3f, ink)
                 }
             }
-            val hammer = Articulation.Mark(NoteMark.HAMMER_ON) in n.articulations || Articulation.Mark(NoteMark.PULL_OFF) in n.articulations || n.links.any { it.kind == LinkKind.HAMMER_ON || it.kind == LinkKind.PULL_OFF }
-            if (hammer && nx != null && next != null) arc(x, nx, y - style.tabLine * 0.45f, ink, if (next.third.pitch.midiNumber >= n.pitch.midiNumber) "H" else "P")
-            if (n.links.any { it.kind == LinkKind.SLUR } && nx != null) arc(x, nx, y - style.tabLine * 0.45f, ink, null)
+            for ((ax, label) in arcsOf(s, v, b, n)) arc(x, ax, y - style.tabLine * 0.45f, ink, label)
             n.links.firstOrNull { it.kind == LinkKind.TIE }?.let { tie ->
                 pendingTies += PendingTie(tie.target, x + halfText - 2f, y + style.tabLine * 0.42f, sys.index, sys.x1, style.tabLine * 0.28f, Ink.MUTED, standard = false)
             }
+        }
+
+        /** Arcs above a note to the next note on its string in the bar: legato slide (sl.), hammer-on/pull-off (H/P), slur. End x and label. */
+        fun arcsOf(s: MeasureSpec, v: Voice, b: Beat, n: Note): List<Pair<Float, String?>> {
+            val string = n.string ?: return emptyList()
+            val next = nextOnString(s, v, b, string) ?: return emptyList()
+            if (next.first !== s) return emptyList()
+            val nx = xFor(s, next.second.offset)
+            val out = ArrayList<Pair<Float, String?>>(1)
+            if (n.articulations.filterIsInstance<Articulation.Slide>().firstOrNull()?.kind == SlideKind.LEGATO) out += nx to "sl."
+            val hammer = Articulation.Mark(NoteMark.HAMMER_ON) in n.articulations || Articulation.Mark(NoteMark.PULL_OFF) in n.articulations || n.links.any { it.kind == LinkKind.HAMMER_ON || it.kind == LinkKind.PULL_OFF }
+            if (hammer) out += nx to if (next.third.pitch.midiNumber >= n.pitch.midiNumber) "H" else "P"
+            if (n.links.any { it.kind == LinkKind.SLUR }) out += nx to null
+            return out
         }
 
         fun arc(x0: Float, x1: Float, y: Float, ink: Ink, label: String?, down: Boolean = false) {
@@ -620,9 +727,7 @@ object ScoreLayouter {
             val bend = n.articulations.filterIsInstance<Articulation.Bend>().firstOrNull()
             val whammy = n.articulations.filterIsInstance<Articulation.Whammy>().firstOrNull()
             val points = bend?.points ?: whammy?.points ?: return
-            if (points.isEmpty()) return
-            val startX = x + TextMetrics.width(fretLabel(n), style.fretText, true) / 2 + 1f
-            val w = max(style.fretText * 1.6f, xFor(s, b.offset + b.duration.length()) - x - 6f).coerceAtMost(style.column16 * 4f)
+            val (startX, w) = bendSpan(n, b, s, x) ?: return
             val topY = sys.tabTop - style.fretText * 1.3f
             val maxCents = points.maxOf { abs(it.cents) }.coerceAtLeast(1)
             // Dives go below the string, but only as far as the system has room (nothing is reserved below the TAB).
@@ -644,6 +749,14 @@ object ScoreLayouter {
                 px = nxp; pyv = npy
             }
             if (whammy != null) glyphs += TextGlyph(startX, topY - 4f, "w/bar", style.fretText * 0.55f, ink, Align.START, italic = true)
+        }
+        /** Start x and width of the bend/whammy curve of [n] at [x], null without curve points. */
+        fun bendSpan(n: Note, b: Beat, s: MeasureSpec, x: Float): Pair<Float, Float>? {
+            val points = n.articulations.filterIsInstance<Articulation.Bend>().firstOrNull()?.points ?: n.articulations.filterIsInstance<Articulation.Whammy>().firstOrNull()?.points ?: return null
+            if (points.isEmpty()) return null
+            val startX = x + TextMetrics.width(fretLabel(n), style.fretText, true) / 2 + 1f
+            val w = max(style.fretText * 1.6f, xFor(s, b.offset + b.duration.length()) - x - 6f).coerceAtMost(style.column16 * 4f)
+            return startX to w
         }
         fun arrow(x: Float, y: Float, up: Boolean, ink: Ink) {
             val d = if (up) 4f else -4f
@@ -706,6 +819,14 @@ object ScoreLayouter {
             glyphs += pb.build(ink, false, 1.1f)
         }
     }
+
+    /** Air between the lowest lane label and the top staff line when nothing above the staff meets a label. */
+    internal const val LANE_AIR = 3f
+    /** Clearance between a lane label and ink rising above the top TAB string below it. */
+    internal const val LABEL_CLEAR = 2f
+    /** Text ascent/descent as fractions of the size (same estimate as the layout property tests). */
+    internal const val ASCENT = 0.78f
+    internal const val DESCENT = 0.22f
 
     fun formatBpm(bpm: Double): String = if (abs(bpm - bpm.toLong()) < 0.01) bpm.toLong().toString() else ((bpm * 10).toLong() / 10.0).toString()
 }
