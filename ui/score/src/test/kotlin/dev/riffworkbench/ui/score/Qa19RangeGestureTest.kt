@@ -30,7 +30,9 @@ import org.robolectric.annotation.Config
  * Haptik (LongPress / TextHandleMove) wird hier nicht gemessen (Gerätetest offen).
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [35])
+// Robolectric's default window is 320 × 470 dp: Modifier.size(600.dp, 1200.dp) is clamped to it, and the bar centres
+// (x ≈ 321 dp, rows at y ≈ 90/300/511/721 dp) fall outside the node, so their touches never arrive (first CI run red).
+@Config(sdk = [35], qualifiers = "w700dp-h1300dp")
 class Qa19RangeGestureTest {
     @get:Rule val compose = createComposeRule()
     private var seq = 0

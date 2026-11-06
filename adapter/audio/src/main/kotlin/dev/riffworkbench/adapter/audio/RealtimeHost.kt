@@ -93,6 +93,12 @@ class RealtimeHost(
     @Volatile private var programs = 0L
     /** Play commands consumed (applied by the render thread, or dropped by [start] with a dead session's queue). */
     @Volatile private var plays = 0L
+    /**
+     * [plays] as of the end of the newest rendered block, published after [lastFlags]: the render thread counts a Play when
+     * it drains the queue but sets "playing" only at the block end, so a snapshot that read the live count mid-block saw
+     * "Play consumed, not playing" and the transport downgraded PLAYING to PAUSED for a poll (follow off, view jumps).
+     */
+    @Volatile private var playsRendered = 0L
     /** Seek commands applied by the render thread; [snapshot] reports the count as of the presented block (see [ringSeeks]). */
     @Volatile private var seeks = 0L
     private var idleBlocks = 0L
@@ -136,6 +142,7 @@ class RealtimeHost(
                 is HostCommand.Preview -> Unit
                 else -> commands.add(c)
             }
+            playsRendered = plays   // dropped Plays are answered too (EngineTransport re-posts them)
             running = true
         }
         val session = ++generation
@@ -231,6 +238,7 @@ class RealtimeHost(
         lastFlags = (if (e.playing) 1 else 0) or (if (e.countingIn) 2 else 0) or (if (e.ended) 4 else 0)
         lastPlan = e.position
         loops = e.loopsCompleted
+        playsRendered = plays
         val accepted = s.write(buffer, frames)
         written += accepted
         idleBlocks = if (e.playing || e.countingIn || e.voicesInUse > 0) 0 else idleBlocks + 1
@@ -260,9 +268,11 @@ class RealtimeHost(
 
     /** Playhead from the newest block that has already reached the speaker. */
     fun snapshot(): HostSnapshot {
+        // Read the consumed-Play count before the block flags (both written at the block end, count last).
+        val consumed = playsRendered
         val f = format
         val count = blocks
-        if (f == null || count == 0L) return HostSnapshot(false, false, false, lastPlan, loops, 0, running, programs, plays, seeks)
+        if (f == null || count == 0L) return HostSnapshot(false, false, false, lastPlan, loops, 0, running, programs, consumed, seeks)
         val presented = sink?.presentedFrame() ?: (written - f.latencyFrames).coerceAtLeast(0)
         var i = count - 1
         val oldest = maxOf(0L, count - ringSize + 8)
@@ -272,6 +282,6 @@ class RealtimeHost(
         val playing = flags and 1 != 0 && flags and 2 == 0
         val within = (presented - ringSink[slot]).coerceIn(0, f.blockFrames.toLong())
         val plan = ringPlan[slot] + if (playing) within else 0
-        return HostSnapshot(lastFlags and 1 != 0, flags and 2 != 0, lastFlags and 4 != 0, plan, loops, sink?.underruns() ?: 0, running, ringPrograms[slot], plays, ringSeeks[slot])
+        return HostSnapshot(lastFlags and 1 != 0, flags and 2 != 0, lastFlags and 4 != 0, plan, loops, sink?.underruns() ?: 0, running, ringPrograms[slot], consumed, ringSeeks[slot])
     }
 }

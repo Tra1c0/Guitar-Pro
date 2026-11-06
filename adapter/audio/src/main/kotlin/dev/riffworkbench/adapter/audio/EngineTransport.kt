@@ -283,8 +283,10 @@ class EngineTransport(
             restartFromTop = false
             atEnd = false
             halted = null
-            starting = true; startingSince = System.nanoTime()
-            postedPlays++; val live = host.post(HostCommand.Play(from, countIn, clicks))
+            // Count and timestamp first: a poll that sees `starting` must also see both (all volatile), or it ends the start phase
+            // at once (stale count, or the 1-s timeout measured from the previous start) and downgrades PLAYING to PAUSED.
+            postedPlays++; startingSince = System.nanoTime(); starting = true
+            val live = host.post(HostCommand.Play(from, countIn, clicks))
             place(mutable.value.copy(sample = SamplePosition(from, current.sampleRate), position = current.positionAt(from)))
             trainerPasses = 0; lastLoops = snap.loopsCompleted
             publish(TransportStatus.PLAYING, null)
@@ -303,8 +305,8 @@ class EngineTransport(
                 val (countIn2, clicks2) = countIn(again, target)
                 synchronized(haltLock) {
                     if (haltEpoch != epoch) return@withLock Outcome.Success(Unit)
-                    starting = true; startingSince = System.nanoTime()
-                    postedPlays++; host.post(HostCommand.Play(target, countIn2, clicks2))
+                    postedPlays++; startingSince = System.nanoTime(); starting = true
+                    host.post(HostCommand.Play(target, countIn2, clicks2))
                     place(mutable.value.copy(sample = SamplePosition(target, again.sampleRate), position = again.positionAt(target)))
                     publish(TransportStatus.PLAYING, null)
                 }
