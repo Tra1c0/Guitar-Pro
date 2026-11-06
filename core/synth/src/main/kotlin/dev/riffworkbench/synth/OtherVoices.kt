@@ -46,7 +46,11 @@ internal class DrumVoice(private val sampleRate: Int) {
         bp.reset(); hp.reset(); bp2.reset()
         for (i in phase.indices) phase[i] = 0.0
         val v = note.velocity.coerceIn(1, 127) / 127f
-        gain = (v.toDouble().pow(1.3) * note.elementGain).toFloat() * 0.8f
+        // Kit trim (QA 19, measured at 48 kHz, factory mix, master before the limiter): 0.8 put a v96 groove with v127
+        // accents at -0.4 dBFS (voice sum +8.3 dBFS into the drum compressor) and kept the master
+        // limiter of a standard band busy 4.7 % of the time. 0.5 (-4.1 dB) with the preset compressor unchanged: groove
+        // -4.5 dBFS peak for -1.4 dB RMS (less squash), every element <= -6 dBFS at v127, limiter idle (Qa19DrumLevelTest).
+        gain = (v.toDouble().pow(1.3) * note.elementGain).toFloat() * 0.5f
         pan = note.elementPan.toFloat()
         amp = 1f; pitchEnv = 1f; noiseEnv = 1f; clickLeft = 0
         bodyLevel = 0f; noiseLevel = 0f; metalLevel = 0f
