@@ -39,7 +39,7 @@ Branch: `ccr-0b650dff-jnhups-qa`, per Fast-Forward gespiegelt nach `ccr-0b650dff
 - [ ] Referenz-Clips nur im Mix, nicht als eigener Stem (mit Clips summieren sich Stems nicht zum Mix); `EngineTransport.render` (UI nutzt `renderTo`) übergibt keine Clips
 - [ ] Dauerzeile auf 320-dp-Geräten effektiv 37,75 dp (außerhalb der Prüfmatrix); Bei Schrift 2,0 verkleinert die Hinweiszeile den Editor stark
 - [ ] Langer Hall endet im Export hart nach 2 s Ausklang (≈ −82 dBFS)
-- [ ] Master-Fader wirkt auch auf Stems: bei Master 1,0 + Track 1,0 clippen Clean-v127-Akkorde im Stem (Werkseinstellung 0,8/0,8 clipfrei)
+- [x] Übersteuerte Exporte melden sich jetzt (Qa22ExportClipNoticeTest): die Exportmeldung nennt jede übersteuerte Datei mit Sample-Zahl. Bleibt bewusst: Master-Fader wirkt auch auf Stems (Master 1,0 + Track 1,0 + Clean-v127-Akkorde clippt den Stem; Werkseinstellung 0,8/0,8 clipfrei)
 
 ## Risiken (nie als bestanden ausgeben)
 Keine Geräte-, Latenz- und Hörtests in dieser Umgebung: erster Schlag auf echtem Android, Unterläufe/Thermik, ART-Allokationen/CPU am Telefon (nur JVM-Desktop gemessen), Klang von Clean/Crunch/High-Gain-Trims (0,3/0,28/0,6), Drum-Trim 0,5, Pinch-Mischpegel, Gesten/Haptik/Pinch auf Hardware, TalkBack (inkl. neuer Viewport-Semantik am Notenbild), PDF nur nachgestellt (nicht mit Android PdfDocument), kein Fremd-DAW-Import der Stems.

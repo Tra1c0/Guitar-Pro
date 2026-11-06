@@ -573,7 +573,7 @@ class WorkspaceViewModel(
             return when (target) {
                 ExportTarget.WAV -> when (val r = renderer.renderTo(project, options, sink, null) { p -> p.total?.let { t -> mutable.value = mutable.value.copy(busyProgress = (p.completed.toFloat() / t).coerceIn(0f, 1f)) } }) {
                     is Outcome.Failure -> r
-                    is Outcome.Success -> { showNotice("WAV exportiert: ${"%.1f".format(r.value.frames / 48_000.0)} s, Spitze ${"%.1f".format(20 * kotlin.math.log10(r.value.peak.coerceAtLeast(1e-6)))} dBFS"); Outcome.Success(Unit) }
+                    is Outcome.Success -> { showNotice("WAV exportiert: ${"%.1f".format(r.value.frames / 48_000.0)} s, Spitze ${"%.1f".format(20 * kotlin.math.log10(r.value.peak.coerceAtLeast(1e-6)))} dBFS" + clipWarning(listOf("Mix" to r.value.clippedSamples))); Outcome.Success(Unit) }
                 }
                 ExportTarget.STEMS -> withContext(background) {
                     val zip = ZipOutputStream(object : java.io.OutputStream() {
@@ -581,6 +581,7 @@ class WorkspaceViewModel(
                         override fun write(b: ByteArray, off: Int, len: Int) { sink.write(b, off, len) }
                     })
                     zip.setLevel(1)
+                    val clipped = ArrayList<Pair<String, Long>>()
                     zip.use { out ->
                         project.tracks.forEachIndexed { i, track ->
                             out.putNextEntry(ZipEntry("${(i + 1).toString().padStart(2, '0')}_${safe(track.name)}.wav"))
@@ -588,11 +589,13 @@ class WorkspaceViewModel(
                                 p.total?.let { t -> mutable.value = mutable.value.copy(busyProgress = ((i + p.completed.toFloat() / t) / (project.tracks.size + 1)).coerceIn(0f, 1f)) }
                             }
                             if (r is Outcome.Failure) return@withContext r
+                            if (r is Outcome.Success) clipped += track.name to r.value.clippedSamples
                             out.closeEntry()
                         }
                         out.putNextEntry(ZipEntry("00_mix.wav"))
                         val mix = renderer.renderTo(project, options, { b, o, l -> out.write(b, o, l) }, null)
                         if (mix is Outcome.Failure) return@withContext mix
+                        if (mix is Outcome.Success) clipped += "Mix" to mix.value.clippedSamples
                         out.closeEntry()
                         services.formats?.exporter("midi")?.let { midi ->
                             val m = midi.export(ExportRequest(project, "midi"))
@@ -603,12 +606,21 @@ class WorkspaceViewModel(
                             "Stems ohne Master-Limiter; 00_mix.wav mit Master-Kette. MIDI-Datei mit Tempo-Map in derselben Reihenfolge.\nTempo zu Beginn: ${project.tempo.firstOrNull()?.quarterNotesPerMinute ?: 120.0} BPM\n").toByteArray())
                         out.closeEntry()
                     }
-                    showNotice("${project.tracks.size} Stems + Mix exportiert")
+                    showNotice("${project.tracks.size} Stems + Mix exportiert" + clipWarning(clipped))
                     Outcome.Success(Unit)
                 }
                 else -> Outcome.Failure(FailureCode.VALIDATION, "Kein Audioformat")
             }
         } finally { mutable.value = mutable.value.copy(busy = null, busyProgress = null) }
+    }
+    /**
+     * Export feedback (QA 22): the renderer counts samples beyond full scale; stems have no master limiter, so a hot track
+     * or master fader clips them silently in the 24-bit file. Names every clipped file so the user can lower that fader.
+     */
+    private fun clipWarning(files: List<Pair<String, Long>>): String {
+        val hot = files.filter { it.second > 0 }
+        if (hot.isEmpty()) return ""
+        return " · Übersteuert: " + hot.joinToString(", ") { "${it.first} (${it.second} Samples)" } + " – Spur- oder Master-Fader senken"
     }
     private fun safe(name: String) = name.replace(Regex("[^\\p{L}\\p{N}_-]"), "_").take(40).ifBlank { "track" }
     private fun fileBase(p: Project?) = safe(p?.metadata?.title ?: "riff").take(60)
