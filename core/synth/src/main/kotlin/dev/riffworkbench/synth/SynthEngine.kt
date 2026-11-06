@@ -167,6 +167,16 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
     private var auxPos = 0
     private var program: EngineProgram? = null
     private var clipSet: ClipSet = ClipSet.EMPTY
+    /**
+     * Clip de-click (QA cycle 20): reference audio is read at the plan position, so a stop, a seek, a loop wrap or a start in
+     * the middle of a clip jumped from one sample value to another (up to -6 dBFS steps on a sine). The old read now fades out
+     * ([clipTailPos], [clipTailLeft] frames from block offset [clipTailOffset]) while the new one fades in ([clipInLeft]), 3 ms.
+     */
+    private val clipFade = (0.003 * sampleRate).toInt().coerceAtLeast(1)
+    private var clipTailPos = 0L
+    private var clipTailLeft = 0
+    private var clipTailOffset = 0
+    private var clipInLeft = 0
     /** Reference-audio level relative to the synth (0 = synth only). */
     var clipLevel = 1f
     private var rack: ChannelRack? = null
@@ -237,7 +247,7 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
         playing = true
         ended = false
     }
-    fun pause() { playing = false; countingIn = false; countInLeft = 0; releaseAll(fast = false) }
+    fun pause() { clipCut(0); playing = false; countingIn = false; countInLeft = 0; releaseAll(fast = false) }
     fun seek(frame: Long) { seekInternal(frame, chase = playing && !countingIn) }
     fun setLoop(start: Long, end: Long) { if (start in 0 until end) { loopStart = start; loopEnd = end } else { loopStart = -1; loopEnd = -1 } }
     val loopActive: Boolean get() = loopEnd > loopStart && loopStart >= 0
@@ -247,7 +257,9 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
 
     private fun seekInternal(frame: Long, chase: Boolean) {
         releaseAll(fast = true)
+        clipCut(0)
         position = frame.coerceAtLeast(0)
+        clipFadeIn()
         val p = program ?: return
         nextNote = p.firstNoteAtOrAfter(position)
         nextClick = p.firstClickAtOrAfter(position)
@@ -318,10 +330,19 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
                 if (!loopActive && position < end) limit = minOf(limit, end)
                 segEnd = (done + (limit - position)).toInt().coerceIn(done + 1, frames)
                 renderVoices(done, segEnd - done)
-                if (clipSet.exactSpeed && clipLevel > 0f) for (c in clipSet.voices) c.mix(auxL, auxR, done, segEnd - done, position, clipLevel)
+                if (clipSet.exactSpeed && clipLevel > 0f) {
+                    val n = segEnd - done
+                    if (clipInLeft > 0) {
+                        val g0 = (clipFade - clipInLeft + 1).toFloat() / clipFade
+                        for (c in clipSet.voices) c.mixRamp(auxL, auxR, done, n, position, clipLevel, g0, 1f / clipFade)
+                        clipInLeft = (clipInLeft - n).coerceAtLeast(0)
+                    } else for (c in clipSet.voices) c.mix(auxL, auxR, done, n, position, clipLevel)
+                }
                 position += (segEnd - done)
                 if (loopActive && position >= loopEnd) {
+                    clipCut(segEnd)
                     position = loopStart
+                    clipFadeIn()
                     releaseAll(fast = true)
                     nextNote = p.firstNoteAtOrAfter(loopStart); nextClick = p.firstClickAtOrAfter(loopStart)
                     loopsCompleted++
@@ -331,6 +352,7 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
             } else renderVoices(done, segEnd - done)
             done = segEnd
         }
+        if (clipTailLeft > 0) mixClipTail(frames)
         mixDown(frames)
         for (i in 0 until frames) { out[2 * i] = masterL[i]; out[2 * i + 1] = masterR[i] }
         clock += frames
@@ -410,6 +432,26 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
         for (i in 0 until frames) { masterL[i] *= m; masterR[i] *= m }
         // Reference clips were mixed into the master bus above, so they share its headroom scaling and limiter with the synth.
         for (fx in r.master) fx.process(masterL, masterR, frames)
+    }
+
+    /** The clip read at [position] stops (stop, seek, wrap at block offset [offset]): it fades out instead of jumping to 0. */
+    private fun clipCut(offset: Int) {
+        if (!playing || countingIn || !clipSet.exactSpeed || clipSet.voices.isEmpty() || clipLevel <= 0f) return
+        clipTailPos = position; clipTailLeft = clipFade; clipTailOffset = offset
+    }
+    /** A read that starts inside a clip (not at its first frame) fades in; one at a clip's start keeps its first sample. */
+    private fun clipFadeIn() {
+        clipInLeft = 0
+        for (c in clipSet.voices) if (position > c.startFrame && position - c.startFrame < c.pcm.frames) clipInLeft = clipFade
+    }
+    private fun mixClipTail(frames: Int) {
+        val n = minOf(frames - clipTailOffset, clipTailLeft)
+        if (n > 0 && clipSet.exactSpeed) {
+            val g0 = (clipTailLeft - 1).toFloat() / clipFade
+            for (c in clipSet.voices) c.mixRamp(auxL, auxR, clipTailOffset, n, clipTailPos, clipLevel, g0, -1f / clipFade)
+        }
+        clipTailPos += n.coerceAtLeast(0); clipTailLeft -= n.coerceAtLeast(0); clipTailOffset = 0
+        if (!clipSet.exactSpeed) clipTailLeft = 0
     }
 
     private fun startClick(level: Int, force: Boolean) {
