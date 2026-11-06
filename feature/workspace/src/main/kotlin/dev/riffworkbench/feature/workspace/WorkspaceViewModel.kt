@@ -58,6 +58,8 @@ class WorkspaceViewModel(
      * while nothing was navigated in between; any selection change while PAUSED makes the next Play start at the cursor.
      */
     private var navigatedSincePause = false
+    /** Laufende Bereichsauswahl per langem Drücken (Bericht 1 §5). */
+    private val rangeGesture = BarRangeGesture()
 
     init {
         viewModelScope.launch { for (project in saves) persist(project) }
@@ -123,6 +125,29 @@ class WorkspaceViewModel(
     }
     fun selectRange(endMeasure: EntityId?) { session?.let { s -> runCatching { s.select(s.state.value.selection.copy(rangeEnd = endMeasure)) }; publish() } }
     fun setRangeMode(enabled: Boolean) { mutableInput.value = input.value.copy(rangeMode = enabled); if (!enabled) selectRange(null) }
+
+    /**
+     * Langes Drücken auf einen Takt (Bericht 1 §5, [BarRangeGesture]): Anker = [measureId], genau dieser Takt ist
+     * ausgewählt. Unabhängig vom Bereich-Schalter. Nie ein Transport-Seek, auch nicht während der Wiedergabe; im PAUSED
+     * zählt ein verschobener Cursor wie jede Navigation (das nächste Play beginnt am Anker, Startmarken-Regel).
+     */
+    fun beginRange(measureId: EntityId) {
+        val s = session ?: return
+        val before = s.state.value.selection
+        try { s.select(rangeGesture.begin(before, measureId)) } catch (e: IllegalArgumentException) { rangeGesture.end(); return }
+        val after = s.state.value.selection
+        if (after.measureId != before.measureId || after.offset != before.offset) noteNavigation()
+        publish(); mutableInput.value = input.value.copy(buffer = "")    }
+    /** Ziehen nach [beginRange]: Bereichsende auf [measureId]; true nur bei einem Taktwechsel (dann tickt die Haptik). */
+    fun extendRange(measureId: EntityId): Boolean {
+        val s = session ?: return false
+        val next = rangeGesture.extend(s.state.value.selection, measureId) ?: return false
+        try { s.select(next) } catch (e: IllegalArgumentException) { return false }
+        publish()
+        return true
+    }
+    /** Loslassen: die Geste endet, der Bereich bleibt (ein einfaches Tippen hebt ihn auf). */
+    fun endRange() { rangeGesture.end() }
 
     /** Score tap: select column/string; in range mode extend the bar range. */
     fun tap(measureId: EntityId, offset: Fraction, string: Int?) {
