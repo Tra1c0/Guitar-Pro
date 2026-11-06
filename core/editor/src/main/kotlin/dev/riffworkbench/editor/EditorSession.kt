@@ -125,7 +125,7 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
             if (diagnostics.any { it.severity == Severity.ERROR }) Outcome.Failure(FailureCode.VALIDATION, diagnostics.first { it.severity == Severity.ERROR }.message, diagnostics)
             else {
                 // Computed before the history changes: a failure here must leave undo/redo untouched.
-                val selection = validSelection(after, before.selection)
+                val selection = validSelection(after, before.selection, before.project)
                 undo.addLast(History(before.project, before.selection, before.diagnostics))
                 while (undo.size > historyLimit) undo.removeFirst()
                 redo.clear()
@@ -352,10 +352,18 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
 
     companion object {
         private fun initialSelection(p: Project) = Selection(p.tracks.first().id, p.measures.first().id)
-        private fun validSelection(p: Project, s: Selection): Selection {
+        /**
+         * [s] adjusted to [p]. A cursor bar that was deleted (QA 20 F5) moves to the first remaining bar at or after its
+         * former place in [previous] (the bar that followed a deleted range), else to the last bar, at its downbeat — not to
+         * bar 1, where the view would jump to the start of the piece.
+         */
+        private fun validSelection(p: Project, s: Selection, previous: Project? = null): Selection {
             val track = p.tracks.firstOrNull { it.id == s.trackId } ?: p.tracks.first()
-            val measure = p.measures.firstOrNull { it.id == s.measureId } ?: p.measures.first()
-            return s.copy(trackId = track.id, measureId = measure.id, offset = if (s.offset < (measure.pickupLength ?: measure.signature.length())) s.offset else Fraction.ZERO,
+            val kept = p.measures.firstOrNull { it.id == s.measureId }
+            val measure = kept ?: previous?.measures?.let { old -> old.indexOfFirst { it.id == s.measureId }.takeIf { it >= 0 }?.let { i ->
+                old.drop(i).firstNotNullOfOrNull { m -> p.measures.firstOrNull { it.id == m.id } } ?: p.measures.last() } } ?: p.measures.first()
+            val offset = if (kept == null) Fraction.ZERO else s.offset
+            return s.copy(trackId = track.id, measureId = measure.id, offset = if (offset < (measure.pickupLength ?: measure.signature.length())) offset else Fraction.ZERO,
                 string = s.string.coerceIn(0, maxOf(0, track.instrument.tuning.lastIndex)), rangeEnd = s.rangeEnd?.takeIf { end -> p.measures.any { it.id == end } })
         }
     }
