@@ -484,7 +484,13 @@ class EngineTransport(
         val barFrames = kotlin.math.round(signature.length().toDouble() * framesPerWhole).toLong()
         val perBar = kotlin.math.round(signature.length().toDouble() / dev.riffworkbench.playback.metronomeBeat(signature).toDouble()).toInt().coerceIn(1, 64)
         val offsets = (0 until bars).flatMap { bar -> (0 until perBar).map { k -> bar * barFrames + kotlin.math.round(k * beat).toLong() } }
-        return bars * barFrames to offsets.toLongArray()
+        // A start between two beats (cursor on an off-beat, QA cycle 20): the count-in keeps the bars' beat grid. It grows by the
+        // distance from the beat before the start and clicks on that beat too; it used to end on the start itself, so its clicks
+        // fell half a beat off the music (an eighth into beat 2: 1.5 beats from the last click to beat 3).
+        val before = plan.clicks.lastOrNull { it.frame <= from }?.frame
+        val phase = if (before != null && before >= span.startFrame) from - before else 0L
+        if (phase <= 0L || phase >= kotlin.math.round(beat).toLong()) return bars * barFrames to offsets.toLongArray()
+        return bars * barFrames + phase to (offsets + bars * barFrames).toLongArray()
     }
 
     private fun startPolling() {

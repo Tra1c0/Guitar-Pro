@@ -56,11 +56,11 @@ class Qa20SyncTest {
         audio = p.audio.copy(clips = p.audio.clips.map { it.copy(mute = source != CLIP) }))
 
     /** How the run moves through the plan: speed, count-in, loop, a start frame and a speed change after [changeAfterBlocks]. */
-    data class Run(val label: String, val speed: Double = 1.0, val countIn: Int = 0, val loop: Pair<Int, Int>? = null, val startBar: Int = 0,
+    data class Run(val label: String, val speed: Double = 1.0, val countIn: Int = 0, val loop: Pair<Int, Int>? = null, val startBar: Int = 0, val startOffset: Fraction = Fraction.ZERO,
                    val changeAfterBlocks: Int = -1, val changeTo: Double = 1.0, val seconds: Double = 0.0)
 
     /** Output frames of the plan beats for a live run, and the live capture of one source. */
-    private class Capture(val left: FloatArray, val beats: List<Long>, val countInClicks: List<Long>)
+    private class Capture(val left: FloatArray, val beats: List<Long>, val countInClicks: List<Long>, val from: Long)
 
     private fun live(p: Project, source: Int, run: Run, pcm: PcmBuffer): Capture = runBlocking {
         val q = solo(p, source)
@@ -73,7 +73,7 @@ class Qa20SyncTest {
         val t = EngineTransport(host, clipLoader = { _, _ -> Outcome.Success(pcm) }, pollMillis = 1_000_000)
         try {
             t.prepare(q, PracticeSettings(speed = run.speed, countInBars = run.countIn, metronome = source == CLICK, loop = loopRange))
-            if (run.startBar > 0) t.seek(PlaybackOccurrence(ScorePosition(q.measures[run.startBar].id), 1, routeIndexOf(pl, run.startBar)))
+            if (run.startBar > 0 || run.startOffset != Fraction.ZERO) t.seek(PlaybackOccurrence(ScorePosition(q.measures[run.startBar].id, run.startOffset), 1, routeIndexOf(pl, run.startBar)))
             check(t.play() is Outcome.Success)
             // Where the engine starts: the transport's published start frame; the count-in precedes it.
             val from = t.state.value.sample!!.frame
@@ -100,7 +100,7 @@ class Qa20SyncTest {
                 var a = planAt; var o = outAt
                 while (o < end) { emit(cur, a, le, o); o += le - a; a = ls }
             } else emit(cur, planAt, cur.totalFrames, outAt)
-            Capture(sink.left.copyOf(frames), beats.filter { it < frames - SR / 10 }, countIn.second)
+            Capture(sink.left.copyOf(frames), beats.filter { it < frames - SR / 10 }, countIn.second, from)
         } finally { t.shutdown() }
     }
     private fun routeIndexOf(pl: PlaybackPlan, bar: Int) = pl.spans.indexOfFirst { it.measureIndex == bar }
@@ -145,6 +145,7 @@ class Qa20SyncTest {
         listOf(Measure(kit.id()), Measure(kit.id(), repeat = RepeatMark(starts = true)), Measure(kit.id(), repeat = RepeatMark(endCount = 2)), Measure(kit.id())).let { m -> out += pulseProject(m, tempo(m, 150.0)) to Run("Wiederholung Takt 2–3 ×2, 150") }
         bars(3).let { m -> out += pulseProject(m, tempo(m, 150.0)) to Run("Vorzähler 1 Takt, 150", countIn = 1) }
         bars(3).let { m -> out += pulseProject(m, tempo(m, 150.0)) to Run("Vorzähler 1 Takt ab Takt 2, 150", countIn = 1, startBar = 1) }
+        bars(3).let { m -> out += pulseProject(m, tempo(m, 150.0)) to Run("Vorzähler 1 Takt ab Takt 1 Zz. 2+ (Achtel), 150", countIn = 1, startOffset = f(3, 8)) }
         bars(3).let { m -> out += pulseProject(m, tempo(m, 150.0)) to Run("Schleife Takt 2–3, 3 Durchläufe, 150", loop = 1 to 2, seconds = 3 * 3.2 + 0.5) }
         for (speed in listOf(0.5, 1.25)) bars(3).let { m -> out += pulseProject(m, tempo(m, 150.0)) to Run("Speed ${speed}, 150", speed = speed) }
         bars(3).let { m -> out += pulseProject(m, tempo(m, 150.0)) to Run("Speed-Trainer 0,5 → 1,25 in Takt 2, Schleife Takt 1–3", speed = 0.5, loop = 0 to 2, changeAfterBlocks = 1000, changeTo = 1.25, seconds = 12.0) }
@@ -177,15 +178,24 @@ class Qa20SyncTest {
                 if (o == null) failures += "${run.label}: Vorzähler-Klick bei $c fehlt" else countInWorst = maxOf(countInWorst, abs(o - stats.getValue(CLICK)[0]))
             }
             if (countInWorst > TOL) failures += "${run.label}: Vorzähler-Klicks $countInWorst Frames neben dem Raster der Takte"
+            // The count-in continues the beat grid of the music: from its last click to the first beat of the bars is one beat.
+            var gridGap = 0L
+            if (run.countIn > 0 && beats.size >= 2) {
+                val cap = caps.getValue(CLICK)
+                val last = cap.countInClicks.last() + (onset(cap.left, cap.countInClicks.last()) ?: 0)
+                val first = beats[0] + (onset(cap.left, beats[0]) ?: 0)
+                gridGap = (first - last) - (beats[1] - beats[0])
+                if (abs(gridGap) > TOL) failures += "${run.label}: letzter Vorzähler-Klick bis erste Zählzeit ${first - last} Frames, eine Zählzeit ${beats[1] - beats[0]}"
+            }
             println("Q20S ${run.label}: ${beats.size} Schläge, $measured gemessen | Onset je Quelle (min..max Frames nach Soll) " +
                 sources.joinToString(", ") { "${names[it]} ${stats.getValue(it)[0]}..${stats.getValue(it)[1]}" } + " | größte Spreizung zwischen Quellen $worstSpread Frames (Schlag bei $worstAt)" +
-                (if (run.countIn > 0) " | Vorzähler-Klicks max |Δ| zum Klick-Raster der Takte $countInWorst Frames" else ""))
+                (if (run.countIn > 0) " | Vorzähler-Klicks max |Δ| zum Klick-Raster der Takte $countInWorst Frames, Übergang Vorzähler → Takt $gridGap Frames neben einer Zählzeit" else ""))
             if (worstSpread > TOL) failures += "${run.label}: Quellen $worstSpread Frames auseinander (Schlag bei Ausgabeframe $worstAt)"
             if (measured < beats.size * 9 / 10) failures += "${run.label}: nur $measured von ${beats.size} Schlägen messbar"
 
             // Live against offline (offline has no metronome, count-in, loop or speed): same onsets per source.
             if (run.speed == 1.0 && run.loop == null && run.changeAfterBlocks < 0) {
-                val shift = if (run.countIn > 0) beats.first() - plan(p).clicks.first { it.frame >= plan(p).spans[run.startBar].startFrame }.frame else 0L
+                val shift = if (run.countIn > 0) beats.first() - plan(p).clicks.first { it.frame >= caps.getValue(GUITAR).from }.frame else 0L
                 var worst = 0; var worstSrc = ""
                 for (s in sources - CLICK) {
                     val off = offline(p, s, pcm)
