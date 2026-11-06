@@ -171,10 +171,15 @@ class Qa20SyncTest {
             }
             // Count-in clicks: on the beat grid that continues into the first bar.
             var countInWorst = 0
-            if (run.countIn > 0) for (c in caps.getValue(CLICK).countInClicks) { val o = onset(caps.getValue(CLICK).left, c); if (o == null) failures += "${run.label}: Vorzähler-Klick bei $c fehlt" else countInWorst = maxOf(countInWorst, abs(o)) }
+            if (run.countIn > 0) for (c in caps.getValue(CLICK).countInClicks) {
+                val o = onset(caps.getValue(CLICK).left, c)
+                // Against the metronome's own offset in the bars that follow (the whole mix is delayed by the rack latency).
+                if (o == null) failures += "${run.label}: Vorzähler-Klick bei $c fehlt" else countInWorst = maxOf(countInWorst, abs(o - stats.getValue(CLICK)[0]))
+            }
+            if (countInWorst > TOL) failures += "${run.label}: Vorzähler-Klicks $countInWorst Frames neben dem Raster der Takte"
             println("Q20S ${run.label}: ${beats.size} Schläge, $measured gemessen | Onset je Quelle (min..max Frames nach Soll) " +
                 sources.joinToString(", ") { "${names[it]} ${stats.getValue(it)[0]}..${stats.getValue(it)[1]}" } + " | größte Spreizung zwischen Quellen $worstSpread Frames (Schlag bei $worstAt)" +
-                (if (run.countIn > 0) " | Vorzähler-Klicks max |Δ| $countInWorst" else ""))
+                (if (run.countIn > 0) " | Vorzähler-Klicks max |Δ| zum Klick-Raster der Takte $countInWorst Frames" else ""))
             if (worstSpread > TOL) failures += "${run.label}: Quellen $worstSpread Frames auseinander (Schlag bei Ausgabeframe $worstAt)"
             if (measured < beats.size * 9 / 10) failures += "${run.label}: nur $measured von ${beats.size} Schlägen messbar"
 
