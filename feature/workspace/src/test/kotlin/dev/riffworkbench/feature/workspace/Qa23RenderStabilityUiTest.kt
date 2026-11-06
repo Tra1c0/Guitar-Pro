@@ -35,7 +35,7 @@ import org.robolectric.annotation.LooperMode
  *      ([RenderCounts]). Before, WorkspaceScreen, EditorHeader and TabCard read the whole transport state.
  *  R2  Open menus and sheets survive polls without recomposing: the tools sheet, the track menu and the "Alle Bereiche" sheet.
  *  N1  A notice lies over the page: the score canvas and the fret pad keep their bounds, a control under the notice still
- *      takes the tap, and the notice closes itself after [NoticeTiming] (ViewModel state back to null).
+ *      takes the tap, and the notice closes itself after [NoticeTiming] (ViewModel state back to null; wall-clock timer).
  *  N2  Inside the tools sheet the notice is shown once (not also on the page behind the scrim) and does not move the tiles.
  *  N3  A failed save keeps its notice with "Erneut versuchen" past the timeout.
  *  Z1  Default: the score is drawn at density × [ScoreScale.EDITOR]; a pinch does not zoom (two fingers pan). With
@@ -197,9 +197,8 @@ class Qa23RenderStabilityUiTest {
         val hit = notice.intersect(up.boundsInRoot).center
         compose.onRoot().performTouchInput { click(Offset(hit.x, hit.y)) }
         compose.waitUntil(5000) { f.vm.state.value.editor!!.selection.string == stringBefore + 1 }
-        // Closes itself.
-        compose.mainClock.advanceTimeBy(NoticeTiming.millis(text) + 1000)
-        compose.waitUntil(5000) { f.vm.state.value.notice == null }
+        // Closes itself (wall-clock timer, TransientNotice).
+        compose.waitUntil(NoticeTiming.millis(text) + 5000) { f.vm.state.value.notice == null }
         compose.waitForIdle()
         assertTrue("N1 notice gone", compose.onAllNodesWithText(text).fetchSemanticsNodes().isEmpty())
     }
@@ -224,9 +223,11 @@ class Qa23RenderStabilityUiTest {
         f.repo.failSaves = true
         compose.onNodeWithTag("fret-3").performClick()
         compose.waitUntil(10000) { f.vm.state.value.saveStatus == SaveStatus.FAILED && f.vm.state.value.notice != null }
-        compose.mainClock.advanceTimeBy(NoticeTiming.MAX_MILLIS + 2000)
-        compose.waitForIdle()
-        assertNotNull("N3 failed-save notice stays", f.vm.state.value.notice)
+        // Longer than a timed notice of this length would stay (wall-clock timer, TransientNotice).
+        val notice = f.vm.state.value.notice!!
+        val until = System.currentTimeMillis() + NoticeTiming.millis(notice) + 1500
+        while (System.currentTimeMillis() < until) { compose.waitForIdle(); Thread.sleep(50) }
+        assertEquals("N3 failed-save notice stays", notice, f.vm.state.value.notice)
         compose.onNodeWithText("Erneut versuchen").assertExists()
         f.repo.failSaves = false
         compose.onNodeWithText("Erneut versuchen").performClick()

@@ -18,14 +18,16 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 /**
  * A notice that lies over the UI instead of taking a row of its own (QA 23, Gerätebefund: notices pushed the layout down
  * and had to be closed by hand). Place it in a Box with an alignment; it never changes the size of anything around it.
  *
- *  - [timeoutMillis] non-null: [onTimeout] runs after that time (longer when the accessibility service asks for more time
- *    for text); null: it stays until the owner removes it (e.g. a failed save with "Erneut versuchen" in [actions]).
+ *  - [timeoutMillis] non-null: [onTimeout] runs after that much wall-clock time (longer when the accessibility service asks
+ *    for more time for text); null: it stays until the owner removes it (e.g. a failed save with "Erneut versuchen" in [actions]).
  *  - No click handler on the notice itself: taps on the controls underneath still land (only [actions] take touches).
  *  - A polite live region, so TalkBack announces the text.
  */
@@ -33,7 +35,10 @@ import kotlinx.coroutines.delay
     val accessibility = LocalAccessibilityManager.current
     val currentOnTimeout by rememberUpdatedState(onTimeout)
     if (timeoutMillis != null) LaunchedEffect(text, timeoutMillis) {
-        delay(accessibility?.calculateRecommendedTimeoutMillis(timeoutMillis, containsIcons = false, containsText = true, containsControls = false) ?: timeoutMillis)
+        val millis = accessibility?.calculateRecommendedTimeoutMillis(timeoutMillis, containsIcons = false, containsText = true, containsControls = false) ?: timeoutMillis
+        // Wall-clock time, not the composition's clock: a test clock that skips delays would close the notice before anyone
+        // (or any test) saw it. Same behaviour on the device.
+        withContext(Dispatchers.Default) { delay(millis) }
         currentOnTimeout()
     }
     val shape = RoundedCornerShape(16.dp)
