@@ -534,7 +534,8 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
                     samples[si].kill()
                     val rr = if (key >= 0) (roundRobin[key]++ + (s ?: 0)) and 0xFFFF else seed ushr 16 and 0xFFFF
                     val pinch = note.harmonic == HarmonicKind.PINCH
-                    samples[si].start(note, t, b, now, endClock, rr, ch.sampleGain, harmonic = n, combGain = if (pinch) 2.2f else 1.4f, combBleed = if (pinch) 0.1f else 0.04f)
+                    samples[si].start(note, t, b, now, endClock, rr, ch.sampleGain, harmonic = n, combGain = if (pinch) 2.2f else 1.4f, combBleed = if (pinch) 0.1f else 0.04f,
+                        combTilt = if (pinch) 1f else 0f, overtoneFloor = OVERTONE_FLOOR)
                     if (key >= 0) sampleMap[key] = si
                 }
             }
@@ -589,5 +590,11 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
         const val MAX_TRACKS = 64
         /** Longest latency compensation (frames); a chain of 64 cabinets would exceed it. */
         const val MAX_COMPENSATION = 4096
+        /**
+         * Least share of the fretted note's power that a picked harmonic's overtone series keeps (QA cycle 22): about what the open
+         * E4 and E2 strings give on their own (the cycle-19 calibration of the pinch mix), so pinches high on the neck, whose
+         * recorded partial is 20-33 dB down, still sound at their overtone instead of the fretted note's bleed.
+         */
+        const val OVERTONE_FLOOR = 0.15f
     }
 }

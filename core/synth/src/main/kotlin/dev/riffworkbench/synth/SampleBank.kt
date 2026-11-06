@@ -30,8 +30,42 @@ class SampleBank private constructor(val sampleRate: Int, internal val regions: 
                           /** Linear level normalisation applied by the voice (see [normalisation]). */
                           val gain: Float = 1f) {
         val frames get() = data.size
+        /**
+         * Share of the power of this (sustained) region in the overtone series of its [n]-th partial, index n = 2..6, measured
+         * once at load over 30-200 ms (QA cycle 22): the harmonic comb keeps only that series, so a weak recorded partial makes a
+         * weak pinch/artificial harmonic (the high DI notes have their 3rd partial 20-33 dB under the fundamental).
+         */
+        internal var overtoneShare: FloatArray = NO_SHARE
 
         companion object {
+            private val NO_SHARE = FloatArray(0)
+
+            /** Power share of the comb of [n] copies spaced a 1/[n] period of the region's root apart (the voice's harmonic comb). */
+            fun overtoneShares(r: Region, sampleRate: Int): FloatArray {
+                val hz = 440.0 * Math_pow2((r.root + r.fineTuneCents / 100.0 - 69.0) / 12.0)
+                val period = sampleRate / hz
+                val from = maxOf((0.03 * sampleRate).toInt(), period.toInt() + 2)
+                val to = minOf((0.2 * sampleRate).toInt(), r.data.size - 1)
+                val out = FloatArray(7)
+                if (to - from < period * 2) return out
+                var full = 0.0
+                for (i in from until to) { val v = r.data[i].toDouble(); full += v * v }
+                for (n in 2..6) {
+                    var e = 0.0
+                    for (i in from until to) {
+                        var sum = 0.0
+                        for (m in 0 until n) {
+                            val p = i - m * period / n
+                            val k = kotlin.math.floor(p).toInt(); val f = p - k
+                            sum += r.data[k] + (r.data[k + 1] - r.data[k]) * f
+                        }
+                        val y = sum / n; e += y * y
+                    }
+                    out[n] = if (full > 0) (e / full).toFloat() else 0f
+                }
+                return out
+            }
+
             /** Peak target of release noises: their natural level in the source, so note-to-release balance is unchanged. */
             private const val RELEASE_PEAK_DB = -18.0
             private const val DEAD_PEAK_DB = -9.0
@@ -77,6 +111,7 @@ class SampleBank private constructor(val sampleRate: Int, internal val regions: 
         notes = Array(128) { key -> Array(layers) { layer -> regions.filter { it.kind == KIND_NOTE && it.layer == layer && key in it.loKey..it.hiKey }.sortedBy { it.rr }.toTypedArray() } }
         releases = Array(128) { key -> regions.filter { it.kind == KIND_RELEASE && key in it.loKey..it.hiKey }.sortedBy { it.rr }.toTypedArray() }
         deadNotes = regions.filter { it.kind == KIND_DEAD }.toTypedArray()
+        for (r in regions) if (r.kind == KIND_NOTE) r.overtoneShare = Region.overtoneShares(r, sampleRate)
         require(notes.all { k -> k.all { it.isNotEmpty() } }) { "Sample-Bank deckt nicht alle Tonhöhen ab" }
     }
 
@@ -141,7 +176,7 @@ class SampleBank private constructor(val sampleRate: Int, internal val regions: 
             } + Region(KIND_DEAD, 52, 0, 127, 0, 0, 0f, 0, 0, ShortArray(2000) { k -> ((k * 7919 % 2000) - 1000).toShort() })
             return SampleBank(rate, regions.toTypedArray())
         }
-        private fun Math_pow2(x: Double) = kotlin.math.exp(x * kotlin.math.ln(2.0))
+        internal fun Math_pow2(x: Double) = kotlin.math.exp(x * kotlin.math.ln(2.0))
 
         private fun readFully(r: ByteReader, b: ByteArray, n: Int) {
             var got = 0
