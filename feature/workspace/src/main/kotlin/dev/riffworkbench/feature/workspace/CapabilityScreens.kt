@@ -97,7 +97,10 @@ import kotlin.math.roundToLong
                     Icon(TabinoIcons.Loop, null, Modifier.size(18.dp)); Text(if (looping) tr("Schleife an", "Loop on") else tr("Auswahl loopen", "Loop selection"), style = MaterialTheme.typography.labelLarge)
                 }
             }
-            Spacer(Modifier.weight(1f))
+        }
+        // Own row (QA 21): next to the loop button the count-in chips were squeezed to 0-23 dp on phones and vanished at
+        // font scale 1.3/2.0. Scrolls sideways if label and chips do not fit.
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.count_in), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             (0..2).forEach { bars -> FilterChip(practice.countInBars == bars, { vm.setCountIn(bars) }, label = { Text(if (bars == 0) tr("aus", "off") else "$bars") }) }
         }

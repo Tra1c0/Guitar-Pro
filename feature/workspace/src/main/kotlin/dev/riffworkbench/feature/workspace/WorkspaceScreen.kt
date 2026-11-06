@@ -3,9 +3,6 @@ package dev.riffworkbench.feature.workspace
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -158,22 +155,27 @@ class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget
 
 /** Grid of every other area, colour-coded like the design's library cards. */
 @Composable private fun MorePages(current: WorkspacePage, onPick: (WorkspacePage) -> Unit, onSettings: () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    // The whole sheet content scrolls (title, tiles, settings), so every tile and the settings button stay reachable on a
+    // short phone and at large font sizes without a nested scroll area. A plain two-column grid: ~10 tiles, all composed
+    // (QA 21: a lazy grid with weight/heightIn left the settings button 0 dp high on a 640-dp phone, and its off-screen
+    // tiles were not composed at all on a 568-dp phone).
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         BigTitle(tr("Alle Bereiche", "All areas"), tr("Projekt, Klang, Austausch", "Project, sound, exchange"), size = 22)
-        // weight(fill = false): the grid takes what is left after title and settings button and scrolls inside. Measured
-        // first (fixed 560 dp), it left the settings button 0 dp on a 640-dp phone (QA 21).
-        LazyVerticalGrid(GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f, fill = false).heightIn(max = 560.dp)) {
-            items(WorkspacePage.entries.filter { it !in primaryPages }) { p ->
-                val selected = p == current
-                Surface(onClick = { onPick(p) }, shape = RoundedCornerShape(24.dp), color = if (selected) p.accent else MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = if (selected) Tabino.Ink else MaterialTheme.colorScheme.onSurface, modifier = Modifier.height(76.dp).testTag("page-${p.route}")) {
-                    Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Box(Modifier.size(36.dp).background(if (selected) Tabino.Ink else p.accent, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                            Text(p.icon, color = if (selected) p.accent else Tabino.Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+        WorkspacePage.entries.filter { it !in primaryPages }.chunked(2).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { p ->
+                    val selected = p == current
+                    Surface(onClick = { onPick(p) }, shape = RoundedCornerShape(24.dp), color = if (selected) p.accent else MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = if (selected) Tabino.Ink else MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f).heightIn(min = 76.dp).testTag("page-${p.route}")) {
+                        Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box(Modifier.size(36.dp).background(if (selected) Tabino.Ink else p.accent, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                                Text(p.icon, color = if (selected) p.accent else Tabino.Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                            }
+                            Text(stringResource(p.title), style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
-                        Text(stringResource(p.title), style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                 }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
         OutlinedButton(onClick = onSettings, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(26.dp)) {
