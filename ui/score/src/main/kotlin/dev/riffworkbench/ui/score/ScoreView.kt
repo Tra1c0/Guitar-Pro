@@ -21,6 +21,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntSize
@@ -34,6 +35,15 @@ data class ScoreTap(val measureId: EntityId, val offset: Fraction, val string: I
 
 /** Cursor to highlight: a column (optionally a string) or a bar range. */
 data class ScoreCursor(val measureId: EntityId, val offset: Fraction, val string: Int?, val rangeEnd: EntityId? = null)
+
+/**
+ * State of the score viewport in pixels, published as the semantics property [ScoreViewportKey] for UI tests (QA 21: the
+ * view must not jump while the cursor is visible). Accessibility services ignore unknown keys. [cursorX]/[cursorY] are the
+ * cursor column and string row in content pixels (null without a cursor position in the layout).
+ */
+data class ScoreViewport(val offsetX: Float, val offsetY: Float, val factor: Float, val width: Int, val height: Int,
+                         val contentWidth: Float, val contentHeight: Float, val cursorX: Float?, val cursorY: Float?)
+val ScoreViewportKey = SemanticsPropertyKey<ScoreViewport>("RiffScoreViewport")
 
 @Composable
 fun rememberInkPalette(): InkPalette {
@@ -114,7 +124,9 @@ fun ScoreCanvas(
     // Finger position (viewport px) while a selected note is dragged.
     var dragAt by remember { mutableStateOf<Offset?>(null) }
     // Cursor geometry of the last cursor-effect run: a relayout that keeps the cursor in place must not move the view.
-    var lastCursorKey by remember { mutableStateOf<List<Any?>?>(null) }
+    var lastCursorKey by remember { mutableStateOf<ViewportScroll.CursorKey?>(null) }
+    // Zoom last set by a pinch: a factor change that comes from the fingers keeps the focus point (ViewportScroll.cursor).
+    var gestureZoom by remember { mutableFloatStateOf(Float.NaN) }
     // After a suspended follow resumes, the first scroll uses the minimal shift instead of the 25 % re-centre.
     var resumeMinimal by remember { mutableStateOf(false) }
     var wasSuspended by remember { mutableStateOf(false) }
@@ -141,17 +153,12 @@ fun ScoreCanvas(
         // While following playback the playhead owns the viewport; re-running on a layout/viewport change must not
         // yank it back to the edit cursor (that made the view jump between cursor and playhead).
         if (currentFollow) return@LaunchedEffect
-        val lx = l.xFor(c.measureId, c.offset) ?: return@LaunchedEffect
-        val sys = l.measures.firstOrNull { it.measureId == c.measureId }?.let { m -> l.systems.getOrNull(m.system) }
-        val spacing = sys?.let { if (it.stringY.size > 1) abs(it.stringY[0] - it.stringY[1]) else 20f } ?: 20f
-        val rowY = sys?.let { s -> c.string?.let { s.stringY.getOrNull(it) } ?: if (s.stringY.isNotEmpty()) (s.tabTop + s.tabBottom) / 2 else (s.staffTop + s.staffBottom) / 2 }
-        val key = listOf(lx, rowY, factor, viewport)
-        if (key == lastCursorKey) return@LaunchedEffect
-        lastCursorKey = key
-        val margin = ViewportScroll.MARGIN * density
-        offsetX = ViewportScroll.horizontal(lx * factor, spacing * 0.62f * factor, offsetX, viewport.width.toFloat(), l.width * factor, margin)
-        if (rowY != null) offsetY = ViewportScroll.vertical(rowY * factor, spacing * factor, offsetY, viewport.height.toFloat(), l.height * factor, margin)
-        clamp()
+        // The rule itself (minimal shift, paging, the pinch exception) is JVM-tested in core:notation (ViewportScrollTest, Qa21ViewportCursorTest).
+        val step = ViewportScroll.cursor(l, c.measureId, c.offset, c.string, offsetX, offsetY, viewport.width.toFloat(), viewport.height.toFloat(),
+            factor, density, lastCursorKey, zoomedByGesture = gestureZoom == zoom) ?: return@LaunchedEffect
+        lastCursorKey = step.key
+        offsetX = step.offsetX
+        offsetY = step.offsetY
     }
     LaunchedEffect(followSuspended) {
         if (followSuspended) wasSuspended = true else if (wasSuspended) { wasSuspended = false; resumeMinimal = true }
@@ -174,7 +181,15 @@ fun ScoreCanvas(
         clamp()
     }
     Box(modifier.clipToBounds().onSizeChanged { viewport = it; clamp() }
-        .semantics { contentDescription = description }
+        .semantics {
+            contentDescription = description
+            val l = layout
+            val cx = l?.let { lay -> cursor?.let { c -> lay.xFor(c.measureId, c.offset) } }
+            val cy = l?.let { lay -> cursor?.let { c -> lay.measures.firstOrNull { it.measureId == c.measureId }?.let { m -> lay.systems.getOrNull(m.system) } } }
+                ?.let { sys -> cursor?.string?.let { sys.stringY.getOrNull(it) } ?: if (sys.stringY.isNotEmpty()) (sys.tabTop + sys.tabBottom) / 2 else (sys.staffTop + sys.staffBottom) / 2 }
+            this[ScoreViewportKey] = ScoreViewport(offsetX, offsetY, factor, viewport.width, viewport.height, (l?.width ?: 0f) * factor, (l?.height ?: 0f) * factor,
+                cx?.let { it * factor }, cy?.let { it * factor })
+        }
         .pointerInput(Unit) {
             detectTransformGestures { centroid, pan, gestureZoom, _ ->
                 val old = currentFactor
@@ -184,6 +199,7 @@ fun ScoreCanvas(
                     // Keep the content under the fingers fixed while zooming.
                     offsetX = (offsetX + centroid.x) * nf / old - centroid.x
                     offsetY = (offsetY + centroid.y) * nf / old - centroid.y
+                    gestureZoom = nextZoom
                     currentOnZoom(nextZoom)
                 }
                 offsetX -= pan.x; offsetY -= pan.y

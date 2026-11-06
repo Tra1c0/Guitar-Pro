@@ -1,5 +1,7 @@
 package dev.riffworkbench.notation
 
+import dev.riffworkbench.model.EntityId
+import dev.riffworkbench.model.Fraction
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -49,6 +51,40 @@ object ViewportScroll {
     /** Vertical cursor rule: based on the cursor's string row ([rowY] ± [half]), not on the whole system. */
     fun vertical(rowY: Float, half: Float, offset: Float, viewport: Float, content: Float, margin: Float = MARGIN): Float =
         minimal(rowY, half, offset, viewport, content, margin)
+
+    /**
+     * What the cursor effect last scrolled for: cursor column [x] and string row [rowY] in layout units, the scale and the
+     * viewport size in pixels. An equal key means nothing moved, so the view stays (a relayout that keeps the cursor in place).
+     */
+    data class CursorKey(val x: Float, val rowY: Float?, val factor: Float, val viewportWidth: Float, val viewportHeight: Float)
+
+    /** Result of [cursor]: the key to remember and the new scroll offsets (pixels). */
+    data class CursorScroll(val key: CursorKey, val offsetX: Float, val offsetY: Float)
+
+    /**
+     * The edit-cursor rule of the score viewport (ScoreView's cursor effect, QA 21: pulled out of Compose so it is testable
+     * on the JVM), in pixels with [factor] = density × zoom. Returns null while the cursor has no position in [layout].
+     *
+     *  - unchanged [lastKey]: the view stays;
+     *  - [zoomedByGesture] and only the factor changed (cursor and viewport as before): the view stays as the pinch put it,
+     *    so the content under the fingers keeps its place even when the cursor leaves the view (QA 21: the effect pulled the
+     *    view back to the cursor on every zoom step of a pinch away from it);
+     *  - otherwise [horizontal] for the column and [vertical] for the string row (both with [MARGIN] × [density]), clamped.
+     */
+    fun cursor(layout: ScoreLayout, measureId: EntityId, offset: Fraction, string: Int?, offsetX: Float, offsetY: Float,
+               viewportWidth: Float, viewportHeight: Float, factor: Float, density: Float, lastKey: CursorKey?, zoomedByGesture: Boolean = false): CursorScroll? {
+        val lx = layout.xFor(measureId, offset) ?: return null
+        val sys = layout.measures.firstOrNull { it.measureId == measureId }?.let { m -> layout.systems.getOrNull(m.system) }
+        val spacing = sys?.let { if (it.stringY.size > 1) abs(it.stringY[0] - it.stringY[1]) else 20f } ?: 20f
+        val rowY = sys?.let { s -> string?.let { s.stringY.getOrNull(it) } ?: if (s.stringY.isNotEmpty()) (s.tabTop + s.tabBottom) / 2 else (s.staffTop + s.staffBottom) / 2 }
+        val key = CursorKey(lx, rowY, factor, viewportWidth, viewportHeight)
+        if (key == lastKey) return CursorScroll(key, offsetX, offsetY)
+        if (zoomedByGesture && lastKey != null && lastKey.copy(factor = factor) == key) return CursorScroll(key, offsetX, offsetY)
+        val margin = MARGIN * density
+        val x = horizontal(lx * factor, spacing * 0.62f * factor, offsetX, viewportWidth, layout.width * factor, margin)
+        val y = if (rowY != null) vertical(rowY * factor, spacing * factor, offsetY, viewportHeight, layout.height * factor, margin) else offsetY
+        return CursorScroll(key, clamp(x, layout.width * factor, viewportWidth), clamp(y, layout.height * factor, viewportHeight))
+    }
 
     /**
      * Playback follow along x: the playhead runs freely between [FOLLOW_MIN] and [FOLLOW_MAX] of the viewport and is then
