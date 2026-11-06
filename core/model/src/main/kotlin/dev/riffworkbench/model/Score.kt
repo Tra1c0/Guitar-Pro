@@ -91,6 +91,13 @@ data class InstrumentDefinition(
 
 @Serializable data class DrumElement(val midiNote: Int, val name: String, val volume: Double = 1.0, val pan: Double = 0.0, val chokeGroup: Int? = null)
 fun defaultDrumKit() = listOf(DrumElement(36, "Kick"), DrumElement(38, "Snare"), DrumElement(42, "Closed HH", chokeGroup = 1), DrumElement(46, "Open HH", chokeGroup = 1), DrumElement(49, "Crash", chokeGroup = 2))
+/**
+ * Kit of new drum tracks (ProjectFactory, QA cycle 24): the [defaultDrumKit] elements in their order, then pedal hi-hat, three
+ * toms, ride and a second crash - what the sampled kit (ArtiFret Pearl Kit) records. The model default stays [defaultDrumKit],
+ * so imports and stored projects keep their own list; choke groups follow the GM defaults of the playback compiler.
+ */
+fun factoryDrumKit() = defaultDrumKit() + listOf(DrumElement(44, "Pedal HH", chokeGroup = 1), DrumElement(48, "Tom 1"), DrumElement(45, "Tom 2"),
+    DrumElement(41, "Floor Tom"), DrumElement(51, "Ride"), DrumElement(57, "Crash 2", chokeGroup = 2))
 
 @Serializable
 data class Track(
