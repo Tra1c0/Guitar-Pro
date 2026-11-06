@@ -388,4 +388,87 @@ class Qa22TransitionPinchLoudnessTest {
         check(failures, abs(withQuiet - lone) <= 0.2) { "relatives Gate: ${f2(withQuiet)} vs. ${f2(lone)}" }
         report("BS.1770", failures)
     }
+
+    // ================================================================== 4. Standardband neuer Projekte (Balance, Gesamtpegel)
+
+    private val bassDef = InstrumentDefinition(InstrumentKind.BASS, listOf(28, 33, 38, 43), List(4) { 0 }, midiProgram = 33)
+    private val drumsDef = InstrumentDefinition(InstrumentKind.PERCUSSION, emptyList(), emptyList(), midiProgram = 0)
+    /** Gitarre wie ProjectFactory.create (E-Standard, Programm 30 → High Gain), Bass (Programm 33), Drums; 2 Takte 150 BPM. */
+    private fun band(guitarVol: Double, bassVol: Double, drumVol: Double, guitarPreset: String? = null): Project {
+        val factoryGuitar = InstrumentDefinition(tuning = listOf(40, 45, 50, 55, 59, 64), capoByString = List(6) { 0 })
+        fun gn(s: Int, f: Int, vararg a: Articulation) = Note(id(), Pitch(factoryGuitar.pitch(s, f)), s, f, 96, a.toList())
+        fun bn(s: Int, f: Int) = Note(id(), Pitch(bassDef.pitch(s, f)), s, f, 104)
+        fun dn(m: Int, v: Int) = Note(id(), Pitch(m), velocity = v)
+        val riff = (0 until 16).mapNotNull { k -> when (k) { 3, 11 -> Triple(k, 8, if (k == 3) 3 else 5); 4, 12 -> null; else -> Triple(k, 16, -1) } }
+        fun guitarBar() = riff.map { (k, den, fr) -> beat(Fraction.of(k.toLong(), 16), den, *(if (fr < 0) arrayOf(gn(0, 0, pmMark)) else arrayOf(gn(0, fr), gn(1, fr + 2), gn(2, fr + 2)))) }
+        fun bassBar() = riff.map { (k, den, fr) -> beat(Fraction.of(k.toLong(), 16), den, bn(1, if (fr < 0) 0 else fr)) }
+        fun drumBar(crash: Boolean) = (0 until 8).map { k ->
+            val notes = mutableListOf(dn(42, if (k % 2 == 0) 96 else 80))
+            if (k == 0 || k == 4 || k == 5) notes += dn(36, if (k == 0) 127 else 96)
+            if (k == 2 || k == 6) notes += dn(38, 127)
+            if (k == 0 && crash) notes += dn(49, 127)
+            beat(Fraction.of(k.toLong(), 8), 8, *notes.toTypedArray())
+        }
+        val m = List(3) { Measure(id()) }
+        fun staff(bars: List<List<Beat>>, kind: NotationKind) = listOf(Staff(id(), setOf(kind), m.mapIndexed { i, mm -> Bar(id(), mm.id, List(4) { v -> Voice(id(), v, if (v == 0 && i < bars.size) bars[i] else emptyList()) }) }))
+        val tracks = listOf(
+            Track(id(), "Gitarre", factoryGuitar, staff(listOf(guitarBar(), guitarBar()), NotationKind.TAB), SoundAssignment(presetId = guitarPreset), ChannelMix(volume = guitarVol)),
+            Track(id(), "Bass", bassDef, staff(listOf(bassBar(), bassBar()), NotationKind.TAB), mix = ChannelMix(volume = bassVol)),
+            Track(id(), "Drums", drumsDef, staff(listOf(drumBar(true), drumBar(false)), NotationKind.PERCUSSION), mix = ChannelMix(volume = drumVol)))
+        return Project(id = id(), measures = m, tracks = tracks, tempo = listOf(TempoChange(ScorePosition(m[0].id), 150.0)))
+    }
+    private class BandLevels(val lufs: Double, val prePeakDb: Double, val limiterShare: Double, val trackRms: List<Double>)
+    /** Pegel am Master; [makeupDb] ist die Verstärkung der Master-Kette vor dem Limiter (Pre-Master × Make-up, hier ohne Nutzer-Master-Effekte). */
+    private fun bandLevels(p: Project, bank: SampleBank, makeupDb: Double): BandLevels {
+        val frames = (3.2 * sr).toInt()
+        val plan = (ScorePlaybackCompiler().compileNow(p, sr) as Outcome.Success).value
+        fun renderPre(solo: Int?): Pair<FloatArray, FloatArray> {
+            val e = SynthEngine(sr, block, bank)
+            e.installRack(ChannelRack.build(p, sr, block, includeMasterFx = false)); e.setMix(MixState.from(p, 0f, solo)); e.install(EngineProgram.prepare(plan)); e.play(0)
+            val l = FloatArray(frames); val r = FloatArray(frames); val buf = FloatArray(2 * block); var done = 0
+            while (done < frames) { val k = minOf(block, frames - done); e.render(buf, k); for (i in 0 until k) { l[done + i] = buf[2 * i]; r[done + i] = buf[2 * i + 1] }; done += k }
+            return l to r
+        }
+        val g = Dsp.dbToGain(makeupDb).toFloat()
+        val (l0, r0) = renderPre(null)
+        val l = FloatArray(frames) { l0[it] * g }; val r = FloatArray(frames) { r0[it] * g }
+        var pk = 0.0; for (i in 0 until frames) pk = maxOf(pk, abs(l[i].toDouble()), abs(r[i].toDouble()))
+        val lim = Qa18GainStructureTest.limiterGain(FloatArray(frames) { maxOf(abs(l[it]), abs(r[it])) })
+        var engaged = 0; for (x in lim) if (x < 0.944f) engaged++
+        val rms = p.tracks.indices.map { t -> val (a, _) = renderPre(t); db(Qa22Analysis.rms(a, 0, frames)) }
+        return BandLevels(Qa22Analysis.integratedLufs(listOf(l, r), sr), db(pk), 100.0 * engaged / frames, rms)
+    }
+
+    /** Werks-Fader der Band neuer Projekte: Gitarre 0,8, Bass und Drums [NEW_BAND_FADER] (= ProjectFactory, geprüft in core/editor Qa22BandFaderTest). */
+    private val NEW_BAND_FADER = 0.48
+
+    /**
+     * Gesamtpegel und Balance der Band für alte (alle Fader 0,8) und neue Projekte, ohne und mit einem gedachten Make-up der
+     * Master-Kette (Pre-Master × Verstärkung): Grundlage der Entscheidung gegen einen Master-Make-up (siehe QA-Journal Zyklus 22).
+     */
+    @Test fun probe_standardBand() {
+        val bank = bankOrSkip()
+        for ((label, vols) in listOf("Fader 0,8/0,8/0,8" to Triple(0.8, 0.8, 0.8), "Fader 0,8/0,48/0,48" to Triple(0.8, NEW_BAND_FADER, NEW_BAND_FADER))) for (mk in listOf(0.0, 2.0, 6.0, 7.1, 8.8)) {
+            val b = bandLevels(band(vols.first, vols.second, vols.third), bank, mk)
+            println("Q22B $label, Make-up ${f1(mk)} dB: ${f1(b.lufs)} LUFS | Spitze vor Limiter ${f1(b.prePeakDb)} dBFS | Limiter ${f2(b.limiterShare)} % | Solo-RMS Gitarre/Bass/Drums ${b.trackRms.joinToString(" / ") { f1(it) }} dBFS | Gitarre−Bass ${f1(b.trackRms[0] - b.trackRms[1])} / Gitarre−Drums ${f1(b.trackRms[0] - b.trackRms[2])} dB")
+        }
+    }
+
+    /**
+     * (4) Balance der Band neuer Projekte wie auf ef25d88: Gitarre (High Gain) gegen Bass und Drums, Solo-RMS über 2 Takte,
+     * innerhalb ±1,5 dB der Werte auf ef25d88 (alle Fader 0,8: Gitarre−Bass +5,1, Gitarre−Drums +4,0 dB). Mit den nach unten
+     * normierten Gitarren-Presets und Werks-Fadern 0,8 überall −3,4 / −4,5 dB (rot); mit Bass/Drums auf [NEW_BAND_FADER] grün. Dazu
+     * kein Clipping und kein Limiter am Master.
+     */
+    @Test fun newProjectBandKeepsItsCycle21Balance() {
+        val bank = bankOrSkip()
+        val b = bandLevels(band(0.8, NEW_BAND_FADER, NEW_BAND_FADER), bank, 0.0)
+        val gb = b.trackRms[0] - b.trackRms[1]; val gd = b.trackRms[0] - b.trackRms[2]
+        println("Q22B neue Band (Fader 0,8/${f2(NEW_BAND_FADER)}/${f2(NEW_BAND_FADER)}): Gitarre−Bass ${f1(gb)} dB (ef25d88 +5,1), Gitarre−Drums ${f1(gd)} dB (ef25d88 +4,0) | ${f1(b.lufs)} LUFS | Spitze vor Limiter ${f1(b.prePeakDb)} dBFS | Limiter ${f2(b.limiterShare)} %")
+        val failures = mutableListOf<String>()
+        check(failures, abs(gb - 5.1) <= 1.5) { "Gitarre−Bass ${f1(gb)} dB, ef25d88 +5,1 (Soll ±1,5)" }
+        check(failures, abs(gd - 4.0) <= 1.5) { "Gitarre−Drums ${f1(gd)} dB, ef25d88 +4,0 (Soll ±1,5)" }
+        check(failures, b.limiterShare == 0.0 && b.prePeakDb < -0.5) { "Limiter ${f2(b.limiterShare)} %, Spitze ${f1(b.prePeakDb)} dBFS" }
+        report("Band-Balance", failures)
+    }
 }
