@@ -119,6 +119,21 @@ class ClipVoice(val clipId: EntityId, val pcm: PcmBuffer, val startFrame: Long, 
             src++
         }
     }
+    /** [mix] with a linear gain ramp: [gain] at the first frame, plus [step] per frame, kept within 0..1 (de-click fades). */
+    internal fun mixRamp(left: FloatArray, right: FloatArray, offset: Int, count: Int, planFrame: Long, scale: Float, gain: Float, step: Float) {
+        var src = planFrame - startFrame
+        val data = pcm.data
+        var g = gain
+        for (k in 0 until count) {
+            if (src in 0 until pcm.frames) {
+                val i = (src * 2).toInt()
+                val a = g.coerceIn(0f, 1f)
+                left[offset + k] += data[i] * (gainL * scale / 32768f) * a
+                right[offset + k] += data[i + 1] * (gainR * scale / 32768f) * a
+            }
+            src++; g += step
+        }
+    }
 }
 
 /** Immutable set of clips for one plan; muted and non-soloed clips are already filtered out. */

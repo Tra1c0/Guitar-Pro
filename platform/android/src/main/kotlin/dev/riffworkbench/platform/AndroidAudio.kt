@@ -91,12 +91,15 @@ class AudioTrackSink(private val context: Context) : AudioSink {
         return if (written < 0) 0 else written / 2
     }
 
-    override fun presentedFrame(): Long? {
-        val t = track ?: return null
+    override fun presentedFrame(): Long? = presentedFrameOrNegative().takeIf { it >= 0 }
+
+    /** Primitive variant for the render thread (no Long boxing; QA cycle 20). */
+    override fun presentedFrameOrNegative(): Long {
+        val t = track ?: return -1L
         return try {
             val ts = timestamp.get()
-            if (t.getTimestamp(ts)) ts.framePosition + (System.nanoTime() - ts.nanoTime) * rate / 1_000_000_000L else null
-        } catch (e: IllegalStateException) { null }
+            if (t.getTimestamp(ts)) (ts.framePosition + (System.nanoTime() - ts.nanoTime) * rate / 1_000_000_000L).coerceAtLeast(0) else -1L
+        } catch (e: IllegalStateException) { -1L }
     }
 
     override fun underruns(): Long = try { track?.underrunCount?.toLong() ?: 0 } catch (e: IllegalStateException) { 0 }

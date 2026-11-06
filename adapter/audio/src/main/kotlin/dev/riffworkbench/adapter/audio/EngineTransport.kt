@@ -11,7 +11,6 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -43,6 +42,8 @@ class EngineTransport(
     private val mutable = MutableStateFlow(TransportState(TransportStatus.STOPPED, reason = null))
     override val state: StateFlow<TransportState> = mutable.asStateFlow()
     private val mutex = Mutex()
+    /** Guards [writes] together with the state value; control threads only (callers, poller), never the audio thread. */
+    private val stateLock = Any()
     @Volatile private var project: Project? = null
     @Volatile private var settings = PracticeSettings(speed = 1.0, countInBars = 0, metronome = false)
     @Volatile private var plan: PlaybackPlan? = null
@@ -484,7 +485,13 @@ class EngineTransport(
         val barFrames = kotlin.math.round(signature.length().toDouble() * framesPerWhole).toLong()
         val perBar = kotlin.math.round(signature.length().toDouble() / dev.riffworkbench.playback.metronomeBeat(signature).toDouble()).toInt().coerceIn(1, 64)
         val offsets = (0 until bars).flatMap { bar -> (0 until perBar).map { k -> bar * barFrames + kotlin.math.round(k * beat).toLong() } }
-        return bars * barFrames to offsets.toLongArray()
+        // A start between two beats (cursor on an off-beat, QA cycle 20): the count-in keeps the bars' beat grid. It grows by the
+        // distance from the beat before the start and clicks on that beat too; it used to end on the start itself, so its clicks
+        // fell half a beat off the music (an eighth into beat 2: 1.5 beats from the last click to beat 3).
+        val before = plan.clicks.lastOrNull { it.frame <= from }?.frame
+        val phase = if (before != null && before >= span.startFrame) from - before else 0L
+        if (phase <= 0L || phase >= kotlin.math.round(beat).toLong()) return bars * barFrames to offsets.toLongArray()
+        return bars * barFrames + phase to (offsets + bars * barFrames).toLongArray()
     }
 
     private fun startPolling() {
@@ -545,8 +552,18 @@ class EngineTransport(
      * read the engine before a seek or pause and writes after it would otherwise put the stale playhead (and status) back
      * over the fresh one, for one poll on a device (the playhead jumps back and forth) and for good in a paused test.
      */
-    private fun place(value: TransportState) { writes++; mutable.value = value }
-    /** The poller's write: applied atomically, and only while no caller-side write happened since the poll began ([seen]). */
-    private inline fun poll(seen: Long, change: (TransportState) -> TransportState) { mutable.update { cur -> if (writes != seen) cur else change(cur) } }
+    private fun place(value: TransportState) { synchronized(stateLock) { writes++; mutable.value = value } }
+    /**
+     * The poller's write: applied only while no caller-side write happened since the poll began ([seen]). Epoch check and
+     * commit sit under [stateLock] with [place] (QA cycle 20): `MutableStateFlow.update` compared by equality, so a poll that
+     * read one play's PLAYING could commit its stale STOPPED after stop() and the next play() had written an equal PLAYING.
+     */
+    private inline fun poll(seen: Long, change: (TransportState) -> TransportState) {
+        synchronized(stateLock) {
+            if (writes != seen) return
+            val next = change(mutable.value)
+            if (writes == seen) mutable.value = next
+        }
+    }
     private fun postSeek(frame: Long) { host.post(HostCommand.Seek(frame)); postedSeeks++ }
 }
