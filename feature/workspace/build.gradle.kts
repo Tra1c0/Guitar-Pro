@@ -15,7 +15,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true }
-    testOptions { unitTests.isIncludeAndroidResources = true }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        // Compose UI tests need ui-test-manifest's ComponentActivity, which is only added to the debug variant (as in ui:score).
+        unitTests.all { if (it.name.contains("Release")) it.exclude("**/*UiTest*") }
+    }
 }
 kotlin { jvmToolchain(17) }
 dependencies {
