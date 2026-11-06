@@ -62,6 +62,40 @@ internal object Standard {
         return lo.coerceAtLeast(-18) to hi.coerceAtMost(26)
     }
 
+    /**
+     * Horizontal extent (left, right of the beat anchor) of what [voice] draws around the noteheads of the beats at one
+     * offset: heads (incl. seconds displaced to the other side of the stem, same rule as [voice]), ledger lines, ghost
+     * parentheses, accidentals and dots. The layout keeps neighbouring beats this far apart (QA 19: dense drum grids).
+     * [beats] are (voice index, beat); accidentals are judged against the key only, without the in-measure state.
+     */
+    fun headExtent(b: ScoreLayouter.Builder, beats: List<Pair<Int, Beat>>, key: KeySignature, multiVoice: Boolean): Pair<Float, Float> {
+        val sp = b.styleOf().staffSpace
+        val clef = b.clef
+        var left = 0f; var right = 0f
+        for ((voiceIndex, beat) in beats) {
+            if (beat.notes.isEmpty()) continue
+            class H(val pos: Int, val note: Note, val accidental: Boolean)
+            val heads = beat.notes.map { n ->
+                if (clef == Clef.PERCUSSION) H(drumStep(n.pitch.midiNumber).first - bottomStep(clef), n, false)
+                else { val s = spell(n.pitch.midiNumber + writtenOffset(clef), key); H(s.step - bottomStep(clef), n, s.alter != keyAlter(s.letter, key)) }
+            }.sortedBy { it.pos }
+            val up = if (multiVoice) voiceIndex % 2 == 0 else clef == Clef.PERCUSSION || heads.map { it.pos }.average() < 4
+            var lastPos = Int.MIN_VALUE; var displaced = false
+            for (h in heads) {
+                displaced = if (h.pos - lastPos == 1) !displaced else false
+                lastPos = h.pos
+                val dx = if (displaced) (if (up) sp * 1.15f else -sp * 1.15f) else 0f
+                var l = sp * 0.62f; var r = sp * 0.62f
+                if (h.pos <= -2 || h.pos >= 10) { l = max(l, sp * 0.95f); r = max(r, sp * 0.95f) }   // ledger lines
+                if (Articulation.Mark(NoteMark.GHOST) in h.note.articulations) { l = max(l, sp * 1.5f); r = max(r, sp * 1.5f) }
+                if (h.accidental) l = max(l, sp * 2.3f)
+                if (beat.duration.dots > 0) r = max(r, sp * (1.36f + (beat.duration.dots - 1) * 0.7f))
+                left = max(left, l - dx); right = max(right, r + dx)
+            }
+        }
+        return left to right
+    }
+
     fun clef(b: ScoreLayouter.Builder, x: Float, staffTop: Float) {
         val sp = b.styleOf().staffSpace
         val c = b.clef

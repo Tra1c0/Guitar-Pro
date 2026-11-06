@@ -12,7 +12,7 @@ Branch: `ccr-0b650dff-jnhups-qa` (Fast-Forward nach `ccr-0b650dff-jnhups` bis 6a
 
 ## P1 (Audio / Bedienung)
 - [ ] Long-Press-Bereichsauswahl mit Haptik (Bericht 1 §5)
-- [ ] Drum-Grid: Überlappung/Bedienbarkeit auf dem Handy; Drum-Pegel; erster Hit
+- [x] Drum-Grid: Überlappung/Bedienbarkeit auf dem Handy; Drum-Pegel; erster Hit (Zyklus 19, JVM grün; DrumScreen-UI, Gerät und Hörprüfung offen)
 - [ ] Gitarren-Artikulationen klar unterscheidbar (Palm Mute, Dead, Harmonics natural/pinch, Slides/Bends), messbar per Render-Test
 - [ ] Preset-Lautheit/-Charakter nachprüfbar verschieden (Clean/Crunch/High Gain)
 - [ ] Live- vs. Offline-Render Konsistenz (Gitarre, Metronom, Drums)

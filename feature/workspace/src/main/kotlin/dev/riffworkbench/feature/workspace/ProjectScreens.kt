@@ -135,17 +135,29 @@ import dev.riffworkbench.ui.score.pitchName
             val measure = state.project.measures.first { it.id == state.selection.measureId }
             val beats = track.staves.first().bars.first { it.measureId == measure.id }.voices.first { it.index == state.selection.voice }.beats
             val slots = (measure.signature.length().toDouble() * grid + 1e-9).toInt().coerceIn(1, 128)
-            Column(Modifier.horizontalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                track.instrument.drumKit.forEach { drum -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(drum.name, Modifier.width(100.dp), style = MaterialTheme.typography.labelMedium)
-                    repeat(slots) { slot ->
-                        val offset = Fraction.of(slot.toLong(), grid.toLong())
-                        val active = beats.firstOrNull { it.offset == offset }?.notes?.any { it.pitch.midiNumber == drum.midiNote } == true
-                        val strong = slot % (grid / 4).coerceAtLeast(1) == 0
-                        FilledTonalButton(onClick = { vm.toggleDrum(track.id, measure.id, offset, drum.midiNote) }, modifier = Modifier.size(48.dp).semanticsLabel("${drum.name}, ${slot + 1}, ${if (active) "on" else "off"}"), contentPadding = PaddingValues(0.dp),
-                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = if (active) MaterialTheme.colorScheme.primary else if (strong) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface, contentColor = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)) { Text(if (active) "●" else "·") }
+            // QA 19 (phone, 1/32 = 32 cells of 48 dp): the element names scrolled away with the cells, so after a few cells
+            // nobody knew which row was the kick. Names stay in a fixed column; the cells (touch target 48 dp) scroll under
+            // a beat ruler, and every beat starts after a wider gap.
+            val perBeat = (grid / 4).coerceAtLeast(1)
+            val cellsScroll = rememberScrollState()
+            Row(Modifier.fillMaxWidth()) {
+                Column(Modifier.width(76.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Spacer(Modifier.height(18.dp))
+                    track.instrument.drumKit.forEach { drum ->
+                        Box(Modifier.height(48.dp), contentAlignment = Alignment.CenterStart) { Text(drum.name, maxLines = 2, style = MaterialTheme.typography.labelMedium) }
                     }
-                } }
+                }
+                Column(Modifier.weight(1f).horizontalScroll(cellsScroll), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        repeat(slots) { slot ->
+                            if (slot > 0 && slot % perBeat == 0) Spacer(Modifier.width(6.dp))
+                            Box(Modifier.width(48.dp).height(18.dp), contentAlignment = Alignment.CenterStart) {
+                                if (slot % perBeat == 0) Text("${slot / perBeat + 1}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                    track.instrument.drumKit.forEach { drum -> DrumCells(vm, track, measure, beats, drum, slots, grid, perBeat) }
+                }
             }
             DrumKitMix(vm, track)
             val note = vm.selectedBeat(state)?.notes?.firstOrNull()
@@ -160,6 +172,20 @@ import dev.riffworkbench.ui.score.pitchName
                     }
                 }
             }
+        }
+    }
+}
+
+/** One kit element's step cells (48 dp touch targets); a wider gap marks every beat, like the ruler above. */
+@Composable private fun DrumCells(vm: WorkspaceViewModel, track: Track, measure: Measure, beats: List<Beat>, drum: DrumElement, slots: Int, grid: Int, perBeat: Int) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        repeat(slots) { slot ->
+            if (slot > 0 && slot % perBeat == 0) Spacer(Modifier.width(6.dp))
+            val offset = Fraction.of(slot.toLong(), grid.toLong())
+            val active = beats.firstOrNull { it.offset == offset }?.notes?.any { it.pitch.midiNumber == drum.midiNote } == true
+            val strong = slot % perBeat == 0
+            FilledTonalButton(onClick = { vm.toggleDrum(track.id, measure.id, offset, drum.midiNote) }, modifier = Modifier.size(48.dp).semanticsLabel("${drum.name}, ${slot + 1}, ${if (active) "on" else "off"}"), contentPadding = PaddingValues(0.dp),
+                colors = ButtonDefaults.filledTonalButtonColors(containerColor = if (active) MaterialTheme.colorScheme.primary else if (strong) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface, contentColor = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)) { Text(if (active) "●" else "·") }
         }
     }
 }
