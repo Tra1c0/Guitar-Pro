@@ -96,10 +96,26 @@ class ScoreLayout(val width: Float, val height: Float, val glyphs: List<Glyph>, 
     internal fun registerLength(id: EntityId, length: Double) { lengths[id] = length }
     private fun measureLength(id: EntityId) = lengths[id] ?: 1.0
     fun systemAt(y: Float): SystemBox? = systems.firstOrNull { y >= it.top && y < it.bottom } ?: systems.lastOrNull { y >= it.top }
+    /** The bar under (x, y): inside the system under y and between its barlines; null beside the bars. */
+    fun measureAt(x: Float, y: Float): MeasureBox? {
+        val system = systemAt(y) ?: return null
+        return measures.firstOrNull { it.system == system.index && x >= it.x && x < it.x + it.width }
+    }
+    /**
+     * The bar nearest to (x, y) for a drag (long-press range selection): like [measureAt] inside the bars, otherwise the
+     * first/last bar of the row when the finger is left/right of it; above the first system the first row counts.
+     */
+    fun measureNear(x: Float, y: Float): MeasureBox? {
+        val system = systemAt(y) ?: systems.firstOrNull() ?: return null
+        val row = measures.filter { it.system == system.index }
+        if (row.isEmpty()) return null
+        row.firstOrNull { x >= it.x && x < it.x + it.width }?.let { return it }
+        val first = row.minBy { it.x }
+        return if (x < first.x) first else row.maxBy { it.x + it.width }
+    }
     /** Nearest column of the measure under (x, y). */
     fun columnAt(x: Float, y: Float): Column? {
-        val system = systemAt(y) ?: return null
-        val measure = measures.firstOrNull { it.system == system.index && x >= it.x && x < it.x + it.width } ?: return null
+        val measure = measureAt(x, y) ?: return null
         return columns.filter { it.measureId == measure.measureId }.minByOrNull { abs(it.x - x) }
     }
     /** String index nearest to y in the system's TAB, or null outside the TAB staff. */
