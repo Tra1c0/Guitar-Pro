@@ -121,6 +121,10 @@
     <string name="shortcuts">Tastenkürzel</string>
     <string name="licenses">Lizenzen &amp; Herkunft</string>
     <string name="license_hint">Keine fremden Tabs, RSE-Sounds oder SoundFonts enthalten. Hinweise zu Bibliotheken stehen in der Projektdokumentation.</string>
+    <string name="license_hint_bundled">Keine fremden Tabs oder RSE-Sounds enthalten. Mitgelieferte Klänge: E-Gitarre aus Karoryfer Emilyguitar (CC0) und das Schlagzeug „ArtiFret Pearl Kit“, abgeleitet von AVL Black Pearl 4 (AVL-Drumkits, Glen MacArthur), CC BY-SA 3.0. Hinweise zu Bibliotheken stehen in der Projektdokumentation.</string>
+    <string name="license_show_drums">Lizenz der Schlagzeug-Samples anzeigen</string>
+    <string name="license_hide_drums">Lizenztext ausblenden</string>
+    <string name="license_text_missing">Lizenztext nicht gefunden.</string>
     <string name="integration_hint">USB-MIDI, Line-in und externe Dienste werden einzeln angebunden. Lizenzabhängige Angebote benötigen eine eigene Freigabe.</string>
     <string name="diagnostics">Hinweise zur Partitur</string>
     <string name="incomplete">Unvollständige Takte sind beim Entwerfen erlaubt.</string>

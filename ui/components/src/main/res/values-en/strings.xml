@@ -121,6 +121,10 @@
     <string name="shortcuts">Keyboard shortcuts</string>
     <string name="licenses">Licenses &amp; provenance</string>
     <string name="license_hint">No third-party tabs, RSE sounds or SoundFonts included. Library notices are in the project documentation.</string>
+    <string name="license_hint_bundled">No third-party tabs or RSE sounds included. Bundled sounds: electric guitar from Karoryfer Emilyguitar (CC0) and the drum kit “ArtiFret Pearl Kit”, derived from AVL Black Pearl 4 (AVL-Drumkits, Glen MacArthur), CC BY-SA 3.0. Library notices are in the project documentation.</string>
+    <string name="license_show_drums">Show drum sample licence</string>
+    <string name="license_hide_drums">Hide licence text</string>
+    <string name="license_text_missing">Licence text not found.</string>
     <string name="integration_hint">USB MIDI, line-in and external services are connected separately. Licensed offerings require separate clearance.</string>
     <string name="diagnostics">Score diagnostics</string>
     <string name="incomplete">Incomplete bars are allowed while drafting.</string>

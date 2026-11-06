@@ -14,6 +14,7 @@ import dev.riffworkbench.adapter.integrations.IntegrationCatalog
 import dev.riffworkbench.data.local.*
 import dev.riffworkbench.feature.workspace.WorkspaceServices
 import dev.riffworkbench.model.*
+import dev.riffworkbench.synth.DrumKit
 import dev.riffworkbench.synth.SampleBank
 import dev.riffworkbench.platform.AndroidPcmOutput
 import dev.riffworkbench.platform.AndroidSystemProbes
@@ -62,10 +63,15 @@ class AppContainer(application: Application) {
     /** Own synthesizer on the device's native rate; the AudioTrack sample clock drives the transport. */
     /** Electric-guitar DI samples (Karoryfer Emilyguitar, CC0), loaded in the background at start. */
     @Volatile var guitarBank: SampleBank? = null; private set
-    val audioHost = RealtimeHost({ AudioTrackSink(application) }, audioThreadStarter, bankProvider = { guitarBank })
+    /**
+     * Sampled drum kit "ArtiFret Pearl Kit" (derived from AVL Black Pearl 4 by Glen MacArthur, CC BY-SA 3.0; licence text in
+     * assets/licenses/avl-drumkits-README.txt), loaded in the background at start; until then the synthetic kit plays.
+     */
+    @Volatile var drumKit: DrumKit? = null; private set
+    val audioHost = RealtimeHost({ AudioTrackSink(application) }, audioThreadStarter, bankProvider = { guitarBank }, drumKitProvider = { drumKit })
     /** Reference audio: WAV in Kotlin, everything else through the device's MediaCodec decoders. */
     val audioDecoder = AudioDecoders(MediaCodecAudioDecoder())
-    val transport = EngineTransport(audioHost, clipLoader = DecodingClipLoader(assets, audioDecoder), bankProvider = { guitarBank })
+    val transport = EngineTransport(audioHost, clipLoader = DecodingClipLoader(assets, audioDecoder), bankProvider = { guitarBank }, drumKitProvider = { drumKit })
     val audioLab = EngineAudioLab(transport, { guitarBank }, AndroidSystemProbes(application), AndroidPcmOutput())
     val tuner = InputTuner({ AudioRecordSource(application) }, audioThreadStarter)
     val notation = AlphaTabBoundary()
@@ -78,6 +84,9 @@ class AppContainer(application: Application) {
     init {
         scope.launch(Dispatchers.IO) {
             guitarBank = runCatching { application.assets.open("banks/guitar-emily-di.rwsb").buffered(1 shl 16).use { input -> SampleBank.read { b, o, l -> input.read(b, o, l) } } }.getOrNull()
+        }
+        scope.launch(Dispatchers.IO) {
+            drumKit = runCatching { application.assets.open("banks/artifret-pearl-kit.rwdk").buffered(1 shl 16).use { input -> DrumKit.read { b, o, l -> input.read(b, o, l) } } }.getOrNull()
         }
         scope.launch {
             transport.state.collect { s -> if (s.status == TransportStatus.PLAYING) guard.acquire() else guard.release() }
