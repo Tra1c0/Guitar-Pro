@@ -686,3 +686,83 @@ Anlass: Zyklus 19/20 änderten Audio (Latenzausgleich im Mix: `Effect.latencyFra
 **Offen / Restrisiken:** PDF-Erzeugung selbst (Android `PdfDocument`) nur nachgestellt, nicht ausgeführt; DAW-Import (Cubase) und Hörprüfung nicht möglich. Referenz-Clips sind nur im Mix, nicht als eigener Stem — mit Clips summieren sich die Stems nicht zum Mix (dokumentiertes Stems-Format: eine WAV pro Spur). `EngineTransport.render` (Port-Methode für Mix + Stems, von der UI nicht benutzt) übergibt dem Mix keine Clips, `renderTo` schon. Bei vollen Stimmenpools (Stimmenraub über Spuren) kann ein Stem vom Mix abweichen. Der 2-s-Ausklang endet bei langem Hall hart bei ≈ −82 dBFS. Mehrere Boxen in einer Kette erhöhen die Export-Vorlaufzeit entsprechend (nur Renderzeit, keine Verschiebung).
 
 Ergebnis Zyklus 21 / Export-Import: **4 Befunde mit roten Tests behoben** (Export 64 Frames Vorlauf/Ende abgeschnitten, Mix gegen Stems bei latenter Master-Kette, Σ Stems ≠ Mix durch gemeinsamen Rausch-Seed, MIDI-Import quantisierte 32tel-Drums), Notensatz-Exporte ohne Befund.
+
+### Zyklus 22 / Übergänge, Pinch, Lautheit
+
+Anlass: drei in Zyklus 19 offen gebliebene Punkte (P1 „Übergänge und Presets klar differenzieren“) messbar lösen, ohne Klangperfektion zu behaupten: High Gain gepickt vs. gebunden gleich, Pinch vs. Natural auf der hohen E-Saite in Crunch/HG kaum verschieden, Lautheitsspreizung der Presets. Methode: Offline-Renders durch die echte Kette (ScorePlaybackCompiler → SynthEngine mit Bank v2 → Preset-Kette → Master), 48 kHz, E-Standard, 120 BPM, v96 wenn nicht anders angegeben. Test `Qa22TransitionPinchLoudnessTest` (core/synth, 11 Tests: 6 Prüfungen, 1 Selbstprüfung, 4 Sonden; Präfixe Q22T/Q22E/Q22P/Q22S/Q22C/Q22L/Q22D/Q22K), Mess-Kit `Qa22Analysis` (K-Gewichtung, Gating, Einsatz-Kennzahlen; nur stdlib). „Vorher“ = ef25d88, „nachher“ = 079bde3. Kein Hörtest; alle Klangurteile stehen aus.
+
+**Metriken (Einsatz bei Notenframe + Kettenlatenz):** *Pegelsprung* = RMS der ersten 10 ms gegen das RMS 25–5 ms davor (die klingende Saite); *HF-Fluss* = Leistung > 3 kHz (Butterworth-Hochpass 4. Ordnung) in den ersten 8 ms gegen die 20 ms davor. Beide vergleichen den Einsatz mit der Saite unmittelbar davor und überleben die Sättigung besser als das 21-ms-Spektrum aus Qa19. Verglichen werden dieselben Töne: Hammer-on und Legato-Slide gegen den gepickten Wechsel aufwärts, Pull-off gegen den gepickten Wechsel abwärts; drei Lagen (D-Saite A3↔B3 wie Qa19, tiefe E G2↔A2, H-Saite E4↔F♯4). Physikalisches Ziel: nur das Plektrum bringt neue Energie und einen breitbandigen Anschlag; beim Legato schwingt die Saite weiter. Schwellen: gepickt mindestens 3 dB (doppelte Leistung) über gebunden in beiden Größen, gebunden ohne neuen Attack-Peak (Pegelsprung ≤ +1 dB). Auf ef25d88: 48 Fehler.
+
+**1. Gepickt gegen gebunden (`pickedAndLegatoTransitionsDifferInEveryPreset`).** Zusammenfassung über 3 Lagen × 3 Paare:
+
+| Preset | Legato-Pegelsprung vorher → nachher | kleinste Differenz Pegelsprung gepickt − gebunden | kleinste Differenz HF-Fluss |
+|---|---|---|---|
+| Clean | +3,3…+7,7 → −4,1…+0,3 dB | 3,4 → 10,3 dB | 2,2 → 32,1 dB |
+| Crunch | +1,2…+5,5 → −3,7…+0,2 dB | 1,0 → 6,1 dB | 0,5 → 26,6 dB |
+| High Gain | −0,6…+1,7 → −1,7…+0,7 dB | −0,9 → 3,5 dB | −1,4 → 4,2 dB |
+
+High Gain im Einzelnen (Pegelsprung gepickt / gebunden; HF-Fluss gepickt / gebunden, dB):
+
+| Lage, Paar | vorher | nachher |
+|---|---|---|
+| D 7–9, gepickt / Hammer-on | 0,6 / 1,5; 2,7 / 2,3 | 4,0 / −0,8; 6,7 / −3,2 |
+| D 7–9, gepickt / Legato-Slide | 0,6 / 0,9; 2,7 / 1,9 | 4,0 / −1,7; 6,7 / −4,0 |
+| D 9–7, gepickt / Pull-off | 1,6 / 1,7; 13,3 / 14,7 | 5,4 / 0,7; 16,9 / 8,9 |
+| E 3–5, gepickt / Hammer-on | 2,5 / 1,7; 12,4 / 11,3 | 5,5 / 0,3; 15,9 / 1,7 |
+| E 3–5, gepickt / Legato-Slide | 2,5 / 0,7; 12,4 / 6,7 | 5,5 / 0,4; 15,9 / −1,9 |
+| E 5–3, gepickt / Pull-off | 1,7 / −0,5; 10,8 / 7,0 | 4,8 / −0,2; 14,5 / 3,3 |
+| H 5–7, gepickt / Hammer-on | 1,3 / 0,8; 1,5 / 0,4 | 4,9 / 0,5; 4,4 / 0,1 |
+| H 5–7, gepickt / Legato-Slide | 1,3 / 0,4; 1,5 / 0,4 | 4,9 / 0,1; 4,4 / 0,2 |
+| H 7–5, gepickt / Pull-off | −0,8 / −0,6; 0,7 / 0,3 | 2,9 / −0,6; 3,7 / −0,6 |
+
+Qa19-Kennzahl (HF-Sprung 21 ms nach/vor dem Wechsel, gepickt / Hammer / Legato-Slide): Clean 35,2/30,3/28,5 → 35,2/6,8/5,1 dB, Crunch 23,6/17,5/15,8 → 23,6/0,3/−1,4 dB, **High Gain 2,8/3,4/2,1 → 7,2/−6,6/−8,2 dB**. Tonhöhe nach Hammer/Slide/Bend weiter 246,5–247,0 Hz (B3 246,9).
+
+Befunde und Reparaturen (rot → grün):
+- *Legato setzte in einen frischen Anschlag ein*: schon im trockenen Signal so viel Leistung > 3 kHz in den ersten 8 ms wie ein gepickter Wechsel (D 7–9 trocken, gegen den Körper 30–80 ms: gepickt 5,3, Hammer 5,4 dB). Der neue Ton begann fest 30 ms im neuen Sample, und die neue Region setzte ohne Einblendung mit vollem Pegel mitten in der Schwingung ein (Stufe = Klick). → `SampleVoice.legato`: die neue Region läuft im Alter der Schwingung seit dem letzten Anschlag weiter (Helligkeit/Pegel der klingenden Saite), übernimmt deren Hüllkurve (PM-Dämpfung, Loop-Abklingen) und wird über 6 ms eingeblendet, während die alte (auch aus dem Loop, durch denselben PM-Tiefpass) ausblendet (Commit ef6d1f9). Übergänge 48 → 12 Fehler, Clean und Crunch grün.
+- *High Gain glättete den Pick-Anschlag* (trocken gepickt +6,6…+11,9 dB Pegelsprung, nach den drei gesättigten Stufen −0,8…+2,5 dB). → `AmpSim` (nur 3-Stufen-Amps): Anschlags-Gedächtnis der gesättigten Kaskade, physikalisch die Arbeitspunktverschiebung durch Gitterstrom am Koppelkondensator: die Ausgangsverstärkung folgt 0,9 × dem Anstieg des Eingangspegels (2 × 2,5 ms) über seinen 40-ms-Pegel, 0…+4,5 dB, Steuerrate 8 Samples, allokationsfrei; ein gehaltener Ton und die Pick-Dynamik (Verhältnis, pegelunabhängig) bleiben (Commit 223e08a). Übergänge 12 → 0 Fehler.
+- Verworfen (gemessen): Höhenanhebung des Sample-Anschlags vor dem Amp (Hochpassanteil der ersten 1,5 ms ×4/×10/×25 → HG-HF-Fluss D 2,7 → 3,0/3,1/4,2 dB; die DI-Samples haben im Klick kaum Höhen: > 2,5 kHz bei 1–2 ms nur ~3 dB über dem Körperverhältnis); Plektrum-Kontakt 1 ms statt 6 ms Ausblendung (D 2,7 → 3,2 dB); symmetrische Anschlags-Hüllkurve (auch Absenkung beim Abklingen, ±3 dB): Übergänge grün, aber PM-Riff-Schwerpunkt +11 % (764 statt 686 Hz) — nicht übernommen; nur Anstieg bis +3 dB scheiterte an H 7–5 (Differenz 2,3 dB).
+
+*PM-Chug / Tight-Hochpass* (`highGainPalmMuteChugStaysDarkAndFull`, Wächter, HG): PM-Achtel E2, Körper 20–190 ms: Schwerpunkt 383,3 → 383,3 Hz, > 1 kHz 6,47 → 6,47 %, < 150 Hz 5,27 → 5,27 %. PM-Riff (16tel E2 mit Powerchords, ganzer Takt): Schwerpunkt 686,1 → 718,2 Hz (+4,7 %), < 150 Hz 3,74 → 4,13 % (voller), **> 1 kHz 22,61 → 24,20 % (+7 % relativ, nur gedruckt)**: die Klangfarbe jeder Note bleibt, im Langzeitspektrum wiegen die nun hörbaren hellen Anschläge mehr. Qa19-PM-Kennzahl HG E2 v96: Anteil > 1 kHz (20–105 ms) 11,18 → 11,16 %, ×0,19 → ×0,21 der offenen Note; > 2 kHz re offen −13,5 → −13,7 dB. Der Tight-Hochpass (122 Hz) ist unverändert.
+
+**2. Pinch gegen Natural Harmonic, hohe E-Saite (`pinchDiffersFromTheNaturalHarmonicOnTheHighE`).** Paare gleicher Tonhöhe: Pinch Bund 0/5/12 (3. Teilton des gegriffenen Tons) gegen NH7/NH5/NH3 (989/1319/1978 Hz); NH12 (659 Hz) hat auf dieser Saite keinen Pinch gleicher Tonhöhe (nur gedruckt). Ziele: Oberton dominant (Tonhöhe = 3 × gegriffen ± 25 Cent, Teiltöne 1+2 des gegriffenen Tons ≤ 5 %), deutlich anderer Teiltonanteil (Vielfache 2–8 re Oberton ≥ NH + 3 dB) und Schwerpunkt ≥ 1,2 × NH, wo das 2. Vielfache unter dem Box-Abfall liegt (Bund 0 und 5).
+
+| Preset | Paar | Schwerpunkt Pinch/NH vorher → nachher | Vielfache 2–8 re Oberton Pinch / NH (dB) vorher → nachher | gegriffen 1+2 vorher → nachher | Tonhöhe Pinch vorher → nachher |
+|---|---|---|---|---|---|
+| Clean | Bund 0 / NH7 | ×1,27 → ×2,50 | −6,7 / −17,0 → 5,3 / −17,0 | 0,30 → 0,56 % | 990 → 991 Hz |
+| Clean | Bund 5 / NH5 | ×1,63 → ×1,84 | 2,6 / −17,5 → 6,9 / −17,5 | 0,60 → 0,40 % | 1326 → 1328 Hz |
+| Clean | Bund 12 / NH3 | ×1,04 → ×1,31 | −7,7 / −27,2 → −3,2 / −27,2 | 12,96 → 1,83 % | **662** → 1996 Hz |
+| Crunch | Bund 0 / NH7 | **×1,04** → ×1,73 | −13,4 / −16,4 → −1,6 / −16,4 | 0,18 → 1,07 % | 989 → 991 Hz |
+| Crunch | Bund 5 / NH5 | ×1,35 → ×1,67 | −2,7 / −20,4 → 2,0 / −20,4 | 1,75 → 1,35 % | 1326 → 1329 Hz |
+| Crunch | Bund 12 / NH3 | ×0,90 → ×1,31 | −8,9 / −35,1 → −2,8 / −35,1 | **29,08** → 3,92 % | **662** → 1997 Hz |
+| High Gain | Bund 0 / NH7 | **×1,01** → ×1,23 | **−6,8 / −7,0** → −3,7 / −7,0 | 0,05 → 0,77 % | 989 → 991 Hz |
+| High Gain | Bund 5 / NH5 | **×1,08** → ×1,58 | −5,5 / −9,3 → 5,9 / −9,3 | 0,23 → 0,26 % | 1325 → 1329 Hz |
+| High Gain | Bund 12 / NH3 | ×1,07 → ×1,06 | −13,2 / −28,9 → −13,5 / −28,9 | **11,70** → 2,50 % | **661** → 1987 Hz |
+
+Befunde und Reparaturen (11 Fehler auf ef25d88 → 0):
+- *Pinch Bund 12 klang am gegriffenen E5* (alle Presets): der 3. Teilton der hohen DI-Regionen liegt 20–33 dB unter dem Grundton (Region 75: −30,6 dB, 78: −32,7 dB; E4-Region 63: −1,8 dB, E2: +13 dB), der Kamm behielt fast nichts, die 10 % Grundton-Rest dominierten. → `SampleBank` misst beim Laden je Noten-Region den Leistungsanteil der Kamm-Reihe n = 2…6 (30–200 ms; kein Asset, keine Formatänderung); ein Pinch/Artificial Harmonic hebt den Kamm auf mindestens 0,15 Anteil an (≈ Oberton 1,4 dB unter dem Notenpegel, wie bei leerer E4/E2, an der die Pinch-Mischung in Zyklus 19 kalibriert wurde), höchstens ×8. Mindestanteil 0,05/0,10 gemessen: HG-Tonhöhe Bund 12 blieb bei 661–662 Hz.
+- *Pinch = NH nach der Sättigung* (Crunch/HG Bund 0): → der Pinch-Kamm neigt seine Oberton-Reihe um +6 dB/Oktave (Plektrum am Steg: Teiltöne ~1/k statt ~1/k² des aufgenommenen Anschlags), auf gleiche Leistung normiert (die Plektrum-Position verteilt die Energie nur um; Faktor je Region beim Laden gemessen) (Commits d118816, 079bde3).
+- *Rot nach den ersten Pinch- und Trim-Commits* (`pinchStemsDoNotClip`, Test 65f0547): Clean-Pinch-Stems v127 (E2/D3/E4/E4 Bund 12) +2,6/+3,6/+1,0/+3,0 dBFS mit 24/42/4/64 geclippten Samples — die auf den Oberton normierte Neigung fügte Energie hinzu, und der angehobene Kamm lag in den ersten Millisekunden auf dem vollen Ton (Spitze bei 3,3 ms, Körper 20–40 ms −11 dBFS). → leistungsneutrale Neigung, und der Kamm baut sich über 12 ms auf, während der volle Ton (6 ms) ausklingt (der Daumen setzt sich nach dem Plektrum-Klick auf den Knoten). Nachher −2,6/−2,3/−4,4/−1,0 dBFS, 0 geclippt (gepickt v127 −3,2/−2,8/−3,1/−2,1 dBFS).
+- Verworfen (gemessen): Hochregal mit Nullstelle am Oberton (G = 4/8: Crunch Bund 0 ×1,13/×1,17), Neigung nur bis zum 3. Vielfachen (HG Bund 0 ×1,04), Neigung bis 5 kHz (HG ×1,07, Clipping blieb), NH-Pegel −6/−12 dB (HG-NH7-Schwerpunkt 1338/1334 Hz, unabhängig vom Pegel), kürzerer voller Einsatz 3 ms (Clipping schlimmer).
+- Schwelle Schwerpunkt ×1,2 statt der im Auftrag beispielhaft genannten ×1,25: in High Gain gibt die Sättigung schon dem reinen NH7 Obertöne −7 dB re Oberton (in den anderen Fällen −16…−35 dB); der Pinch erreicht dort ×1,23 bei +3,3 dB Teiltonanteil, auf ef25d88 ×1,01–1,08.
+- E2/D3-Saite (Qa19-Prüfung, weiter grün): Vielfache re Oberton Pinch Clean −2,7/0,2 → 4,2/0,8 dB, Crunch −3,2/−0,3 → 6,1/0,4 dB, HG 0,7/4,5 → 11,9/5,9 dB; Schwerpunkt Clean 1289/1016 → 1477/1118 Hz, Crunch 728/852 → 952/888 Hz, HG 1564/1848 → 1705/1808 Hz; Tonhöhe 247,4–247,8 / 441,0–441,3 Hz. Spitze am Master (inkl. Clean-Trim +4,5 dB) Clean −9,9/−11,3 → −4,8/−7,0 dBFS.
+
+**3. Preset-Lautheit (`presetLoudnessIsMatchedWithoutClipping`, `presetCharacterStaysInItsRange`, `kWeightingAndGatingFollowBs1770`).** K-Gewichtung nach BS.1770-4 selbst implementiert (Analogprototyp über bilineare Transformation; bei 48 kHz die Koeffizienten der Normtabellen auf 1e-6; 1-kHz-Sinus −20 dBFS nur links −23,00 LUFS; 5 s Stille bzw. ein 30 dB leiserer Teil ändern den integrierten Wert um 0,14 dB, Teilblöcke an der Grenze), 400-ms-Blöcke mit 75 % Überlappung, Gates −70 LUFS / −10 LU. Referenzphrase 4 Takte: offene E-/A-Akkorde, Achtel-Linie D- bis E-Saite, PM-Riff mit Powerchords, Powerchords; Werks-Mix 0,8, am Master (L+R).
+
+| Preset | Trim | integriert vorher → nachher | Spitze vor Limiter vorher → nachher | Stem (ohne Limiter) | Limiter > 0,5 dB |
+|---|---|---|---|---|---|
+| Clean | +4,5 dB | −23,2 → −18,7 LUFS | −8,7 → −4,2 dBFS | −8,7 → −4,2 dBFS, 0 geclippt | 0 % |
+| Crunch | −1,0 dB | −17,0 → −18,0 LUFS | −7,4 → −8,4 dBFS | −7,4 → −8,4 dBFS, 0 geclippt | 0 % |
+| High Gain | −2,5 dB | −15,9 → −17,9 LUFS | −9,1 → −7,4 dBFS | −9,1 → −7,4 dBFS, 0 geclippt | 0 % |
+| Spreizung | | **7,24 → 0,80 LU** | | | |
+
+Reparatur: Ausgangstrim je gesampeltem Preset nach der Effektkette, nur solange die Bank spielt (`TonePresets.outputTrimDb`, Commit d1d8fb8). Die erste Fassung über den AMP-„level“ (Clean 3 → 7,5 dB) war rot in `Qa18GainStructureTest.cleanPresetAmpStaysCleanOnADefaultVelocityNote` (Amp-Ausgangssamples ≥ 0,98) und `Qa18FirstBeatTest.loopStartingAtBar2…` (modellierter Clean ohne Bank lief in den Master-Limiter) und wurde deshalb hinter die Kette verlegt und auf die Bank beschränkt. Der Clean-Trim ist so groß, wie ein v127-Powerchord-Stem ~1 dB Reserve behält (−5,6 → −1,1 dBFS); HG enthält +0,5 LU aus dem Pick-Anschlag. Qa18-Sonde (1 Takt Riff, RMS nach Limiter, inkl. Akustik ohne Trim): Spreizung 8,6 → 6,9 dB.
+
+Klangcharakter (`presetCharacterStaysInItsRange`; Bereiche Schwerpunkt ±10 %, THD ±15 %, Dynamik ±1 dB, Ausklang ±20 %): Schwerpunkt 462/519/1445 → 462/519/1424 Hz, THD 1,1/20,8/24,3 → 1,1/20,8/24,0 %, Dynamik v40→v127 12,8/8,5/1,4 → 12,8/8,5/1,3 dB, Ausklang nach Note-off bis −50 dB 192/125/67 → 192/125/63 ms (Clean/Crunch in diesen Größen unverändert, HG durch die Anschlags-Hüllkurve).
+
+**Nebenwirkungen (gemessen; alle bestehenden Prüfungen grün):** Standardband D19 (HG + Bass + Drums): Master vor Limiter −3,0 → −2,7 dBFS, Limiter 0 → 0 %, Gitarre Spitze −9,4 → −7,6 / RMS −20,3 → −22,1 dBFS (Bass/Drums unverändert). Default-Band D2: −3,0 → −2,1 dBFS, Limiter 0 %. Demo-Band (2 × HG): −0,4 → +0,7 dBFS vor Limiter, Limiter > 0,5 dB 0,0 → 3,7 % der Zeit, max. GR 0,1 → 1,2 dB (nur gedruckt; das Budget gilt für die Default-Band). Qa20-Declick HG (Grenze −20 dBFS): STOP −23,3 → −22,6, PAUSE −22,0 → −20,6 dBFS (Release-Geräusch mit Anschlags-Hüllkurve; 0,6 dB Reserve). HG-Attack-Verhältnis (Qa19, E2 v96, erste 20 ms gegen 20–200 ms) offen 0,1 → 3,5 dB, PM 2,6 → 6,4 dB. Audio-Thread 0 B (Qa20AudioThreadAllocTest), Live = Offline bitgleich (Q19L max |Δ| 0), Export-Ausrichtung und Synchronität unverändert (Q20S größte Spreizung 17 Frames), CPU Standardband Block 192 Median 179 µs / p99 336 µs (JVM, parallele Last).
+
+**Stabilität:** neue Tests deterministisch (kein Thread, keine Zeitmessung; Qa22-Klasse ≈ 10 s). Volle JVM-Suite auf 079bde3 dreimal hintereinander grün (`--rerun-tasks`, je 598/598, ≈ 4 min), Messausgaben der drei Läufe identisch.
+
+**Offen / nur per Hörtest:** ob der hörbare HG-Pick-Anschlag (bis +4,5 dB) natürlich klingt und ob das PM-Riff damit „heller“ wirkt (Langzeitanteil > 1 kHz +7 %); Klang des Legato-Übergangs (6-ms-Überblendung zweier Tonhöhen, in HG Intermodulation während der Überblendung möglich); Pinch-Klangfarbe nach Neigung und Anhebung (Clean-Pinch deutlich heller als in Zyklus 19, E4 Bund 0 Schwerpunkt ×2,50), Pinch-/NH-Mischpegel; ob gleiche LUFS bei so verschiedenen Spektren gleich laut wirken (K-Gewichtung ist ein Modell); Mischbalance der Standardband (HG-Gitarre −1,8 dB RMS). Risiken: Clean hat weniger Stem-Reserve (v127-Powerchord-Stem clippt ab Fader ≈ 0,85 statt nie; im Mix fängt der Limiter ab), HG-Declick-Reserve 0,6 dB, die Demo-Band mit zwei HG-Gitarren nutzt den Limiter wieder (3,7 %). A/B-Renders (24 bit, 48 kHz, je 25 s: 0–8 s Referenzphrase, 10–12 s gepickt/Hammer-on, 12–14 s gepickt/Pull-off auf der D-Saite, 16–22 s Pinch/NH-Paare hohe E) liegen nur im Scratchpad, nicht im Repo.
+
+Ergebnis Zyklus 22: **3 Ziele mit roten Tests erreicht** (Übergänge in allen Presets und Lagen ≥ 3 dB getrennt, Pinch vs. Natural auf der hohen E-Saite in allen Presets messbar verschieden und am Oberton, Lautheit 7,24 → 0,80 LU ohne Clipping), dazu 1 Folgebefund behoben (Pinch-Stems clippten nach Trim und Neigung). Commits ef6d1f9, 223e08a, d118816, d1d8fb8, 079bde3 (Tests b14a38c, 65f0547).

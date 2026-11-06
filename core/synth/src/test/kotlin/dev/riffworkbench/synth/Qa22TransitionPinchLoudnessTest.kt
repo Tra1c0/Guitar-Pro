@@ -103,7 +103,7 @@ class Qa22TransitionPinchLoudnessTest {
      * Beide Größen vergleichen den Einsatz mit der klingenden Saite unmittelbar davor und überleben deshalb die Sättigung besser als
      * ein Spektrum über 21 ms (Qa19: High Gain 2,8 / 3,4 dB). Gemessen auf ef25d88 rot: der Legato-Ton setzte mit 30 ms Versatz in
      * einen frischen, hellen Anschlag ein und ohne Einblendung (Stufe = Klick), und in High Gain glätteten die drei Stufen den
-     * Pick-Anschlag auf +0,6…+2,5 dB.
+     * Pick-Anschlag auf −0,8…+2,5 dB.
      */
     @Test fun pickedAndLegatoTransitionsDifferInEveryPreset() {
         val bank = bankOrSkip()
@@ -285,7 +285,7 @@ class Qa22TransitionPinchLoudnessTest {
      * (3) Wahrgenommene Lautheit der drei Presets bei gleicher Spur-Lautstärke (Werks-Mix 0,8): integrierte Lautheit nach
      * BS.1770-4 (K-Gewichtung, 400-ms-Blöcke, Gates −70 LUFS / −10 LU) über die Referenzphrase am Master. Ziel: alle innerhalb
      * 1,5 LU zueinander, ohne Clipping am Ausgang und im Stem (ohne Limiter), Limiter für diese Phrase nie > 0,5 dB.
-     * Auf ef25d88 rot: Clean −23,2, Crunch −17,0, High Gain −15,9 LUFS (Spreizung 7,3 LU).
+     * Auf ef25d88 rot: Clean −23,2, Crunch −17,0, High Gain −15,9 LUFS (Spreizung 7,2 LU).
      */
     @Test fun presetLoudnessIsMatchedWithoutClipping() {
         val bank = bankOrSkip()
