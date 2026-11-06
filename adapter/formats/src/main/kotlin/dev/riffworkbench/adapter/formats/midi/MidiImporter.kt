@@ -10,7 +10,8 @@ import kotlin.math.abs
  * Measures follow the time-signature events (4/4 until the first one); a signature change inside a bar shortens
  * that bar (pickupLength). Onsets and note ends are quantized per quarter-note window of each measure: the window
  * uses either the 1/16 grid or the triplet 1/12 grid, whichever gives the lower summed distance for all onsets
- * and ends inside it (ties prefer 1/16; windows shorter than a quarter always use 1/16). All positions stay exact
+ * and ends inside it (ties prefer 1/16; windows shorter than a quarter never use triplets); a window whose events all
+ * lie exactly on the 1/32 or 1/64 grid keeps that grid instead (drum-grid 32nds from our own export). All positions stay exact
  * rationals. Notes with identical quantized start and end form one beat; overlapping beats are spread over up to
  * four voices; notes crossing bar lines become tied notes, odd lengths are spelled as tied written values.
  *
@@ -323,16 +324,30 @@ private class MidiScoreBuilder(private val smf: SmfData, private val ids: IdSour
         }
         val percussion = kind == InstrumentKind.PERCUSSION
         val events = g.notes.flatMap { if (percussion) listOf(it.on * unitsPerTick) else listOf(it.on * unitsPerTick, it.off * unitsPerTick) }
+        // Finer straight grids (QA cycle 21): a window whose events all lie exactly on the 1/32 (or 1/64) grid keeps it -
+        // the drum grid writes 32nds, and quantizing them to 1/16 moved every second hit of our own MIDI export. Only an
+        // exact fit counts, so played (unquantized) files keep the 1/16-or-triplet choice.
+        val step32 = units / 32
+        val step64 = units / 64
+        val err32 = HashMap<Long, Long>()
+        val err64 = HashMap<Long, Long>()
         for (p in events) {
             val (key, ws, we) = windowOf(p)
             err16[key] = (err16[key] ?: 0L) + distance(p, ws, we, step16)
             if (we - ws == quarter) err12[key] = (err12[key] ?: 0L) + distance(p, ws, we, step12)
+            err32[key] = (err32[key] ?: 0L) + distance(p, ws, we, step32)
+            err64[key] = (err64[key] ?: 0L) + distance(p, ws, we, step64)
         }
-        val triplet = err12.filter { (key, e12) -> e12 < (err16[key] ?: 0L) }.keys
-        fun stepAt(p: Long) = if (windowOf(p).first in triplet) step12 else step16
+        val fine = HashMap<Long, Long>()
+        for ((key, e16) in err16) if (e16 > 0) when {
+            err32[key] == 0L -> fine[key] = step32
+            err64[key] == 0L -> fine[key] = step64
+        }
+        val triplet = err12.filter { (key, e12) -> key !in fine && e12 < (err16[key] ?: 0L) }.keys
+        fun stepAt(p: Long) = windowOf(p).first.let { key -> fine[key] ?: if (key in triplet) step12 else step16 }
         fun snap(p: Long): Long {
             val (key, ws, we) = windowOf(p)
-            val step = if (key in triplet) step12 else step16
+            val step = fine[key] ?: if (key in triplet) step12 else step16
             val j = (minOf(p, total) - ws) / step
             val a = ws + j * step
             val b = minOf(a + step, we)
