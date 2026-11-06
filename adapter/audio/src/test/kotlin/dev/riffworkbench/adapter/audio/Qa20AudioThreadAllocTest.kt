@@ -165,7 +165,8 @@ class Qa20AudioThreadAllocTest {
         mx.isThreadContentionMonitoringEnabled = true
         val before = mx.getThreadInfo(tid)
         val done = java.util.concurrent.atomic.AtomicInteger()
-        val watchdog = Thread { Thread.sleep(20_000); if (done.get() < cmds.size * 50) release.countDown() }.apply { isDaemon = true; start() }
+        // Releases the monitors if the render loop hangs on one (the assertion below then fails instead of the test hanging).
+        val watchdog = Thread { try { Thread.sleep(20_000); if (done.get() < cmds.size * 50) release.countDown() } catch (_: InterruptedException) {} }.apply { isDaemon = true; start() }
         val t0 = System.nanoTime()
         // post() itself reads `running` under the idle lock (control side): enqueue directly, as post() does before that read.
         @Suppress("UNCHECKED_CAST") val queue = RealtimeHost::class.java.getDeclaredField("commands").apply { isAccessible = true }.get(host) as java.util.Queue<HostCommand>
