@@ -4,7 +4,7 @@ Fortsetzung nach Pausen: dieses Dokument + `docs/QA_JOURNAL.md` lesen, dann beim
 Branch: `ccr-0b650dff-jnhups-qa`, per Fast-Forward gespiegelt nach `ccr-0b650dff-jnhups`. Android-Builds/Tests nur auf GitHub Actions; lokal JVM-Harness für die portablen Module.
 
 ## Stand
-- Letzter grüner CI-Lauf: eb82763 (Lauf 42201992391, Build + `check` + Lint + Robolectric, APK-Artefakt `riffworkbench-debug-apk`). Vorher grün: 2acce85, 1eec164, d9c3c09, 7ed6d80, 2b8a1d7, 64b495b.
+- Letzter grüner CI-Lauf: babba9a (Lauf 42203891763, Build + `check` + Lint + Robolectric, APK-Artefakt `riffworkbench-debug-apk`). Vorher grün: eb82763, 2acce85, 1eec164, d9c3c09, 7ed6d80, 2b8a1d7, 64b495b.
 - Lokale JVM-Suite (portable Module): 602/602 grün auf eb82763.
 - Zyklus 18 abgeschlossen (siehe QA_JOURNAL): Sample-Bank v2 (Feinstimmung/Pegel), Gain-Staging, Transport-Startfixes, Seek-Poller-Race, Startmarke/Zum-Anfang, ViewportScroll, Taktangabe-Sheet (Long-Press), Standard 1×4/4 + E-Standard, Umstimmen mit Konfliktplan.
 - Zyklus 19 gemergt (64b495b, JVM 549/549, CI grün): Long-Press-Bereichsauswahl mit Haptik, Drum-Pegel/erster Hit/Raster, Gitarren-Artikulationen (Natural/Pinch Harmonics, Palm-Mute-Klangfarbe), Live = Offline bitidentisch, zwei Start-Races im Transport (PLAYING→PAUSED-Flackern, Ansicht sprang).
@@ -46,4 +46,4 @@ Keine Geräte-, Latenz- und Hörtests in dieser Umgebung: erster Schlag auf echt
 Bank-Grenze: Flatwound-DI-Aufnahme, E2 trocken ohne Energie > 2 kHz — „glasklarer“ Clean nur mit anderer (lizenzierter) Aufnahme oder Hörentscheidung über Höhenanhebung. Natural Harmonics sind modelliert (keine Flageolett-Samples).
 
 ## Nächster Schritt
-Autonom lösbare P0/P1-Befunde sind abgearbeitet (Zyklen 18–21). Als Nächstes braucht es Gerätebefunde des Nutzers: APK aus Lauf 42201992391 installieren, A/B-WAVs aus Zyklus 22 anhören, Diagnose-Zähler (Unterläufe/Überläufe) nach dem ersten Play eines frischen Prozesses ablesen, Hörtest Clean/Crunch/HG mit Open/PM/Dead/Harmonics/Pinch/Legato, Bereichsauswahl/Haptik und Pinch-Zoom am Telefon. Danach P2 oder Klangfeinschliff nach Gehör. Branch `ccr-0b650dff-jnhups` per Fast-Forward auf denselben Stand wie `ccr-0b650dff-jnhups-qa` gebracht (e6972b5).
+Autonom lösbare P0/P1-Befunde sind abgearbeitet (Zyklen 18–21). Als Nächstes braucht es Gerätebefunde des Nutzers: APK aus Lauf 42203891763 installieren, A/B-WAVs aus Zyklus 22 anhören, Diagnose-Zähler (Unterläufe/Überläufe) nach dem ersten Play eines frischen Prozesses ablesen, Hörtest Clean/Crunch/HG mit Open/PM/Dead/Harmonics/Pinch/Legato, Bereichsauswahl/Haptik und Pinch-Zoom am Telefon. Danach P2 oder Klangfeinschliff nach Gehör. Branch `ccr-0b650dff-jnhups` per Fast-Forward auf denselben Stand wie `ccr-0b650dff-jnhups-qa` gebracht.
