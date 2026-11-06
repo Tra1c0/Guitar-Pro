@@ -149,8 +149,10 @@ internal class DrumVoice(private val sampleRate: Int) {
             left[offset + k] += lastL
             right[offset + k] += lastR
             t++
+            // Sample-exact end (QA cycle 24): checked once per render call, the voice stopped at the end of whatever block or
+            // segment it was in, so the live path (256/192/480-frame blocks) and the export (1024) differed by up to 7.6e-5.
+            if (amp < 1e-3f && (noiseLevel == 0f || noiseEnv < 1e-3f) && clickLeft == 0) { active = false; return }
         }
-        if (amp < 1e-3f && (noiseLevel == 0f || noiseEnv < 1e-3f) && clickLeft == 0) active = false
     }
 
     /** Drum heads damp their previous vibration when struck again; cymbals keep ringing. */

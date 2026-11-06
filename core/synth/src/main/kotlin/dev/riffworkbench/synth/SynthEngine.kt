@@ -144,14 +144,21 @@ class MixState internal constructor(internal val gains: FloatArray, internal val
  */
 private val NO_CLICKS = LongArray(0)
 
-class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val bank: SampleBank? = null) {
+class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val bank: SampleBank? = null,
+                  /** Sampled drum kit (QA cycle 24); GM notes it does not hold, and every note while it is missing, play the synthetic kit. */
+                  private val drumKit: DrumKit? = null) {
     val hasBank: Boolean get() = bank != null
+    val hasDrumKit: Boolean get() = drumKit != null
     private val strings = Array(72) { StringVoice(sampleRate) }
     /** Sampled electric-guitar strings (only allocated with a bank): 8 tracks x 7 strings plus release tails. */
     private val samples = Array(if (bank != null) 96 else 0) { SampleVoice(sampleRate) }
     private val sampleMap = IntArray(MAX_TRACKS * 16) { -1 }
     private val roundRobin = IntArray(MAX_TRACKS * 16)
     private val drums = Array(48) { DrumVoice(sampleRate) }
+    /** Sampled drum strokes (only allocated with a kit); cymbal tails ring up to 6 s, hi-hats choke each other. */
+    private val drumSamples = Array(if (drumKit != null) 64 else 0) { SampledDrumVoice(sampleRate) }
+    /** Round-robin counter of the sampled kit per track (slot [MAX_TRACKS] for tracks beyond it), like the noise seeds. */
+    private val drumRoundRobin = IntArray(MAX_TRACKS + 1)
     private val keys = Array(48) { KeysVoice(sampleRate) }
     private val clicks = Array(6) { ClickVoice(sampleRate) }
     private val stringMap = IntArray(MAX_TRACKS * 16) { -1 }
@@ -291,6 +298,7 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
     private fun restartDrums() {
         val r = rack
         for (v in drums) if (v.active) { if (r != null) stolen(r, v.track, v.lastL, v.lastR); v.kill() }
+        for (v in drumSamples) v.fadeOutQuickly()
         if (r != null) for (ch in r.channels) if (ch.kind == ChannelKind.DRUMS) for (fx in ch.effects) if (fx is Compressor) fx.reset()
     }
 
@@ -298,7 +306,7 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
         for (v in strings) v.release(fast)
         for (v in samples) v.release(fast)
         for (v in keys) v.release(fast)
-        if (fast) for (v in drums) v.choke()
+        if (fast) { for (v in drums) v.choke(); for (v in drumSamples) v.choke() }
         stringMap.fill(-1)
         sampleMap.fill(-1)
     }
@@ -372,6 +380,7 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
         for (v in samples) if (v.active) { val ch = r.channels.getOrNull(v.track); if (ch == null) v.kill() else { v.render(ch.left, offset, count, now); ch.idleBlocks = 0; used++ } }
         for (v in keys) if (v.active) { val ch = r.channels.getOrNull(v.track); if (ch == null) v.kill() else { v.render(ch.left, offset, count, now); ch.idleBlocks = 0; used++ } }
         for (v in drums) if (v.active) { val ch = r.channels.getOrNull(v.track); if (ch == null) v.kill() else { v.render(ch.left, ch.right, offset, count, now); ch.idleBlocks = 0; used++ } }
+        for (v in drumSamples) if (v.active) { val ch = r.channels.getOrNull(v.track); if (ch == null || !ch.stereo) v.kill() else { v.render(ch.left, ch.right, offset, count, now); ch.idleBlocks = 0; used++ } }
         for (v in clicks) if (v.active) v.render(auxL, auxR, offset, count, mix.metronome.coerceAtLeast(0.6f))
         for (ch in r.channels) if (ch.residualL != 0f || ch.residualR != 0f) {
             var rl = ch.residualL; var rr = ch.residualR
@@ -544,7 +553,23 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
             }
             ChannelKind.DRUMS -> {
                 val midi = note.soundingPitch.toInt()
+                val kit = drumKit
+                val kitNote = kit?.note(midi)
+                val excl = kitNote?.exclusiveClass ?: 0
                 for (v in drums) if (v.active && v.track == t && ((note.chokeGroup == 1 && v.chokeGroup == 1) || (v.midi == midi && v.isHead))) v.choke()
+                // The kit's exclusive classes (SF2 exclusiveClass: hi-hat open/closed/pedal, each cymbal) choke like the hi-hat group.
+                for (v in drumSamples) if (v.active && v.track == t && ((note.chokeGroup == 1 && v.chokeGroup == 1) || (excl != 0 && v.exclusiveClass == excl) || (v.midi == midi && v.isHead))) v.choke()
+                if (kit != null && kitNote != null) {
+                    val si = allocate(drumSamples, { it.active }, { false }, { it.startClock })
+                    if (drumSamples[si].active) stolen(r, drumSamples[si].track, drumSamples[si].lastL, drumSamples[si].lastR)
+                    drumSamples[si].kill()
+                    val art = if (note.drumStroke == DrumStroke.RIMSHOT) kitNote.rimshot ?: kitNote.normal else kitNote.normal
+                    val pan = (kitNote.pan + note.elementPan.toFloat()).coerceIn(-1f, 1f)
+                    val rr = drumRoundRobin[slot]++
+                    drumSamples[si].start(kit, kitNote, art, note.velocity, rr, t, now, (note.elementGain.toFloat() * kitNote.gain * SAMPLED_KIT_TRIM), pan, note.chokeGroup,
+                        if (note.drumStroke == DrumStroke.CHOKE) (0.12 * sampleRate).toLong() else -1L)
+                    return
+                }
                 val index = allocate(drums, { it.active }, { false }, { it.startClock })
                 if (drums[index].active) stolen(r, drums[index].track, drums[index].lastL, drums[index].lastR)
                 drums[index].kill()
@@ -599,5 +624,12 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
          * recorded partial is 20-33 dB down, still sound at their overtone instead of the fretted note's bleed.
          */
         const val OVERTONE_FLOOR = 0.15f
+        /**
+         * Output level of the sampled kit (QA cycle 24, measured at 48 kHz, factory mix, standard band of Qa22): its samples peak
+         * near 0 dBFS at the top layer. Trim 0.5 (the synthetic kit's) left the drums 5.9 dB under the high-gain guitar (solo RMS,
+         * synthetic kit +2.5 dB), 0.72 still 4.5 dB (the drum compressor takes about half of a level change); 1.0 gives +3.3 dB,
+         * inside both +2.5 ±2 (cycle 22) and +4.0 ±2 (ef25d88), with the v127 groove stem at -1.9 dBFS at track fader 1.0.
+         */
+        const val SAMPLED_KIT_TRIM = 1.0f
     }
 }

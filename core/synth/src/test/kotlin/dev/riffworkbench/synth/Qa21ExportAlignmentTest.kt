@@ -20,7 +20,9 @@ import org.junit.Test
  * Projekte: Standardband 120 BPM (Clean-Gitarre mit Box + Hall, gesampelt wenn die Bank vorliegt; Bass mit Box; Drums
  * ohne Box; Pad mit langem Hall), je Zählzeit ein Schlag. Jede Messung druckt ihre Zahlen ("Q21E ...").
  */
-class Qa21ExportAlignmentTest {
+open class Qa21ExportAlignmentTest {
+    /** Kit under test: null = the synthetic kit (fallback); Qa24SampledExportAlignmentTest repeats every check with the sampled kit. */
+    protected open val drumKit: DrumKit? get() = null
     companion object {
         const val SR = 48_000
         const val BLOCK = 1024
@@ -60,7 +62,7 @@ class Qa21ExportAlignmentTest {
 
     private fun export(p: Project, solo: Int?, tail: Double, masterFx: Boolean = true): Stereo {
         val bytes = ByteArrayOutputStream()
-        val r = OfflineMixdown(ScorePlaybackCompiler(), bank).render(p, RenderOptions(sampleRate = SR, bitDepth = 32, includeMasterFx = masterFx, tailSeconds = tail), { b, o, l -> bytes.write(b, o, l) }, solo)
+        val r = OfflineMixdown(ScorePlaybackCompiler(), bank, drumKit).render(p, RenderOptions(sampleRate = SR, bitDepth = 32, includeMasterFx = masterFx, tailSeconds = tail), { b, o, l -> bytes.write(b, o, l) }, solo)
         assertTrue("export $solo: $r", r is Outcome.Success)
         val d = Wav.decode(bytes.toByteArray())
         return Stereo(d.left, d.right)
@@ -69,7 +71,7 @@ class Qa21ExportAlignmentTest {
     /** The same engine as OfflineMixdown (1024-frame blocks from plan frame 0), without compensation, [frames] long. */
     private fun raw(p: Project, solo: Int?, frames: Long, masterFx: Boolean = true): Stereo {
         val plan = (ScorePlaybackCompiler().compileNow(p, SR) as Outcome.Success).value
-        val e = SynthEngine(SR, BLOCK, bank)
+        val e = SynthEngine(SR, BLOCK, bank, drumKit)
         e.installRack(ChannelRack.build(p, SR, BLOCK, includeMasterFx = masterFx && solo == null)); e.setMix(MixState.from(p, 0f, solo)); e.install(EngineProgram.prepare(plan)); e.play(0)
         val l = FloatArray(frames.toInt()); val r = FloatArray(frames.toInt()); val buf = FloatArray(BLOCK * 2); var done = 0
         while (done < frames) { val k = minOf(BLOCK.toLong(), frames - done).toInt(); e.render(buf, k); for (i in 0 until k) { l[done + i] = buf[2 * i]; r[done + i] = buf[2 * i + 1] }; done += k }
