@@ -76,6 +76,15 @@ fun ScoreCanvas(
     followSuspended: Boolean = false,
     /** The user panned, zoomed or dragged while following: the owner decides how long following pauses. */
     onUserScroll: (() -> Unit)? = null,
+    /**
+     * Long press on a bar (Bericht 1 §5): the pressed bar becomes the anchor of a bar range. A drawn time signature wins
+     * ([onSignatureLongPress]); on the selected note the press stays a note drag ([onMoveNote]). Null disables it.
+     */
+    onRangeStart: ((EntityId) -> Unit)? = null,
+    /** Drag after [onRangeStart]: the bar under (or, beside the bars, nearest to) the finger; true when the range changed (haptic tick). */
+    onRangeExtend: ((EntityId) -> Boolean)? = null,
+    /** Release (or cancel) after [onRangeStart]: the range stays selected. */
+    onRangeEnd: (() -> Unit)? = null,
 ) {
     val density = LocalDensity.current.density
     val palette = rememberInkPalette()
@@ -97,6 +106,11 @@ fun ScoreCanvas(
     val currentSuspended by rememberUpdatedState(followSuspended)
     val currentOnSignature by rememberUpdatedState(onSignatureLongPress)
     val currentOnUserScroll by rememberUpdatedState(onUserScroll)
+    val currentOnRangeStart by rememberUpdatedState(onRangeStart)
+    val currentOnRangeExtend by rememberUpdatedState(onRangeExtend)
+    val currentOnRangeEnd by rememberUpdatedState(onRangeEnd)
+    // Long-press range: started by the tap detector's long press, followed bar by bar by the range tracker below.
+    val range = remember { RangeDrag() }
     // Finger position (viewport px) while a selected note is dragged.
     var dragAt by remember { mutableStateOf<Offset?>(null) }
     // Cursor geometry of the last cursor-effect run: a relayout that keeps the cursor in place must not move the view.
@@ -111,6 +125,13 @@ fun ScoreCanvas(
         offsetY = ViewportScroll.clamp(offsetY, l.height * currentFactor, viewport.height.toFloat())
     }
     fun userScrolled() { if (currentFollow && !currentSuspended) currentOnUserScroll?.invoke() }
+    // The selected note under (x, y) in layout units, i.e. where the note-drag detector below would start a drag.
+    fun onDragHandle(l: ScoreLayout, x: Float, y: Float): Boolean {
+        if (currentOnMove == null) return false
+        val c = currentCursor ?: return false
+        val note = l.notes.firstOrNull { x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h } ?: return false
+        return note.measureId == c.measureId && note.offset == c.offset && (note.string == null || note.string == c.string)
+    }
     // Keep the edit cursor visible after taps, arrows and auto-advance.
     LaunchedEffect(cursor?.measureId, cursor?.offset, cursor?.string, layout, zoom, viewport) {
         val l = layout ?: return@LaunchedEffect
@@ -172,12 +193,31 @@ fun ScoreCanvas(
         }
         .pointerInput(Unit) {
             // Same detector as the tap, so the outer transform detector still cancels both once a pan passes the slop.
+            // After a long press it consumes every change until release, which also ends pan/zoom for that gesture.
             detectTapGestures(onLongPress = { pos: Offset ->
                 val l = currentLayout ?: return@detectTapGestures
-                val handler = currentOnSignature ?: return@detectTapGestures
-                val box = l.signatureAt((pos.x + offsetX) / currentFactor, (pos.y + offsetY) / currentFactor) ?: return@detectTapGestures
+                val x = (pos.x + offsetX) / currentFactor
+                val y = (pos.y + offsetY) / currentFactor
+                // The drawn time signature has priority: it opens the signature/tempo sheet.
+                val signature = currentOnSignature
+                if (signature != null) {
+                    val box = l.signatureAt(x, y)
+                    if (box != null) {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        signature(box.measureId)
+                        return@detectTapGestures
+                    }
+                }
+                // Anywhere else on a bar the long press anchors a bar range; the selected note stays a drag handle.
+                val start = currentOnRangeStart ?: return@detectTapGestures
+                if (onDragHandle(l, x, y)) return@detectTapGestures
+                val bar = l.measureAt(x, y) ?: return@detectTapGestures
                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                handler(box.measureId)
+                range.active = true
+                range.last = bar.measureId
+                // Following pauses like for a note drag, so the bars do not move under the finger (no seek: the view only).
+                userScrolled()
+                start(bar.measureId)
             }) { pos: Offset ->
                 val l = currentLayout ?: return@detectTapGestures
                 val x = (pos.x + offsetX) / currentFactor
@@ -220,6 +260,33 @@ fun ScoreCanvas(
                 val string = l.stringAt(y) ?: fromString
                 currentOnMove?.invoke(ScoreTap(note.measureId, note.offset, fromString, note.noteId), ScoreTap(column.measureId, column.offset, string, null))
             }
+        }
+        .pointerInput(Unit) {
+            // Long-press range tracker: once the long press above started a range, follow the finger bar by bar until it
+            // is lifted or the gesture is cancelled. It only reads positions; the tap detector consumes them after the long press.
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                try {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) break
+                        if (!range.active) continue
+                        val l = currentLayout ?: continue
+                        val bar = l.measureNear((change.position.x + offsetX) / currentFactor, (change.position.y + offsetY) / currentFactor) ?: continue
+                        if (bar.measureId == range.last) continue
+                        range.last = bar.measureId
+                        // A light tick per bar change, only when the owner actually moved the range end.
+                        if (currentOnRangeExtend?.invoke(bar.measureId) == true) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    }
+                } finally {
+                    if (range.active) {
+                        range.active = false
+                        range.last = null
+                        currentOnRangeEnd?.invoke()
+                    }
+                }
+            }
         }) {
         Canvas(Modifier.fillMaxSize()) {
             val l = layout ?: return@Canvas
@@ -255,6 +322,12 @@ fun ScoreCanvas(
             }
         }
     }
+}
+
+/** State of a long-press range drag, shared by the tap detector (start) and the range tracker (extend/end); not drawn. */
+private class RangeDrag {
+    var active = false
+    var last: EntityId? = null
 }
 
 private class OverlayPaints(color: Int, playheadColor: Int) {

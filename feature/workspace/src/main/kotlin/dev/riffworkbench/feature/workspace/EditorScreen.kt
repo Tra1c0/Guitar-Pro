@@ -155,11 +155,16 @@ import dev.riffworkbench.ui.score.pitchName
                 onTap = { tap -> vm.tap(tap.measureId, tap.offset, tap.string); if (transport.status == TransportStatus.PLAYING) vm.seekToCursor() },
                 onMoveNote = { from, to -> vm.moveNote(from.measureId, from.offset, from.string, to.measureId, to.offset, to.string) },
                 onSignatureLongPress = onEditSignature,
+                // Long press on a bar + drag: bar range with haptics (Bericht 1 §5). Selection only, never a seek, also while playing.
+                onRangeStart = vm::beginRange,
+                onRangeExtend = vm::extendRange,
+                onRangeEnd = vm::endRange,
                 // A pan/zoom/drag while following: the view stays where the finger put it until the chip (or Play/seek/stop) resumes.
                 onUserScroll = vm::suspendFollow,
                 modifier = Modifier.fillMaxSize().padding(4.dp).clip(RoundedCornerShape(20.dp)).testTag("score-canvas").onSizeChanged { with(density) { vm.setViewportWidth(it.width.toDp().value) } },
                 description = tr("Partitur, Takt $measureNumber, Position ${selection.offset}, Saite ${selection.string + 1}", "Score, bar $measureNumber, position ${selection.offset}, string ${selection.string + 1}") +
-                    tr(". Lange auf die Taktart drücken, um Taktart und Tempo zu ändern", ". Long-press the time signature to change signature and tempo"),
+                    tr(". Lange auf die Taktart drücken, um Taktart und Tempo zu ändern", ". Long-press the time signature to change signature and tempo") +
+                    tr(". Lange auf einen Takt drücken und ziehen, um Takte auszuwählen", ". Long-press a bar and drag to select bars"),
             )
             if (view.followSuspended && playing) {
                 // Following is paused after a manual pan: say so, and offer the way back (Bericht 1 §4 "klar erkennbare Rückkehr").
