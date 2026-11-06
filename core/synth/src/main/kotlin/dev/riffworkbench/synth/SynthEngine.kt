@@ -212,7 +212,7 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
     /**
      * Transport start (QA 19, "der erste Drum-Hit fehlt manchmal"): what sounded before Play (a previewed grid cell, the
      * last hits before Stop) must not shape the first hit. Measured before: up to 200 ms after such a sound the first hit
-     * lost 1-1.8 dB over 50 ms and 2.4-4.2 dB in its 5 ms attack - the drum compressor was still in gain reduction and the
+     * lost up to 1.8 dB over 50 ms and up to 4.2 dB in its 5 ms attack - the drum compressor was still in gain reduction and the
      * 15 ms choke of the previewed head overlapped the new stroke. Drum voices stop here with the 4 ms residual de-click of
      * a stolen voice, and the drum channels' compressors start from rest; reverb/delay tails and every other channel are untouched.
      */
