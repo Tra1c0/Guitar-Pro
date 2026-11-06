@@ -245,6 +245,32 @@ class Qa22TransitionPinchLoudnessTest {
         report("Pinch-Stems", failures)
     }
 
+    /**
+     * (3c) Kein Stem clippt bei maximalem Track-Fader: Stems haben keinen Limiter, der Track-Slider der UI reicht bis 1,0
+     * (MixState.volumeToGain: +3,9 dB über dem Werks-Fader 0,8; Master auf Werkswert). Je Preset v127: offene E- und A-Akkorde
+     * (6/5 Saiten), Powerchords auf E/A/D (Bund 0/3/5/7, Viertel) und ein Takt PM-Riff mit Powerchords; Stem-Spitze ≤ −0,3 dBFS.
+     * Rot gegen die erste Lautheitsangleichung (Clean +4,5 dB, Commit d1d8fb8: Clean +6,1 dBFS, 620 geclippte Samples); ohne
+     * Trim (ef25d88) läge Clean bei +1,6 dBFS, deshalb wird nach unten normiert.
+     */
+    @Test fun noStemClipsAtMaximumTrackFader() {
+        val bank = bankOrSkip()
+        val failures = mutableListOf<String>()
+        fun chord(o: Fraction, den: Int, vararg sf: Pair<Int, Int>) = beat(o, den, *sf.map { (s, f) -> note(s, f, 127) }.toTypedArray())
+        fun power(o: Fraction, den: Int, fret: Int, vararg a: Articulation) = beat(o, den, note(0, fret, 127, *a), note(1, fret + 2, 127, *a), note(2, fret + 2, 127, *a))
+        val bars = listOf(
+            listOf(chord(Fraction.ZERO, 2, 0 to 0, 1 to 2, 2 to 2, 3 to 1, 4 to 0, 5 to 0), chord(Fraction.of(1, 2), 2, 1 to 0, 2 to 2, 3 to 2, 4 to 2, 5 to 0)),
+            listOf(power(Fraction.ZERO, 4, 0), power(Fraction.of(1, 4), 4, 3), power(Fraction.of(1, 2), 4, 5), power(Fraction.of(3, 4), 4, 7)),
+            (0 until 16).mapNotNull { k -> when (k) { 3, 11 -> power(Fraction.of(k.toLong(), 16), 8, if (k == 3) 3 else 5); 4, 12 -> null; else -> beat(Fraction.of(k.toLong(), 16), 16, note(0, 0, 127, pmMark)) } })
+        for (preset in presets) {
+            val base = project(preset, bars)
+            val p = base.copy(tracks = base.tracks.map { it.copy(mix = it.mix.copy(volume = 1.0)) })
+            val stem = (OfflineMixdown(bank = bank).render(p, RenderOptions(sampleRate = sr, bitDepth = 24, tailSeconds = 1.0), { _, _, _ -> }, soloTrack = 0) as Outcome.Success).value
+            println("Q22M ${short(preset)} v127-Akkorde/Powerchords, Fader 1,0: Stem-Spitze ${f1(db(stem.peak))} dBFS, ${stem.clippedSamples} geclippt")
+            check(failures, db(stem.peak) <= -0.3 && stem.clippedSamples == 0L) { "${short(preset)}: Stem-Spitze ${f1(db(stem.peak))} dBFS bei Fader 1,0 (Soll ≤ −0,3 dBFS), ${stem.clippedSamples} geclippt" }
+        }
+        report("Stems bei maximalem Fader", failures)
+    }
+
     // ================================================================== 3. Preset-Lautheit (ITU-R BS.1770-4)
 
     /** Referenzphrase, 4 Takte 120 BPM, v96: offene Akkorde (E, A), Single Notes (Achtel D–E-Saite), PM-Riff mit Powerchords, Powerchords. */
