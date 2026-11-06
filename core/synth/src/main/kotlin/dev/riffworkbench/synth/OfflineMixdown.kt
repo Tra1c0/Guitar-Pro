@@ -7,6 +7,12 @@ import kotlin.math.roundToLong
 /**
  * C-RENDER: the same compiler, engine and mix graph as live playback, rendered faster than real time.
  * Every stem starts at frame 0 of the unfolded route and has the same length, so DAW imports line up.
+ *
+ * Latency compensation (QA cycle 21): live, every source is heard [ChannelRack.outputLatencyFrames] after its plan frame
+ * (cabinet convolution 64 frames, cycle 20). The export drops exactly that many leading engine frames, like a DAW's
+ * plugin-delay compensation: bar 1, beat 1 lies on frame 0 of the file, the file still holds the whole plan plus the tail
+ * (nothing is cut at the end), and mix and stems line up although the stems have no master chain. The engine renders the
+ * same blocks as before, so export frame i is bit-identical to live/engine frame i + latency.
  */
 class OfflineMixdown(private val compiler: ScorePlaybackCompiler = ScorePlaybackCompiler(), private val bank: SampleBank? = null) {
     fun framesFor(project: Project, options: RenderOptions): Outcome<Long> = when (val plan = compiler.compileNow(project, options.sampleRate)) {
@@ -24,7 +30,8 @@ class OfflineMixdown(private val compiler: ScorePlaybackCompiler = ScorePlayback
         if (Wav.dataBytes(total, 2, options.bitDepth) + 36 > 0xFFFFFFFFL) return Outcome.Failure(FailureCode.RESOURCE_LIMIT, "Audio-Export wäre größer als 4 GiB (WAV-Grenze); bitte kürzer oder mit geringerer Bittiefe exportieren", contractId = "C-RENDER")
         val block = 1024
         val engine = SynthEngine(options.sampleRate, block, bank)
-        engine.installRack(ChannelRack.build(project, options.sampleRate, block, includeMasterFx = options.includeMasterFx && soloTrack == null))
+        val rack = ChannelRack.build(project, options.sampleRate, block, includeMasterFx = options.includeMasterFx && soloTrack == null)
+        engine.installRack(rack)
         engine.setMix(MixState.from(project, 0f, soloTrack))
         engine.install(EngineProgram.prepare(plan))
         if (soloTrack == null) engine.installClips(clips)
@@ -35,13 +42,19 @@ class OfflineMixdown(private val compiler: ScorePlaybackCompiler = ScorePlayback
         val bytes = ByteArray(block * 2 * 4)
         val stats = Wav.Stats()
         var written = 0L
+        // Leading engine frames that only carry the effect latency: rendered (the same blocks as before) but not written.
+        var skip = rack.outputLatencyFrames.toLong()
         while (written < total) {
             if (isCancelled()) return Outcome.Failure(FailureCode.CANCELLED, "Rendern abgebrochen", contractId = "C-RENDER")
-            val n = minOf(block.toLong(), total - written).toInt()
+            val n = minOf(block.toLong(), total - written + skip).toInt()
             engine.render(buffer, n)
-            val count = Wav.encode(buffer, n * 2, options.bitDepth, bytes, stats)
+            val drop = minOf(skip, n.toLong()).toInt()
+            skip -= drop
+            if (drop == n) continue
+            if (drop > 0) buffer.copyInto(buffer, 0, drop * 2, n * 2)
+            val count = Wav.encode(buffer, (n - drop) * 2, options.bitDepth, bytes, stats)
             sink.write(bytes, 0, count)
-            written += n
+            written += n - drop
             if ((written / block) % 64 == 0L) progress(OperationProgress(written, total, if (soloTrack == null) "Mix" else project.tracks[soloTrack].name))
         }
         progress(OperationProgress(total, total, "Fertig"))

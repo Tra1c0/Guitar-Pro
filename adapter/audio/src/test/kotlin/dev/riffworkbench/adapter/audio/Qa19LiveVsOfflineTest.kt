@@ -56,8 +56,13 @@ class Qa19LiveVsOfflineTest {
         return FloatArray(frames) { i -> val o = 44 + i * 8; Float.fromBits((d[o].toInt() and 0xFF) or ((d[o + 1].toInt() and 0xFF) shl 8) or ((d[o + 2].toInt() and 0xFF) shl 16) or (d[o + 3].toInt() shl 24)) }
     }
 
-    /** Live capture of [frames] frames from Play; [seekBar] > 0 seeks to that bar first (the transport's cursor start). */
+    /**
+     * Live capture of [frames] frames from Play; [seekBar] > 0 seeks to that bar first (the transport's cursor start).
+     * The export compensates the effect latency (QA cycle 21: export frame i = engine frame i + latency, the cabinet's 64
+     * frames), so the capture starts that many frames after the first live frame: live as heard, aligned like the export.
+     */
     private fun live(p: Project, bank: SampleBank?, frames: Int, block: Int = BLOCK, seekBar: Int = 0): FloatArray = runBlocking {
+        val lat = ChannelRack.build(p, SR, 1024).outputLatencyFrames
         val sinks = ArrayList<FakeSink>()
         val host = RealtimeHost({ FakeSink(SR, block, 2048).also { it.capture = true; sinks += it } }, threadStarter = { _, _ -> Thread {} }, idleStopSeconds = 1000.0, bankProvider = { bank })
         val t = EngineTransport(host, pollMillis = 1_000_000)
@@ -66,9 +71,9 @@ class Qa19LiveVsOfflineTest {
             if (seekBar > 0) t.seek(PlaybackOccurrence(ScorePosition(p.measures[seekBar].id), 1, seekBar))
             assertTrue("live play", t.play() is Outcome.Success)
             val mark = sinks.last().captured.size
-            repeat(frames / block + 2) { host.renderBlock() }
+            repeat((frames + lat) / block + 2) { host.renderBlock() }
             val c = sinks.last().captured
-            FloatArray(frames) { c[mark + it] }
+            FloatArray(frames) { c[mark + lat + it] }
         } finally { t.shutdown() }
     }
 
