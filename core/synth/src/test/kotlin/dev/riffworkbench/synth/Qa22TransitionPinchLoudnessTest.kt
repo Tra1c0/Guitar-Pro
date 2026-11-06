@@ -226,6 +226,25 @@ class Qa22TransitionPinchLoudnessTest {
         report("Pinch hohe E-Saite", failures)
     }
 
+    /**
+     * (2b) Pinch-Stems ohne Limiter clippen nicht: Pinch auf der leeren E2-, D3- und E4-Saite und auf Bund 12 der E4-Saite, v127,
+     * jedes Preset, als Stem (OfflineMixdown, Spur solo, Werks-Mix 0,8) unter 0 dBFS und ohne geclippte Samples. Rot nach den
+     * ersten Pinch- und Trim-Commits (d1d8fb8): die auf den Oberton normierte Neigung fügte Energie hinzu und der Kamm lag in den
+     * ersten 6 ms auf dem vollen Ton: Clean E2/D3/E4/E4-Bund-12 v127 +2,6/+3,6/+1,0/+3,0 dBFS (24/42/4/64 geclippte Samples).
+     */
+    @Test fun pinchStemsDoNotClip() {
+        val bank = bankOrSkip()
+        val failures = mutableListOf<String>()
+        for (preset in presets) for ((s, fret) in listOf(0 to 0, 2 to 0, 5 to 0, 5 to 12)) {
+            val p = project(preset, listOf(listOf(beat(Fraction.ZERO, 2, note(s, fret, 127, Articulation.Harmonic(HarmonicKind.PINCH))))))
+            val stem = (OfflineMixdown(bank = bank).render(p, RenderOptions(sampleRate = sr, bitDepth = 16, tailSeconds = 0.5), { _, _, _ -> }, soloTrack = 0) as Outcome.Success).value
+            val picked = (OfflineMixdown(bank = bank).render(project(preset, listOf(listOf(beat(Fraction.ZERO, 2, note(s, fret, 127))))), RenderOptions(sampleRate = sr, bitDepth = 16, tailSeconds = 0.5), { _, _, _ -> }, soloTrack = 0) as Outcome.Success).value
+            println("Q22S ${short(preset)} Pinch Saite $s Bund $fret v127: Stem-Spitze ${f1(db(stem.peak))} dBFS (${stem.clippedSamples} geclippt) | gepickt ${f1(db(picked.peak))} dBFS")
+            check(failures, stem.clippedSamples == 0L && stem.peak < 1.0) { "${short(preset)} Pinch Saite $s Bund $fret v127: Stem-Spitze ${f1(db(stem.peak))} dBFS, ${stem.clippedSamples} geclippt" }
+        }
+        report("Pinch-Stems", failures)
+    }
+
     // ================================================================== 3. Preset-Lautheit (ITU-R BS.1770-4)
 
     /** Referenzphrase, 4 Takte 120 BPM, v96: offene Akkorde (E, A), Single Notes (Achtel D–E-Saite), PM-Riff mit Powerchords, Powerchords. */
