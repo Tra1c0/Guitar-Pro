@@ -193,7 +193,7 @@ class Qa20WorkspaceRobustnessTest {
             val e = editor(f); val sel = e.selection; val ms = e.project.measures
             val ci = ms.indexOfFirst { it.id == sel.measureId }
             val revBefore = e.project.revision
-            when (r.nextInt(100)) {
+            when (r.nextInt(110)) {
                 in 0..11 -> { val bi = r.nextInt(ms.size); val off = Fraction.of(r.nextLong(0, 4), 4).let { o -> if (o < ms[bi].signature.length()) o else Fraction.ZERO }   // a column of the layout lies inside the bar
                     val rangeMode = f.vm.input.value.rangeMode
                     log += "tap(bar ${bi + 1}, $off) rangeMode=$rangeMode"
@@ -260,7 +260,29 @@ class Qa20WorkspaceRobustnessTest {
                     log += "signatureSheet(bar ${ci + 1}, ${sig.numerator}/${sig.denominator})"; f.vm.command(EditorCommand.SetSignature(sel.measureId, sig)); m.structuralSincePause = true; navigated(sel) }
                 in 90..92 -> { log += "copyBars()"; f.vm.copyBars(r.nextInt(3) == 0) }
                 in 93..95 -> { log += "pasteBars()"; f.vm.pasteBars(); m.structuralSincePause = true; navigated(sel) }
-                else -> { log += "deleteBars() range ${sel.measureRange(e.project).map { id -> ms.indexOfFirst { it.id == id } + 1 }}"; if (ms.size > 1) f.vm.deleteBars(); m.structuralSincePause = true; navigated(sel) }
+                in 96..99 -> { log += "deleteBars() range ${sel.measureRange(e.project).map { id -> ms.indexOfFirst { it.id == id } + 1 }}"; if (ms.size > 1) f.vm.deleteBars(); m.structuralSincePause = true; navigated(sel) }
+                in 100..105 -> {
+                    // Note drag in the score (EditorScreen onMoveNote): the selected-or-any note of the cursor track to a nearby column/string.
+                    val track = e.project.tracks.first { it.id == sel.trackId }
+                    val notes = track.staves.first().bars.flatMap { b -> b.voices.first { it.index == sel.voice }.beats.flatMap { bt -> bt.notes.map { Triple(b.measureId, bt, it) } } }
+                    val pick = notes.randomOrNull(r)
+                    if (pick == null || track.instrument.tuning.isEmpty()) { log += "moveNote n/a"; continue }
+                    val (fromBar, fromBeat, note) = pick
+                    val ti = (ms.indexOfFirst { it.id == fromBar } + r.nextInt(-1, 2)).coerceIn(ms.indices)
+                    val toOffset = Fraction.of(r.nextLong(0, 8), 8).let { o -> if (o < ms[ti].signature.length()) o else Fraction.ZERO }
+                    val toString = r.nextInt(track.instrument.tuning.size)
+                    log += "moveNote(bar ${ms.indexOfFirst { it.id == fromBar } + 1} @${fromBeat.offset} s${note.string} -> bar ${ti + 1} @$toOffset s$toString)"
+                    val rev = e.project.revision
+                    f.vm.moveNote(fromBar, fromBeat.offset, note.string, ms[ti].id, toOffset, toString); navigated(sel, always = true); m.structuralSincePause = true
+                    val after = editor(f)
+                    if (after.project.revision != rev) {
+                        check(after.selection.measureId == ms[ti].id && after.selection.offset == toOffset && after.selection.string == toString) { "after the drag the cursor is not on the dropped note: ${after.selection}" }
+                        val moved = after.project.tracks.first { it.id == sel.trackId }.staves.first().bars.first { it.measureId == ms[ti].id }.voices.first { it.index == sel.voice }.beats.firstOrNull { it.offset == toOffset }?.notes?.firstOrNull { it.string == toString }
+                        check(moved?.id == note.id && moved.pitch == note.pitch) { "dragged note ${note.id} not at the target with its pitch: $moved" }
+                    } }
+                in 106..108 -> { val dup = r.nextBoolean(); log += if (dup) "duplicateBars()" else "insertBar(after=${r.nextBoolean()})"
+                    if (dup) f.vm.duplicateBars() else f.vm.insertBar(r.nextBoolean()); m.structuralSincePause = true; navigated(sel) }
+                else -> { log += "clearBars()"; f.vm.clearBars(); m.structuralSincePause = true; navigated(sel) }
             }
             settle(f.vm)
             // V2 selection valid
