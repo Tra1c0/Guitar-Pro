@@ -13,6 +13,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -160,7 +162,9 @@ import kotlin.math.roundToLong
 
 @Composable fun AudioScreen(vm: WorkspaceViewModel, state: EditorState, onImport: () -> Unit) {
     val practice by vm.practice.collectAsStateWithLifecycle()
-    val transport by vm.transport.state.collectAsStateWithLifecycle()
+    // Only the reason: the whole transport state changes on every poll while playing and recomposed the page with its
+    // clip sliders 30 times a second (QA 23).
+    val transportReason by remember(vm) { vm.transport.state.map { it.reason }.distinctUntilChanged() }.collectAsStateWithLifecycle(vm.transport.state.value.reason)
     val ui by vm.state.collectAsStateWithLifecycle()
     val clips = state.project.audio.clips
     ScrollPage(stringResource(R.string.audio), stringResource(R.string.audio_hint)) {
@@ -173,7 +177,7 @@ import kotlin.math.roundToLong
                 TextButton(onClick = { vm.setSpeed(1.0) }) { Text("100 %") }
             }
         }
-        transport.reason?.takeIf { it.startsWith("Referenz-Audio") }?.let { NoticeCard(it, true) }
+        transportReason?.takeIf { it.startsWith("Referenz-Audio") }?.let { NoticeCard(it, true) }
         if (clips.isEmpty()) Text(stringResource(R.string.audio_empty), style = MaterialTheme.typography.titleMedium)
         clips.forEach { clip -> ClipCard(vm, clip) }
         if (clips.isNotEmpty()) Text(tr("Ausrichten: „Takt 1 im Audio bei“ ist die Stelle der Aufnahme, an der Takt 1 der Partitur beginnt. Solo gilt gemeinsam für Spuren und Clips. Loops, Sprünge und Count-in bleiben sample-genau synchron, solange das Partitur-Tempo zur Aufnahme passt.",
