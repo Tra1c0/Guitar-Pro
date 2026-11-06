@@ -75,7 +75,11 @@ import dev.riffworkbench.ui.components.R
                 items = listOf(
                     PillItem(TabinoIcons.Library, stringResource(R.string.library), true, {}),
                     PillItem(TabinoIcons.Open, stringResource(R.string.open_native), false, onImport),
-                    PillItem(TabinoIcons.Pen, if (en) "Open most recent project" else "Letztes Projekt öffnen", false, { projects.maxByOrNull { it.modifiedMillis }?.let { onOpen(it.id) } }),
+                    // Without any project the tap would do nothing: say so instead (QA 21).
+                    PillItem(TabinoIcons.Pen, if (en) "Open most recent project" else "Letztes Projekt öffnen", false, {
+                        projects.maxByOrNull { it.modifiedMillis }?.let { onOpen(it.id) }
+                            ?: vm.showNotice(if (en) "No project yet: create one with +" else "Noch kein Projekt – mit + eines anlegen")
+                    }),
                     PillItem(TabinoIcons.Settings, stringResource(R.string.settings), false, onSettings, "nav-settings"),
                 ),
                 centerIcon = TabinoIcons.Plus, centerLabel = stringResource(R.string.new_project), onCenter = { creating = true }, centerTag = "nav-new",

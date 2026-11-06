@@ -11,6 +11,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -26,6 +29,16 @@ import dev.riffworkbench.ui.components.R
         OutlinedButton(onClick = onMinus, contentPadding = PaddingValues(0.dp), modifier = Modifier.size(48.dp).let { m -> minusTag?.let { m.testTag(it) } ?: m }) { Text("−") }
         Text(value, style = MaterialTheme.typography.titleMedium, fontFamily = FontFamily.Monospace, modifier = Modifier.widthIn(min = 40.dp))
         OutlinedButton(onClick = onPlus, contentPadding = PaddingValues(0.dp), modifier = Modifier.size(48.dp).let { m -> plusTag?.let { m.testTag(it) } ?: m }) { Text("+") }
+    }
+}
+
+/** The ViewModel notice inside a bottom sheet: the page's notice row lies behind the sheet's scrim. */
+@Composable internal fun SheetNotice(vm: WorkspaceViewModel, notice: String) {
+    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }) {
+        Row(Modifier.padding(start = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(notice, Modifier.weight(1f).padding(vertical = 8.dp), color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            TextButton(onClick = { vm.showNotice(null) }) { Text(stringResource(R.string.dismiss)) }
+        }
     }
 }
 
@@ -84,14 +97,7 @@ internal fun signatureSetInBar(p: Project, index: Int): Int? {
             BigTitle("${stringResource(R.string.measure)} ${index + 1}", "${measure.signature.numerator}/${measure.signature.denominator}" + (bpm?.let { " · ${it.toInt()} BPM" } ?: ""), size = 22)
             if (inherited != null) Text(tr("Taktart übernommen aus Takt $inherited – eine Änderung gilt ab Takt ${index + 1}.", "Time signature carried over from bar $inherited – a change applies from bar ${index + 1}."),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            ws.notice?.let { notice ->
-                Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(start = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(notice, Modifier.weight(1f).padding(vertical = 8.dp), color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                        TextButton(onClick = { vm.showNotice(null) }) { Text(stringResource(R.string.dismiss)) }
-                    }
-                }
-            }
+            ws.notice?.let { SheetNotice(vm, it) }
             SignatureTempoControls(vm, p, measure, index)
             Button(onClick = onDismiss, modifier = Modifier.align(Alignment.End).height(48.dp).testTag("signature-done"), shape = RoundedCornerShape(24.dp)) { Text(tr("Fertig", "Done")) }
         }
