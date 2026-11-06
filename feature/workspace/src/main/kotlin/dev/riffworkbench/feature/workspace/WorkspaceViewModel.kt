@@ -100,13 +100,28 @@ class WorkspaceViewModel(
     /**
      * Explicit navigation (arrows, PageUp/Down, bar map): like a score tap, the transport follows while PLAYING (D5-8), so
      * cursor and playhead stay together; while PAUSED the next Play starts here.
+     *
+     * [moveCursor] (arrows, PageUp/Down, auto-advance, string keys): the cursor moves also in range mode, where only taps
+     * (and the bar map) extend the range; the range end is kept there (QA 20 F2/F3: in range mode note entry overwrote one
+     * beat and PageDown seeked back to the unchanged cursor). Without range mode this is exactly [select].
      */
-    private fun navigateTo(selection: Selection) {
-        select(selection)
-        if (transport.state.value.status == TransportStatus.PLAYING) seekToCursor()
+    private fun navigateTo(selection: Selection, moveCursor: Boolean = true) {
+        val before = session?.state?.value?.selection
+        if (moveCursor) moveCursorTo(selection.copy(rangeEnd = if (input.value.rangeMode) selection.rangeEnd else null)) else select(selection)
+        val after = session?.state?.value?.selection
+        val moved = before == null || after == null || before.measureId != after.measureId || before.offset != after.offset
+        if (transport.state.value.status == TransportStatus.PLAYING && (moved || !input.value.rangeMode)) seekToCursor()
     }
-    /** Bar map: jump to the start of [measureId]. */
-    fun selectMeasure(measureId: EntityId) { val s = state.value.editor?.selection ?: return; navigateTo(s.copy(measureId = measureId, offset = Fraction.ZERO)) }
+    /** Moves the cursor to [selection] as given (no range-mode adjustment); false if it does not exist. */
+    private fun moveCursorTo(selection: Selection): Boolean {
+        val s = session ?: return false
+        try { s.select(selection) } catch (e: IllegalArgumentException) { return false }
+        noteNavigation()
+        publish(); mutableInput.value = input.value.copy(buffer = "")
+        return true
+    }
+    /** Bar map: jump to the start of [measureId] (in range mode, like a tap, it extends the range). */
+    fun selectMeasure(measureId: EntityId) { val s = state.value.editor?.selection ?: return; navigateTo(s.copy(measureId = measureId, offset = Fraction.ZERO), moveCursor = false) }
     fun putNoteAt(string: Int, fret: Int) {
         val selection = state.value.editor?.selection ?: return
         if (selectCell(selection.copy(string = string))) command(EditorCommand.PutNote(fret = fret, duration = input.value.duration))
@@ -253,7 +268,9 @@ class WorkspaceViewModel(
     fun moveString(delta: Int) {
         val e = state.value.editor ?: return
         val track = e.project.tracks.first { it.id == e.selection.trackId }
-        select(e.selection.copy(string = (e.selection.string + delta).coerceIn(0, maxOf(0, track.instrument.tuning.lastIndex))))
+        val next = e.selection.copy(string = (e.selection.string + delta).coerceIn(0, maxOf(0, track.instrument.tuning.lastIndex)))
+        // Also in range mode (F3): a string change is never a range extension.
+        if (input.value.rangeMode) moveCursorTo(next) else select(next)
     }
     fun moveMeasure(delta: Int) {
         val e = state.value.editor ?: return
@@ -263,7 +280,8 @@ class WorkspaceViewModel(
     /** Explicit "back to the start": cursor to bar 1, beat 1, transport stopped, so the next Play unambiguously starts at the top. */
     fun jumpToStart() {
         val e = state.value.editor ?: return
-        select(e.selection.copy(measureId = e.project.measures.first().id, offset = Fraction.ZERO))
+        // Also in range mode (F1): select() would only have moved the range end there; the jump clears the range.
+        moveCursorTo(e.selection.copy(measureId = e.project.measures.first().id, offset = Fraction.ZERO, rangeEnd = null))
         navigatedSincePause = false
         resumeFollow()
         viewModelScope.launch { transport.stop() }
@@ -305,15 +323,22 @@ class WorkspaceViewModel(
     fun command(command: EditorCommand): Outcome<Unit> {
         val active = session ?: return Outcome.Failure(FailureCode.VALIDATION, "Projekt noch nicht geladen")
         val before = active.state.value.project.revision
+        val cursor = active.state.value.selection
         val result = active.dispatch(command)
         if (result is Outcome.Failure) showNotice(result.message)
         else if (active.state.value.project.revision != before) { if (command !is EditorCommand.Replace && command !is EditorCommand.MoveNote) lastCommand = command; enqueueSave() }
+        noteCursorMove(cursor)
         publish()
         return result
     }
     fun repeatLast() { lastCommand?.let(::command) }
-    fun undo() { val result = session?.undo(); if (result is Outcome.Success) enqueueSave() else if (result is Outcome.Failure) showNotice(result.message); publish() }
-    fun redo() { val result = session?.redo(); if (result is Outcome.Success) enqueueSave() else if (result is Outcome.Failure) showNotice(result.message); publish() }
+    fun undo() { val cursor = session?.state?.value?.selection; val result = session?.undo(); if (result is Outcome.Success) enqueueSave() else if (result is Outcome.Failure) showNotice(result.message); noteCursorMove(cursor); publish() }
+    fun redo() { val cursor = session?.state?.value?.selection; val result = session?.redo(); if (result is Outcome.Success) enqueueSave() else if (result is Outcome.Failure) showNotice(result.message); noteCursorMove(cursor); publish() }
+    /** An edit or undo/redo that re-places the cursor (the start marker) counts as navigation while PAUSED (QA 20 F4). */
+    private fun noteCursorMove(before: Selection?) {
+        val now = session?.state?.value?.selection ?: return
+        if (before != null && (before.measureId != now.measureId || before.offset != now.offset)) noteNavigation()
+    }
     fun showNotice(text: String?) { mutable.value = mutable.value.copy(notice = text) }
 
     fun copyBars(allTracks: Boolean = false) {
