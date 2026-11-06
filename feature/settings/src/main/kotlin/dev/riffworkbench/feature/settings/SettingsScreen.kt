@@ -40,6 +40,9 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
         error?.let { NoticeCard(it, true) }
         ToggleRow(stringResource(R.string.dark_theme), settings.darkTheme, { value -> vm.update { it.copy(darkTheme = value) } })
         ToggleRow(stringResource(R.string.auto_advance), settings.autoAdvance, { value -> vm.update { it.copy(autoAdvance = value) } })
+        // QA 23: pinch zoom is off by default (fixed, readable score size); this switch turns it on.
+        ToggleRow(stringResource(R.string.pinch_zoom), settings.pinchZoom, { value -> vm.update { it.copy(pinchZoom = value) } })
+        Text(stringResource(R.string.pinch_zoom_hint), style = MaterialTheme.typography.bodySmall)
         ToggleRow(stringResource(R.string.strict_rhythm), settings.strictRhythm, {}, enabled = false)
         Text(stringResource(R.string.strict_hint), style = MaterialTheme.typography.bodySmall)
         HorizontalDivider()

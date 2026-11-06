@@ -150,4 +150,6 @@ enum class TextKind { TEXT, LYRICS, SECTION, FINGERING }
 @Serializable data class LayoutSettings(val mode: LayoutMode = LayoutMode.CONTINUOUS, val scale: Double = 1.0, val stylesheet: String = "default", val trackOrder: List<EntityId> = emptyList(), val barsPerSystem: Int? = null, val pageWidthMm: Double = 210.0, val pageHeightMm: Double = 297.0)
 enum class LayoutMode { PAGE, CONTINUOUS, MULTITRACK }
 
-@Serializable data class AppSettings(val darkTheme: Boolean = true, val autoAdvance: Boolean = true, val strictRhythm: Boolean = false, val retuningPolicy: RetuningPolicy = RetuningPolicy.KEEP_SOUNDING_PITCH, val favoriteEffects: List<String> = listOf("palm_mute", "slide", "bend"), val shortcuts: Map<String, String> = emptyMap())
+@Serializable data class AppSettings(val darkTheme: Boolean = true, val autoAdvance: Boolean = true, val strictRhythm: Boolean = false, val retuningPolicy: RetuningPolicy = RetuningPolicy.KEEP_SOUNDING_PITCH, val favoriteEffects: List<String> = listOf("palm_mute", "slide", "bend"), val shortcuts: Map<String, String> = emptyMap(),
+    /** Pinch zoom in the score (QA 23): off by default, the score is drawn at a fixed readable scale; older files read as off. */
+    val pinchZoom: Boolean = false)

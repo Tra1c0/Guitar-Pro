@@ -112,6 +112,8 @@
     <string name="snapshots_empty">No named snapshots yet</string>
     <string name="history_hint">Each committed change is one undo step. Restoring a snapshot can also be undone.</string>
     <string name="dark_theme">Dark theme</string>
+    <string name="pinch_zoom">Pinch to zoom</string>
+    <string name="pinch_zoom_hint">Zoom the score with two fingers. Off: a fixed, readable size; scrolling stays.</string>
     <string name="strict_rhythm">Strict rhythm validation</string>
     <string name="settings_hint">These settings are stored locally on this device.</string>
     <string name="strict_hint">Strict validation cannot be switched on yet; the editor already flags incomplete bars.</string>

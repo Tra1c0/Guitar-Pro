@@ -8,6 +8,7 @@ import dev.riffworkbench.model.*
 import dev.riffworkbench.notation.LayoutRequest
 import dev.riffworkbench.notation.LayoutStyle
 import dev.riffworkbench.notation.ScoreLayouter
+import dev.riffworkbench.ui.score.ScoreViewportKey
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Before
@@ -67,10 +68,14 @@ class Qa18SignatureSheetTest {
         val p = storedProject()
         val layout = ScoreLayouter.layout(LayoutRequest(p, 0, LayoutStyle.EDIT.copy(showTab = true, showStandard = false), null, WrittenDuration().length(), 0, null, margin = 6f))
         val box = layout.signatures.first { it.measureId == p.measures.first().id }
-        val d = compose.density.density
         compose.waitUntil(20000) { compose.onAllNodesWithTag("score-canvas").fetchSemanticsNodes().isNotEmpty() }
-        // Cursor at bar 1, zoom 1 and no scroll yet: canvas pixels = layout units × density.
-        compose.onNodeWithTag("score-canvas").performTouchInput { longClick(Offset((box.x + box.w / 2) * d, (box.y + box.h / 2) * d)) }
+        compose.waitForIdle()
+        // Canvas pixels = layout units × factor − scroll offset, as the canvas publishes them (ScoreViewport). Before QA 23 the
+        // factor was the density (zoom 1, no scroll yet); the editor now draws at density × ScoreScale.EDITOR.
+        val view = compose.onNodeWithTag("score-canvas").fetchSemanticsNode().config[ScoreViewportKey]
+        compose.onNodeWithTag("score-canvas").performTouchInput {
+            longClick(Offset((box.x + box.w / 2) * view.factor - view.offsetX, (box.y + box.h / 2) * view.factor - view.offsetY))
+        }
         compose.waitUntil(20000) { compose.onAllNodesWithTag("signature-sheet").fetchSemanticsNodes().isNotEmpty() }
         changeToThreeFourAndCheck()
     }
