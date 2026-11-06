@@ -271,6 +271,30 @@ class Qa22TransitionPinchLoudnessTest {
         report("Stems bei maximalem Fader", failures)
     }
 
+    /**
+     * Stems are for the DAW: the master fader is a listening level, not part of a stem (QA 22, after the clip notice). Red
+     * before: master 1,0 (+3,9 dB over the factory 0,8) on top of track 1,0 clipped Clean v127 stems. Now a stem is the same
+     * whatever the master fader says, rendered at the factory reference level, so at factory settings Σ stems = mix still holds.
+     */
+    @Test fun stemsDoNotDependOnTheMasterFader() {
+        val bank = bankOrSkip()
+        val failures = mutableListOf<String>()
+        fun chord(o: Fraction, den: Int, vararg sf: Pair<Int, Int>) = beat(o, den, *sf.map { (s, f) -> note(s, f, 127) }.toTypedArray())
+        val bars = listOf(listOf(chord(Fraction.ZERO, 2, 0 to 0, 1 to 2, 2 to 2, 3 to 1, 4 to 0, 5 to 0), chord(Fraction.of(1, 2), 2, 1 to 0, 2 to 2, 3 to 2, 4 to 2, 5 to 0)))
+        for (preset in presets) {
+            val base = project(preset, bars).let { b -> b.copy(tracks = b.tracks.map { it.copy(mix = it.mix.copy(volume = 1.0)) }) }
+            fun stem(master: Double): RenderSummary {
+                val p = base.copy(mix = base.mix.copy(master = base.mix.master.copy(volume = master)))
+                return (OfflineMixdown(bank = bank).render(p, RenderOptions(sampleRate = sr, bitDepth = 24, tailSeconds = 1.0), { _, _, _ -> }, soloTrack = 0) as Outcome.Success).value
+            }
+            val factory = stem(ChannelMix().volume); val hot = stem(1.0); val quiet = stem(0.3)
+            println("Q22F ${short(preset)} Stem-Spitze Master 0,8 / 1,0 / 0,3: ${f1(db(factory.peak))} / ${f1(db(hot.peak))} / ${f1(db(quiet.peak))} dBFS, geclippt ${hot.clippedSamples}")
+            check(failures, hot.peak == factory.peak && quiet.peak == factory.peak) { "${short(preset)}: Stem hängt vom Master-Fader ab (0,8 → ${f1(db(factory.peak))}, 1,0 → ${f1(db(hot.peak))}, 0,3 → ${f1(db(quiet.peak))} dBFS)" }
+            check(failures, hot.clippedSamples == 0L && db(hot.peak) <= -0.3) { "${short(preset)}: Stem bei Track 1,0 + Master 1,0 bei ${f1(db(hot.peak))} dBFS, ${hot.clippedSamples} geclippt" }
+        }
+        report("Stems unabhängig vom Master-Fader", failures)
+    }
+
     // ================================================================== 3. Preset-Lautheit (ITU-R BS.1770-4)
 
     /** Referenzphrase, 4 Takte 120 BPM, v96: offene Akkorde (E, A), Single Notes (Achtel D–E-Saite), PM-Riff mit Powerchords, Powerchords. */

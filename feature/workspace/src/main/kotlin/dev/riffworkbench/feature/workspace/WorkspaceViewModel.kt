@@ -603,7 +603,7 @@ class WorkspaceViewModel(
                         }
                         out.putNextEntry(ZipEntry("LIESMICH.txt"))
                         out.write(("Alle Stems beginnen bei Sample 0 der aufgelösten Wiedergabereihenfolge (Wiederholungen ausgeschrieben), 48 kHz, 24 Bit, gleiche Länge inkl. 2 s Ausklang.\n" +
-                            "Stems ohne Master-Limiter; 00_mix.wav mit Master-Kette. MIDI-Datei mit Tempo-Map in derselben Reihenfolge.\nTempo zu Beginn: ${project.tempo.firstOrNull()?.quarterNotesPerMinute ?: 120.0} BPM\n").toByteArray())
+                            "Stems ohne Master-Kette und unabhängig vom Master-Fader (Werkspegel); 00_mix.wav mit Master-Fader und Master-Kette. MIDI-Datei mit Tempo-Map in derselben Reihenfolge.\nTempo zu Beginn: ${project.tempo.firstOrNull()?.quarterNotesPerMinute ?: 120.0} BPM\n").toByteArray())
                         out.closeEntry()
                     }
                     showNotice("${project.tracks.size} Stems + Mix exportiert" + clipWarning(clipped))

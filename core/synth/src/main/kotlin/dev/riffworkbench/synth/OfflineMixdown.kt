@@ -32,7 +32,10 @@ class OfflineMixdown(private val compiler: ScorePlaybackCompiler = ScorePlayback
         val engine = SynthEngine(options.sampleRate, block, bank)
         val rack = ChannelRack.build(project, options.sampleRate, block, includeMasterFx = options.includeMasterFx && soloTrack == null)
         engine.installRack(rack)
-        engine.setMix(MixState.from(project, 0f, soloTrack))
+        // A stem is for the DAW: the master fader is a listening level, not part of it (QA 22). Stems render at the factory
+        // master level, so they never depend on (or clip from) a raised master fader and Σ stems = mix holds at factory settings.
+        val mixProject = if (soloTrack == null) project else project.copy(mix = project.mix.copy(master = project.mix.master.copy(volume = ChannelMix().volume)))
+        engine.setMix(MixState.from(mixProject, 0f, soloTrack))
         engine.install(EngineProgram.prepare(plan))
         if (soloTrack == null) engine.installClips(clips)
         engine.play(options.commonStartFrame.coerceAtLeast(0))
