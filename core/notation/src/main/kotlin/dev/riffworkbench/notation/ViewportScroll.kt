@@ -34,12 +34,14 @@ object ViewportScroll {
     fun minimal(center: Float, half: Float, offset: Float, viewport: Float, content: Float, margin: Float = MARGIN): Float {
         if (viewport <= 0f) return offset
         val m = margin.coerceAtMost(viewport / 4f)
-        val next = when {
-            center - half < offset + m -> center - half - m
-            center + half > offset + viewport - m -> center + half + m - viewport
-            else -> offset
-        }
-        return clamp(next, content, viewport)
+        // Offsets that show the marker inside the margin: [center + half + m − viewport, center − half − m]; the nearest one wins.
+        // A marker taller than the viewport minus both margins (the zoomed TAB band the playhead follows) leaves that range
+        // empty: then the bounds swap and the view only moves until it lies inside the marker. The old two-branch rule put
+        // the top and then the bottom of such a marker into view on alternate calls — the 30-Hz flicker of a zoomed score
+        // during playback (QA 23, Qa23FollowZoomTest). As a projection the rule is idempotent in both cases.
+        val a = center + half + m - viewport
+        val b = center - half - m
+        return clamp(offset.coerceIn(minOf(a, b), maxOf(a, b)), content, viewport)
     }
 
     /** Horizontal cursor rule: minimal shift, paged (landing at [PAGE_AT]) when the shift would exceed a viewport. */
@@ -95,5 +97,26 @@ object ViewportScroll {
         if (viewport <= 0f) return offset
         if (minimalFirst) return horizontal(x, half, offset, viewport, content, margin)
         return if (x < offset + viewport * FOLLOW_MIN || x > offset + viewport * FOLLOW_MAX) clamp(x - viewport * FOLLOW_AT, content, viewport) else offset
+    }
+
+    /** Result of [playhead]: the new scroll offsets in pixels. */
+    data class FollowScroll(val offsetX: Float, val offsetY: Float)
+
+    /**
+     * One step of the playback follow of ScoreView (QA 23: pulled out of Compose so it is testable on the JVM), in pixels with
+     * [factor] = density × zoom. Along x [follow]; along y [vertical] for the band the playhead runs through (the TAB, or the
+     * staff without TAB) plus 12 units; both clamped. Returns null while the playhead has no position in [layout].
+     */
+    fun playhead(layout: ScoreLayout, measureId: EntityId, offset: Double, offsetX: Float, offsetY: Float, viewportWidth: Float, viewportHeight: Float,
+                 factor: Float, density: Float, minimalFirst: Boolean = false): FollowScroll? {
+        val lx = layout.xFor(measureId, offset) ?: return null
+        val margin = MARGIN * density
+        val x = follow(lx * factor, 6f * density, offsetX, viewportWidth, layout.width * factor, minimalFirst, margin)
+        val sys = layout.measures.firstOrNull { it.measureId == measureId }?.let { m -> layout.systems.getOrNull(m.system) }
+        val y = if (sys == null) offsetY else {
+            val (top, bottom) = if (sys.stringY.isNotEmpty()) sys.tabTop to sys.tabBottom else sys.staffTop to sys.staffBottom
+            vertical((top + bottom) / 2 * factor, ((bottom - top) / 2 + 12f) * factor, offsetY, viewportHeight, layout.height * factor, margin)
+        }
+        return FollowScroll(clamp(x, layout.width * factor, viewportWidth), clamp(y, layout.height * factor, viewportHeight))
     }
 }
