@@ -102,7 +102,7 @@ import kotlin.math.roundToLong
             (0..2).forEach { bars -> FilterChip(practice.countInBars == bars, { vm.setCountIn(bars) }, label = { Text(if (bars == 0) tr("aus", "off") else "$bars") }) }
         }
         Text("${stringResource(R.string.speed)} · ${(speed * 100).toInt()} %", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 6.dp))
-        Slider(speed, { speed = it }, valueRange = 0.25f..1.5f, steps = 24, onValueChangeFinished = { vm.setSpeed(speed.toDouble()) })
+        Slider(speed, { speed = it }, valueRange = 0.25f..1.5f, steps = 24, onValueChangeFinished = { vm.setSpeed(speed.toDouble()) }, modifier = Modifier.semanticsLabel(stringResource(R.string.speed)))
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(0.5, 0.7, 0.85, 1.0).forEach { s -> FilterChip(abs(practice.speed - s) < 0.001, { vm.setSpeed(s) }, label = { Text("${(s * 100).toInt()} %") }) }
         }
@@ -201,9 +201,9 @@ import kotlin.math.roundToLong
         }
         val db = if (gain <= 0.0001f) "−∞" else "%+.1f".format(locale, 20 * kotlin.math.log10(gain.toDouble()))
         Text(tr("Pegel", "Level") + " $db dB", style = MaterialTheme.typography.labelLarge)
-        Slider(gain, { gain = it }, valueRange = 0f..2f, onValueChangeFinished = { vm.updateClip(clip.copy(gain = gain.toDouble())) })
+        Slider(gain, { gain = it }, valueRange = 0f..2f, onValueChangeFinished = { vm.updateClip(clip.copy(gain = gain.toDouble())) }, modifier = Modifier.semanticsLabel(tr("Pegel", "Level")))
         Text("Pan " + when { pan < -0.02f -> "L ${(-pan * 100).toInt()}"; pan > 0.02f -> "R ${(pan * 100).toInt()}"; else -> "C" }, style = MaterialTheme.typography.labelLarge)
-        Slider(pan, { pan = it }, valueRange = -1f..1f, onValueChangeFinished = { vm.updateClip(clip.copy(pan = pan.toDouble())) })
+        Slider(pan, { pan = it }, valueRange = -1f..1f, onValueChangeFinished = { vm.updateClip(clip.copy(pan = pan.toDouble())) }, modifier = Modifier.semanticsLabel("Pan"))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(clip.mute, { vm.updateClip(clip.copy(mute = !clip.mute)) }, label = { Text("Mute") })
             FilterChip(clip.solo, { vm.updateClip(clip.copy(solo = !clip.solo)) }, label = { Text("Solo") })
@@ -300,7 +300,7 @@ import kotlin.math.roundToLong
         ToggleRow(tr("Kompakt (Lesen statt Eingeben)", "Compact (reading instead of entry)"), view.compact, vm::setCompact)
         Text("Zoom ${(view.zoom * 100).toInt()} %", style = MaterialTheme.typography.bodyMedium)
         var zoom by remember(view.zoom) { mutableFloatStateOf(view.zoom) }
-        Slider(zoom, { zoom = it }, valueRange = 0.5f..2.5f, onValueChangeFinished = { vm.setZoom(zoom) })
+        Slider(zoom, { zoom = it }, valueRange = 0.5f..2.5f, onValueChangeFinished = { vm.setZoom(zoom) }, modifier = Modifier.semanticsLabel("Zoom"))
         FeatureRegistry.all.filter { it.id.startsWith("layout.") || it.id.startsWith("notation.") }.forEach { FeatureCard(it) }
     }
 }

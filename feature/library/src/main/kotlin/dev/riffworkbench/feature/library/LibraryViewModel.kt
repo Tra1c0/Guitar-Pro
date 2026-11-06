@@ -94,5 +94,6 @@ class LibraryViewModel(
     fun delete(id: EntityId) { viewModelScope.launch { report(repository.delete(id)) } }
     fun showError(message: String?) { mutableError.value = message }
     fun dismissNotice() { mutableNotice.value = null }
+    fun showNotice(message: String?) { mutableNotice.value = message }
     private fun report(result: Outcome<Unit>) { if (result is Outcome.Failure) mutableError.value = result.message }
 }

@@ -165,7 +165,7 @@ import dev.riffworkbench.ui.score.pitchName
                 Text(tr("Ausgewählter Schlag", "Selected hit"), style = MaterialTheme.typography.titleSmall)
                 var velocity by remember(note.id, note.velocity) { mutableFloatStateOf(note.velocity.toFloat()) }
                 Text("Velocity ${velocity.toInt()}")
-                Slider(velocity, { velocity = it }, valueRange = 1f..127f, onValueChangeFinished = { vm.command(EditorCommand.SetVelocity(velocity.toInt())) })
+                Slider(velocity, { velocity = it }, valueRange = 1f..127f, onValueChangeFinished = { vm.command(EditorCommand.SetVelocity(velocity.toInt())) }, modifier = Modifier.semanticsLabel("Velocity"))
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf(PercussionTechnique.GHOST to "Ghost", PercussionTechnique.RIMSHOT to "Rimshot", PercussionTechnique.CROSS_STICK to "Cross-Stick", PercussionTechnique.CHOKE to "Choke", PercussionTechnique.OPEN_HI_HAT to "HH offen").forEach { (kind, label) ->
                         AssistChip(onClick = { vm.articulation(Articulation.Percussion(kind)) }, label = { Text(label) })
@@ -206,9 +206,9 @@ import dev.riffworkbench.ui.score.pitchName
         track.instrument.copy(drumKit = track.instrument.drumKit.map { if (it.midiNote == drum.midiNote) updated else it }), vm.retunePolicy()))
     val db = if (volume <= 0.0001f) "−∞" else "%+.1f".format(java.util.Locale.ROOT, 20 * kotlin.math.log10(volume.toDouble()))
     Text("${drum.name} · " + tr("Pegel", "Level") + " $db dB", style = MaterialTheme.typography.labelLarge)
-    Slider(volume, { volume = it }, valueRange = 0f..2f, onValueChangeFinished = { commit(drum.copy(volume = volume.toDouble())) })
+    Slider(volume, { volume = it }, valueRange = 0f..2f, onValueChangeFinished = { commit(drum.copy(volume = volume.toDouble())) }, modifier = Modifier.semanticsLabel("${drum.name} " + tr("Pegel", "level")))
     Text("Pan " + when { pan < -0.02f -> "L ${(-pan * 100).toInt()}"; pan > 0.02f -> "R ${(pan * 100).toInt()}"; else -> "C" }, style = MaterialTheme.typography.labelLarge)
-    Slider(pan, { pan = it }, valueRange = -1f..1f, onValueChangeFinished = { commit(drum.copy(pan = pan.toDouble())) })
+    Slider(pan, { pan = it }, valueRange = -1f..1f, onValueChangeFinished = { commit(drum.copy(pan = pan.toDouble())) }, modifier = Modifier.semanticsLabel("${drum.name} Pan"))
 }
 
 @Composable fun MixerScreen(vm: WorkspaceViewModel, state: EditorState) {
@@ -218,7 +218,8 @@ import dev.riffworkbench.ui.score.pitchName
         OutlinedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
             Text(stringResource(R.string.master_bus), style = MaterialTheme.typography.titleMedium)
             Text("${stringResource(R.string.volume)} ${(master * 100).toInt()}%")
-            Slider(master, { master = it }, onValueChangeFinished = { vm.command(EditorCommand.SetMasterMix(state.project.mix.master.copy(volume = master.toDouble()))) })
+            Slider(master, { master = it }, onValueChangeFinished = { vm.command(EditorCommand.SetMasterMix(state.project.mix.master.copy(volume = master.toDouble()))) },
+                modifier = Modifier.semanticsLabel("${stringResource(R.string.master_bus)} ${stringResource(R.string.volume)}"))
             Text(tr("Am Ausgang begrenzt ein Limiter Spitzen; Stems werden ohne ihn exportiert.", "A limiter protects the output; stems are exported without it."), style = MaterialTheme.typography.bodySmall)
         } }
     }
@@ -267,10 +268,11 @@ import dev.riffworkbench.ui.score.pitchName
         // Show what the DSP actually uses when the unit does not store the value yet.
         var value by remember(unit) { mutableFloatStateOf((unit.parameters[main] ?: dev.riffworkbench.synth.EffectDefaults.value(unit.kind, main) ?: range.start.toDouble()).toFloat().coerceIn(range)) }
         fun write(updated: EffectUnit) = vm.command(EditorCommand.SetMix(track.id, track.mix.copy(effects = chain.mapIndexed { k, u -> if (k == i) updated else u })))
+        val name = unit.kind.name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Switch(unit.enabled, { write(unit.copy(enabled = it)) })
-            Text(unit.kind.name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }, Modifier.width(96.dp), style = MaterialTheme.typography.bodyMedium)
-            Slider(value, { value = it }, valueRange = range, modifier = Modifier.weight(1f), onValueChangeFinished = { write(unit.copy(parameters = unit.parameters + (main to value.toDouble()))) })
+            Switch(unit.enabled, { write(unit.copy(enabled = it)) }, modifier = Modifier.semanticsLabel(name))
+            Text(name, Modifier.width(96.dp), style = MaterialTheme.typography.bodyMedium)
+            Slider(value, { value = it }, valueRange = range, modifier = Modifier.weight(1f).semanticsLabel("$name $main"), onValueChangeFinished = { write(unit.copy(parameters = unit.parameters + (main to value.toDouble()))) })
         }
     }
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {

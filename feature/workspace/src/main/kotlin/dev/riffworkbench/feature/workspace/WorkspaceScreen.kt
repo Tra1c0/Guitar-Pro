@@ -160,7 +160,9 @@ class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget
 @Composable private fun MorePages(current: WorkspacePage, onPick: (WorkspacePage) -> Unit, onSettings: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         BigTitle(tr("Alle Bereiche", "All areas"), tr("Projekt, Klang, Austausch", "Project, sound, exchange"), size = 22)
-        LazyVerticalGrid(GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.heightIn(max = 560.dp)) {
+        // weight(fill = false): the grid takes what is left after title and settings button and scrolls inside. Measured
+        // first (fixed 560 dp), it left the settings button 0 dp on a 640-dp phone (QA 21).
+        LazyVerticalGrid(GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f, fill = false).heightIn(max = 560.dp)) {
             items(WorkspacePage.entries.filter { it !in primaryPages }) { p ->
                 val selected = p == current
                 Surface(onClick = { onPick(p) }, shape = RoundedCornerShape(24.dp), color = if (selected) p.accent else MaterialTheme.colorScheme.surfaceVariant,

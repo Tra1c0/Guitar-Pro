@@ -38,7 +38,7 @@ import dev.riffworkbench.ui.score.pitchName
 
 @Composable fun TrackAndVoice(vm: WorkspaceViewModel, state: EditorState) {
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        state.project.tracks.forEachIndexed { i, track -> FilterChip(selected = state.selection.trackId == track.id, onClick = { vm.select(state.selection.copy(trackId = track.id, string = 0)) },
+        state.project.tracks.forEachIndexed { i, track -> FilterChip(selected = state.selection.trackId == track.id, onClick = { vm.selectTrack(track.id) },
             label = { Text(track.name) }, leadingIcon = { ColorDot(Tabino.Accents[i % Tabino.Accents.size]) }) }
     }
 }
@@ -208,7 +208,7 @@ private val HeaderTouchTarget = 40.dp
         }
         DropdownMenu(open, { open = false }) {
             state.project.tracks.forEachIndexed { k, t -> DropdownMenuItem(text = { Text(t.name) }, leadingIcon = { ColorDot(Tabino.Accents[k % Tabino.Accents.size]) },
-                onClick = { open = false; vm.select(state.selection.copy(trackId = t.id, string = 0)) }) }
+                onClick = { open = false; vm.selectTrack(t.id) }) }
             HorizontalDivider()
             (0..3).forEach { v -> DropdownMenuItem(text = { Text("${stringResource(R.string.voice)} ${v + 1}" + if (v == state.selection.voice) "  ✓" else "") },
                 onClick = { open = false; vm.select(state.selection.copy(voice = v)) }) }
@@ -291,7 +291,8 @@ private val HeaderTouchTarget = 40.dp
             }
         }
         ChoiceTile("Vibrato", hasType { it is Articulation.Vibrato }, { vm.articulation(Articulation.Vibrato()) }, Modifier.weight(1f).fillMaxHeight(), icon = TabinoIcons.Vibrato)
-        ChoiceTile("P.M.", input.palmMute || has(NoteMark.PALM_MUTE), vm::togglePalmMute, Modifier.weight(1f).fillMaxHeight(), icon = TabinoIcons.PalmMute, description = stringResource(R.string.palm_mute))
+        // On a note the tile shows that note's palm mute; on an empty beat the entry mode (QA 21, WorkspaceViewModel.togglePalmMute).
+        ChoiceTile("P.M.", vm.palmMuteLit(state), vm::togglePalmMute, Modifier.weight(1f).fillMaxHeight(), icon = TabinoIcons.PalmMute, description = stringResource(R.string.palm_mute))
         ChoiceTile(tr("Mehr", "More"), false, onMore, Modifier.weight(1f).fillMaxHeight().testTag("tools-more"), icon = TabinoIcons.More, description = tr("Weitere Techniken und Takt-Werkzeuge", "More techniques and bar tools"))
     }
 }
@@ -319,10 +320,14 @@ private val HeaderTouchTarget = 40.dp
             repeat(7 - row.size) { Spacer(Modifier.weight(1f)) }
         }
     }
+    // At the first beat and on the outer strings these keys would do nothing: they show it as disabled (QA 21).
+    val atStart = state.selection.offset == Fraction.ZERO && state.selection.measureId == state.project.measures.first().id
     Row(Modifier.fillMaxWidth().height(46.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        ChoiceTile("", false, { vm.move(-1) }, Modifier.weight(1f).fillMaxHeight(), icon = TabinoIcons.Left, description = stringResource(R.string.previous))
-        ChoiceTile("", false, { vm.moveString(1) }, Modifier.weight(1f).fillMaxHeight(), icon = TabinoIcons.Up, description = tr("Saite höher", "Higher string"))
-        ChoiceTile("", false, { vm.moveString(-1) }, Modifier.weight(1f).fillMaxHeight(), icon = TabinoIcons.Down, description = tr("Saite tiefer", "Lower string"))
+        ChoiceTile("", false, { vm.move(-1) }, Modifier.weight(1f).fillMaxHeight(), icon = TabinoIcons.Left, description = stringResource(R.string.previous), enabled = !atStart)
+        ChoiceTile("", false, { vm.moveString(1) }, Modifier.weight(1f).fillMaxHeight(), icon = TabinoIcons.Up, description = tr("Saite höher", "Higher string"),
+            enabled = state.selection.string < track.instrument.tuning.lastIndex)
+        ChoiceTile("", false, { vm.moveString(-1) }, Modifier.weight(1f).fillMaxHeight(), icon = TabinoIcons.Down, description = tr("Saite tiefer", "Lower string"),
+            enabled = state.selection.string > 0)
         ChoiceTile(if (high) "0–12" else "12+", high, { high = !high }, Modifier.weight(1f).fillMaxHeight().testTag("fret-range"), description = tr("Bundbereich wechseln", "Switch fret range"))
         ChoiceTile("", input.chordMode, { vm.chordMode(!input.chordMode) }, Modifier.weight(1f).fillMaxHeight(), icon = TabinoIcons.Chord, description = stringResource(R.string.chord_mode))
         ChoiceTile("", false, vm::backspace, Modifier.weight(1f).fillMaxHeight(), icon = TabinoIcons.Erase, description = stringResource(R.string.delete))
@@ -351,12 +356,15 @@ private val HeaderTouchTarget = 40.dp
 /** Everything that is not needed for every note: further techniques, rhythm extras and bar tools. */
 @Composable private fun MoreTools(vm: WorkspaceViewModel, state: EditorState, input: NoteInput) {
     val ws by vm.state.collectAsStateWithLifecycle()
+    val practice by vm.practice.collectAsStateWithLifecycle()
     val note = vm.selectedNote(state)
     fun has(kind: NoteMark) = note?.articulations?.contains(Articulation.Mark(kind)) == true
     fun hasType(predicate: (Articulation) -> Boolean) = note?.articulations?.any(predicate) == true
     val beat = vm.selectedBeat(state)
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         BigTitle(tr("Werkzeuge", "Tools"), tr("Techniken, Rhythmus, Takte", "Techniques, rhythm, bars"), size = 22)
+        // Feedback of these tools (e.g. "Zuerst eine Note wählen") would otherwise land in the page's notice row behind the scrim (QA 21).
+        ws.notice?.let { SheetNotice(vm, it) }
         @Composable fun section(title: String) = Text(title.uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
         @Composable fun grid(items: List<Triple<String, Boolean, () -> Unit>>) {
             items.chunked(4).forEach { row -> Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -394,12 +402,14 @@ private val HeaderTouchTarget = 40.dp
         grid(listOf(
             Triple(tr("Bereich", "Range"), input.rangeMode) { vm.setRangeMode(!input.rangeMode) },
             Triple(tr("Kopieren", "Copy"), false) { vm.copyBars() },
-            Triple(tr("Einfügen", "Paste"), false) { if (ws.clipboard != null) vm.pasteBars() },
+            // Without clipboard / with a single bar the ViewModel answers with a notice instead of a silent no-op (QA 21).
+            Triple(tr("Einfügen", "Paste"), false) { vm.pasteBars() },
             Triple(tr("Duplizieren", "Duplicate"), false) { vm.duplicateBars() },
             Triple(tr("+ Takt", "+ Bar"), false) { vm.insertBar(after = true) },
-            Triple(tr("Takt löschen", "Delete bar"), false) { if (state.project.measures.size > 1) vm.deleteBars() },
+            Triple(tr("Takt löschen", "Delete bar"), false) { vm.deleteBars() },
             Triple(tr("Leeren", "Clear"), false) { vm.clearBars() },
-            Triple(tr("Loop", "Loop"), false) { vm.loopSelection() },
+            // Lit while a loop is set: the loop itself is only drawn on the practice page (QA 21).
+            Triple(tr("Loop", "Loop"), practice.loop != null) { vm.loopSelection() },
         ))
     }
 }
