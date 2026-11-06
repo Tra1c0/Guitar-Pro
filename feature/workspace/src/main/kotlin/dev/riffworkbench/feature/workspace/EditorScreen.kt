@@ -79,6 +79,7 @@ import dev.riffworkbench.ui.score.pitchName
  * line (Bericht 1 §9: metadata had too much weight and height) and opens the signature/tempo sheet of the selected bar:
  * the accessible alternative to the long press on the drawn signature.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun EditorHeader(vm: WorkspaceViewModel, state: EditorState, onEditSignature: (EntityId) -> Unit) {
     val transport by vm.transport.state.collectAsStateWithLifecycle()
     val practice by vm.practice.collectAsStateWithLifecycle()
@@ -94,10 +95,14 @@ import dev.riffworkbench.ui.score.pitchName
         val beat = transport.position?.let { pos -> p.measures.firstOrNull { it.id == pos.position.measureId }?.let { it.signature to pos.position.offset } }
         if (practice.visualMetronome && playing && beat != null) BeatDots(beat.first, beat.second)
         val action = stringResource(R.string.bar_settings)
-        Surface(onClick = { measure?.let { onEditSignature(it.id) } }, shape = RoundedCornerShape(16.dp), color = Color.Transparent, contentColor = Tabino.Faint,
-            modifier = Modifier.heightIn(min = 32.dp).semantics { contentDescription = "$info. $action" }.testTag("bar-info")) {
-            Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(info, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // Touch target 40 dp instead of Material's 48 (QA 20 / Partitur-Kopf): the 32-dp pill set the height of the whole
+        // title row; 40 dp keeps the agreed minimum and gives the score 8 dp.
+        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides HeaderTouchTarget) {
+            Surface(onClick = { measure?.let { onEditSignature(it.id) } }, shape = RoundedCornerShape(16.dp), color = Color.Transparent, contentColor = Tabino.Faint,
+                modifier = Modifier.heightIn(min = 32.dp).semantics { contentDescription = "$info. $action" }.testTag("bar-info")) {
+                Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(info, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
     }
@@ -133,9 +138,9 @@ import dev.riffworkbench.ui.score.pitchName
     val measureNumber = state.project.measures.indexOfFirst { it.id == selection.measureId } + 1
     val input by vm.input.collectAsStateWithLifecycle()
     val playing = transport.status == TransportStatus.PLAYING
-    // Paddings 4/6 instead of 6/12: the canvas is the scarce part of a phone screen (Bericht 1 §9).
+    // Paddings 4/6 instead of 6/12: the canvas is the scarce part of a phone screen (Bericht 1 §9); QA 20: row top 4.
     TabinoCard(modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
-        Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TrackMenu(vm, state)
             InfoPill(selectionInfo(vm, state, input), if (fretted) Tabino.stringColor(selection.string, track.instrument.tuning.size) else null, Modifier.weight(1f))
         }
@@ -161,7 +166,8 @@ import dev.riffworkbench.ui.score.pitchName
                 onRangeEnd = vm::endRange,
                 // A pan/zoom/drag while following: the view stays where the finger put it until the chip (or Play/seek/stop) resumes.
                 onUserScroll = vm::suspendFollow,
-                modifier = Modifier.fillMaxSize().padding(4.dp).clip(RoundedCornerShape(20.dp)).testTag("score-canvas").onSizeChanged { with(density) { vm.setViewportWidth(it.width.toDp().value) } },
+                // No top padding: the layout's own margin (EDITOR_MARGIN) already separates the score from the row above (QA 20).
+                modifier = Modifier.fillMaxSize().padding(start = 4.dp, end = 4.dp, bottom = 4.dp).clip(RoundedCornerShape(20.dp)).testTag("score-canvas").onSizeChanged { with(density) { vm.setViewportWidth(it.width.toDp().value) } },
                 description = tr("Partitur, Takt $measureNumber, Position ${selection.offset}, Saite ${selection.string + 1}", "Score, bar $measureNumber, position ${selection.offset}, string ${selection.string + 1}") +
                     tr(". Lange auf die Taktart drücken, um Taktart und Tempo zu ändern", ". Long-press the time signature to change signature and tempo") +
                     tr(". Lange auf einen Takt drücken und ziehen, um Takte auszuwählen", ". Long-press a bar and drag to select bars"),
@@ -180,17 +186,24 @@ import dev.riffworkbench.ui.score.pitchName
     }
 }
 
+/** Minimum touch target of the chips above the score (agreed minimum 40 dp; Material's default is 48 dp). */
+private val HeaderTouchTarget = 40.dp
+
 /** Track (with colour dot) and voice chooser in one chip. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun TrackMenu(vm: WorkspaceViewModel, state: EditorState) {
     var open by remember { mutableStateOf(false) }
     val i = state.project.tracks.indexOfFirst { it.id == state.selection.trackId }.coerceAtLeast(0)
     val track = state.project.tracks[i]
     Box {
-        Surface(onClick = { open = true }, shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.heightIn(min = 36.dp)) {
-            Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ColorDot(Tabino.Accents[i % Tabino.Accents.size])
-                Text(track.name.substringBefore(" · ").take(14), style = MaterialTheme.typography.labelLarge, maxLines = 1)
-                if (state.selection.voice > 0) Text("V${state.selection.voice + 1}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // 40-dp touch target like the bar info: the 36-dp chip made the row 48 dp high (QA 20 / Partitur-Kopf).
+        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides HeaderTouchTarget) {
+            Surface(onClick = { open = true }, shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.heightIn(min = 36.dp)) {
+                Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ColorDot(Tabino.Accents[i % Tabino.Accents.size])
+                    Text(track.name.substringBefore(" · ").take(14), style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                    if (state.selection.voice > 0) Text("V${state.selection.voice + 1}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
         DropdownMenu(open, { open = false }) {
