@@ -39,7 +39,8 @@ internal class Channel(val kind: ChannelKind, val stringTone: StringTone, val ke
                        /** Timbre of the modelled harmonics while the samples play (level trimmed to the samples); the plain tone when no bank is installed. */
                        val harmonicTone: StringTone = stringTone,
                        /** What the voices depend on (kind, preset, samples); equal voices can keep sounding across a rack swap. */ val voiceSignature: String = "",
-                       /** The units behind [effects], to keep the state of unchanged effects across a rack swap. */ val units: List<EffectUnit> = emptyList()) {
+                       /** The units behind [effects], to keep the state of unchanged effects across a rack swap. */ val units: List<EffectUnit> = emptyList(),
+                       /** Linear output trim of a sampled preset after its chain, applied while a bank plays it ([TonePresets.outputTrimDb]). */ val outputTrim: Float = 1f) {
     val left = FloatArray(maxBlock)
     val right = FloatArray(maxBlock)
     val stereo = kind == ChannelKind.DRUMS
@@ -110,7 +111,8 @@ class ChannelRack internal constructor(internal val channels: Array<Channel>, in
                 // Harmonics stay modelled inside a sampled preset; their level follows the sample trim so a pinch harmonic sits just under a picked note.
                 val tone = TonePresets.stringTone(preset)
                 val harmonicTone = if (sampled) StringTone(tone.brightness, tone.sustainSeconds, tone.pickPosition, tone.excitationSoftness, tone.pickNoise, tone.level * TonePresets.harmonicGain(preset)) else tone
-                Channel(kind, tone, TonePresets.keysMode(preset), chain, maxBlock, sampled, TonePresets.sampleGain(preset), harmonicTone, "$kind:${preset.id}:$sampled", units)
+                Channel(kind, tone, TonePresets.keysMode(preset), chain, maxBlock, sampled, TonePresets.sampleGain(preset), harmonicTone, "$kind:${preset.id}:$sampled", units,
+                    if (sampled) Dsp.dbToGain(TonePresets.outputTrimDb(preset)).toFloat() else 1f)
             }.toTypedArray()
             val master = if (includeMasterFx) (project.mix.master.effects.mapNotNull { Effects.create(it, sampleRate, maxBlock) } + Limiter(sampleRate)).toTypedArray() else emptyArray()
             return ChannelRack(channels, master, signature(project) + includeMasterFx)
@@ -403,7 +405,8 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
         val silentLimit = (3L * sampleRate / frames).toInt()
         for (t in r.channels.indices) {
             val ch = r.channels[t]
-            val g = if (t < mix.gains.size) mix.gains[t] else 0f
+            // The sampled presets' output trim only applies while the bank plays them (the modelled fallback has its own level).
+            val g = (if (t < mix.gains.size) mix.gains[t] else 0f) * (if (bank != null) ch.outputTrim else 1f)
             val pan = if (t < mix.pans.size) mix.pans[t] else 0f
             val angle = (pan + 1f) * (PI / 4).toFloat()
             val targetL = g * cos(angle) * 1.414f
