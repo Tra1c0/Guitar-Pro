@@ -1,7 +1,7 @@
 # STATUS (Release-Candidate-Ziel)
 
 Fortsetzung nach Pausen: dieses Dokument + `docs/QA_JOURNAL.md` lesen, dann beim "Nächster Schritt" weitermachen.
-Branch: `ccr-0b650dff-jnhups-qa` (Fast-Forward nach `ccr-0b650dff-jnhups` bis 6ac710e erfolgt). Android-Builds/Tests nur auf GitHub Actions; lokal JVM-Harness für die portablen Module.
+Branch: `ccr-0b650dff-jnhups-qa`, per Fast-Forward gespiegelt nach `ccr-0b650dff-jnhups`. Android-Builds/Tests nur auf GitHub Actions; lokal JVM-Harness für die portablen Module.
 
 ## Stand
 - Letzter grüner CI-Lauf: eb82763 (Lauf 42201992391, Build + `check` + Lint + Robolectric, APK-Artefakt `riffworkbench-debug-apk`). Vorher grün: 2acce85, 1eec164, d9c3c09, 7ed6d80, 2b8a1d7, 64b495b.
@@ -46,4 +46,4 @@ Keine Geräte-, Latenz- und Hörtests in dieser Umgebung: erster Schlag auf echt
 Bank-Grenze: Flatwound-DI-Aufnahme, E2 trocken ohne Energie > 2 kHz — „glasklarer“ Clean nur mit anderer (lizenzierter) Aufnahme oder Hörentscheidung über Höhenanhebung. Natural Harmonics sind modelliert (keine Flageolett-Samples).
 
 ## Nächster Schritt
-Autonom lösbare P0/P1-Befunde sind abgearbeitet (Zyklen 18–21). Als Nächstes braucht es Gerätebefunde des Nutzers: APK aus Lauf 42201992391 installieren, A/B-WAVs aus Zyklus 22 anhören, Diagnose-Zähler (Unterläufe/Überläufe) nach dem ersten Play eines frischen Prozesses ablesen, Hörtest Clean/Crunch/HG mit Open/PM/Dead/Harmonics/Pinch/Legato, Bereichsauswahl/Haptik und Pinch-Zoom am Telefon. Danach P2 oder Klangfeinschliff nach Gehör. Branch `ccr-0b650dff-jnhups` steht auf 6ac710e; ein Fast-Forward auf den QA-Stand braucht die ausdrückliche Freigabe des Nutzers.
+Autonom lösbare P0/P1-Befunde sind abgearbeitet (Zyklen 18–21). Als Nächstes braucht es Gerätebefunde des Nutzers: APK aus Lauf 42201992391 installieren, A/B-WAVs aus Zyklus 22 anhören, Diagnose-Zähler (Unterläufe/Überläufe) nach dem ersten Play eines frischen Prozesses ablesen, Hörtest Clean/Crunch/HG mit Open/PM/Dead/Harmonics/Pinch/Legato, Bereichsauswahl/Haptik und Pinch-Zoom am Telefon. Danach P2 oder Klangfeinschliff nach Gehör. Branch `ccr-0b650dff-jnhups` per Fast-Forward auf denselben Stand wie `ccr-0b650dff-jnhups-qa` gebracht (e6972b5).
