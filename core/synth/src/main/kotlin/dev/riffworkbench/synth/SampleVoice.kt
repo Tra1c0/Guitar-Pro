@@ -43,6 +43,8 @@ internal class SampleVoice(private val sampleRate: Int) {
     private var fade = 1f
     private var fadeStep = 0f
     private var age = 0L
+    /** Output frames since the last pick (a legato note continues the same string, so it does not reset this). */
+    private var sinceAttack = 0L
     private var baseMidi = 60.0
     private var rootMidi = 60
     /** The region's measured pitch offset (cents above its root); the ratio removes it so the note lands on its pitch. */
@@ -106,7 +108,7 @@ internal class SampleVoice(private val sampleRate: Int) {
         startClock = clock
         this.endClock = endClock
         active = true; releasing = false; fade = 1f; fadeStep = 0f; silentRun = 0
-        age = 0; lastOut = 0f
+        age = 0; sinceAttack = 0; lastOut = 0f
         rr = roundRobin
         oldRegion = null; xfade = 0f; relRegion = null
         lp1 = 0f; lp2 = 0f
@@ -134,19 +136,26 @@ internal class SampleVoice(private val sampleRate: Int) {
         val bank = bank ?: return
         val current = region ?: return
         oldRegion = current; oldPos = pos; oldRatio = ratioAt(0); oldGain = level * regionGain * env * fade; xfade = 1f
+        val stringEnv = env
         this.endClock = endClock
         releasing = false; fade = 1f; fadeStep = 0f; silentRun = 0; relRegion = null
         configure(note, gain)
         combN = 1
         level *= 0.72f
         val key = Math_round(note.soundingPitch)
-        region = bank.note(key, layerFor(note.velocity, bank.layers), rr + 1)
-        rootMidi = region!!.root
-        fineTune = region!!.fineTuneCents.toDouble()
-        regionGain = region!!.gain
-        // Skip the pick transient: the string already vibrates.
-        pos = 0.03 * bank.sampleRate
+        val next = bank.note(key, layerFor(note.velocity, bank.layers), rr + 1)
+        region = next
+        rootMidi = next.root
+        fineTune = next.fineTuneCents.toDouble()
+        regionGain = next.gain
+        // No new pick (QA cycle 22): the string keeps vibrating, so the new note continues at the age of the vibration since
+        // the last pick - its brightness and level are those of the ringing string, not of a fresh attack. Starting 30 ms into
+        // the new sample put a bright, loud early attack on every hammer-on (dry: as much energy above 3 kHz in the first 8 ms
+        // as a picked change). The envelope (palm-mute damping, loop decay) carries over.
+        val bankFrames = sinceAttack.toDouble() * bank.sampleRate / sampleRate
+        pos = bankFrames.coerceIn(0.03 * bank.sampleRate, (if (next.loopEnd > 0) next.loopEnd - 4 else next.frames - 4).toDouble().coerceAtLeast(0.0))
         looped = false; loopDecay = 1f
+        env = stringEnv
         age = 0
         startClock = clock
     }
@@ -247,14 +256,32 @@ internal class SampleVoice(private val sampleRate: Int) {
                 if (r.loopEnd > 0) s = cubicLoop(data, pos, r.loopStart, r.loopEnd) else if (pos < r.frames - 2) s = cubic(data, pos) else fade = 0f
                 pos += ratio
                 if (looped) env *= loopDecay
-                if (damp) { env *= envDecay; lp1 = ftz(lp1 + (1f - lpA) * (s - lp1)); lp2 = ftz(lp2 + (1f - lpA) * (lp1 - lp2)); s = lp2 }
-                var y = s * level * regionGain * env
-                if (xfade > 0f) {
+                // Legato crossfade (QA cycle 22): the old vibration fades out while the new one fades in from the ringing string.
+                // The new region used to start at full level mid-cycle (a step, i.e. a broadband click on every hammer-on).
+                var oldPart = 0f
+                var newShare = 1f
+                val crossfading = xfade > 0f
+                if (crossfading) {
                     val o = oldRegion
-                    if (o != null && oldPos < o.frames - 2) { y += cubic(o.data, oldPos) * oldGain * xfade; oldPos += oldRatio }
+                    if (o != null) {
+                        if (o.loopEnd > 0 && oldPos >= o.loopEnd) oldPos = o.loopStart + (oldPos - o.loopStart) % (o.loopEnd - o.loopStart)
+                        if (o.loopEnd > 0) oldPart = cubicLoop(o.data, oldPos, o.loopStart, o.loopEnd) * oldGain * xfade
+                        else if (oldPos < o.frames - 2) oldPart = cubic(o.data, oldPos) * oldGain * xfade
+                        oldPos += oldRatio
+                    }
+                    newShare = 1f - xfade
                     xfade -= xfadeStep
                     if (xfade <= 0f) { xfade = 0f; oldRegion = null }
                 }
+                if (damp) {
+                    env *= envDecay
+                    // While crossfading, the old vibration goes through the same damping low-pass as the new one.
+                    val g = level * regionGain * env
+                    val input = if (crossfading) s * newShare + (if (g > 1e-9f) oldPart / g else 0f) else s
+                    lp1 = ftz(lp1 + (1f - lpA) * (input - lp1)); lp2 = ftz(lp2 + (1f - lpA) * (lp1 - lp2)); s = lp2
+                }
+                var y = s * level * regionGain * env
+                if (crossfading && !damp) y = y * newShare + oldPart
                 if (fadeStep > 0f) { fade -= fadeStep; if (fade < 0f) fade = 0f }
                 y *= fade
                 if (combN > 1) y = comb(y)
@@ -267,6 +294,7 @@ internal class SampleVoice(private val sampleRate: Int) {
                 val a = abs(y); if (a > peak) peak = a
             }
             age += chunk
+            sinceAttack += chunk
             i += chunk
             val done = (fade <= 0f && relRegion == null) || (env < 1e-4f && relRegion == null)
             if (done) { silentRun += chunk; if (silentRun > 64) { active = false; region = null; oldRegion = null; return } } else silentRun = 0
