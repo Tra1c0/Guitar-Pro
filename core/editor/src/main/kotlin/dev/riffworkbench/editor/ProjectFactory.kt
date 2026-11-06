@@ -5,7 +5,7 @@ import dev.riffworkbench.model.*
 class ProjectFactory(private val ids: IdSource) {
     /**
      * Product default for a new project: one 4/4 bar, 150 BPM, section "Riff A", a 6-string E-standard guitar named
-     * "Gitarre" plus bass and drums. The model default InstrumentDefinition() stays Drop A (fixtures and formats rely on it).
+     * "Gitarre" plus bass and drums (faders [BAND_RHYTHM_VOLUME]). The model default InstrumentDefinition() stays Drop A (fixtures and formats rely on it).
      */
     fun create(
         title: String,
@@ -20,7 +20,7 @@ class ProjectFactory(private val ids: IdSource) {
             id = ids.next(), metadata = ProjectMetadata(title = title.trim().ifBlank { "Neues Riff" }),
             measures = measures,
             tracks = (if (withBand) listOf(InstrumentKind.GUITAR, InstrumentKind.BASS, InstrumentKind.PERCUSSION) else listOf(InstrumentKind.GUITAR))
-                .map { if (it == InstrumentKind.GUITAR) track(it, measures, guitarName, guitar) else track(it, measures) },
+                .map { if (it == InstrumentKind.GUITAR) track(it, measures, guitarName, guitar) else track(it, measures).let { t -> t.copy(mix = t.mix.copy(volume = BAND_RHYTHM_VOLUME)) } },
             sections = listOf(Section(ids.next(), measures.first().id, "Riff A")),
             tempo = listOf(TempoChange(ScorePosition(measures.first().id), 150.0)),
         )
@@ -49,6 +49,12 @@ class ProjectFactory(private val ids: IdSource) {
     fun bar(measureId: EntityId) = Bar(ids.next(), measureId, List(4) { Voice(ids.next(), it) })
 
     companion object {
+        /**
+         * Factory fader of the band's bass and drums in a new project (the guitar keeps 0.8). QA cycle 22 normalised the guitar
+         * presets' loudness downwards (High Gain -9.5 dB); 0.48 (-8.9 dB by MixState.volumeToGain) restores the guitar-to-bass and
+         * guitar-to-drums balance of cycle 21 (solo RMS +5.4 / +4.4 dB, was +5.1 / +4.0). Saved projects keep their faders.
+         */
+        const val BAND_RHYTHM_VOLUME = 0.48
         /** 6-string E standard, low to high: E2 A2 D3 G3 B3 E4. */
         val E_STANDARD = InstrumentDefinition(tuning = listOf(40, 45, 50, 55, 59, 64), capoByString = List(6) { 0 })
     }
