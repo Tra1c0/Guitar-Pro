@@ -32,18 +32,26 @@ class AudioClipTest {
     }
     private fun firstOnset(x: FloatArray, from: Int = 0) = (from until x.size).first { abs(x[it]) > 0.05f }
 
+    /**
+     * The mix is heard [ChannelRack.latencyFrames] after the plan frame (QA cycle 20: the guitar track's cabinet convolution
+     * takes 64 frames, and the clip is delayed with every other source so it stays on the frame of the score's audio).
+     */
+    private fun latency(p: Project) = ChannelRack.build(p, sr, 1024, includeMasterFx = false).latencyFrames
+
     @Test fun clipIsSampleLockedToThePlanWithOffset() {
         val (p, pcm) = project(offsetMicros = 250_000)
         val out = render(p, pcm, sr * 2)
-        assertEquals(12_000, firstOnset(out))            // 0.25 s offset
-        assertEquals(12_000 + 24_000, firstOnset(out, 12_100)) // next impulse 0.5 s later
+        val l = latency(p)
+        assertEquals(12_000 + l, firstOnset(out))            // 0.25 s offset
+        assertEquals(12_000 + 24_000 + l, firstOnset(out, 12_100 + l)) // next impulse 0.5 s later
     }
 
     @Test fun loopsReplayTheSameAudioFrames() {
         val (p, pcm) = project(offsetMicros = 0)
         val out = render(p, pcm, sr * 3) { it.setLoop(24_000, 72_000) }
+        val l = latency(p)
         // Impulses at 0, then 24000 (=loop start), 48000, then wrap at 72000 -> 24000 again => output 72000.
-        assertEquals(0, firstOnset(out)); assertEquals(24_000, firstOnset(out, 100)); assertEquals(48_000, firstOnset(out, 24_100)); assertEquals(72_000, firstOnset(out, 48_100))
+        assertEquals(0 + l, firstOnset(out)); assertEquals(24_000 + l, firstOnset(out, 100 + l)); assertEquals(48_000 + l, firstOnset(out, 24_100 + l)); assertEquals(72_000 + l, firstOnset(out, 48_100 + l))
     }
 
     @Test fun otherSpeedsStaySilentUntilTimeStretchExists() {

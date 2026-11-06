@@ -52,10 +52,45 @@ internal class Channel(val kind: ChannelKind, val stringTone: StringTone, val ke
     /** Consecutive blocks whose processed output was silent; long delay/reverb tails keep the channel alive. */
     var silentBlocks = 0
     var effectsCleared = true
+    /** Output delay of this channel's effect chain (cabinet convolution). */
+    val latency: Int = effects.sumOf { it.latencyFrames }
+    /**
+     * Latency compensation (QA cycle 20): a channel with less effect latency than the rack's slowest chain is delayed by the
+     * difference, so drums and keys line up with cabinet-convolved guitar and bass (the cabinet partition is 64 frames).
+     */
+    var compensation = 0; private set
+    private var compL = FloatArray(0)
+    private var compR = FloatArray(0)
+    private var compPos = 0
+    internal fun setCompensation(frames: Int) {
+        compensation = frames.coerceAtLeast(0)
+        compL = FloatArray(compensation); compR = FloatArray(if (stereo) compensation else 0); compPos = 0
+    }
+    /** Takes over the delay-line contents of the channel this one replaces (compatible rack swap), when the delays match. */
+    internal fun takeCompensationFrom(old: Channel) {
+        if (old.compensation != compensation || compensation == 0) return
+        old.compL.copyInto(compL); if (stereo && old.stereo) old.compR.copyInto(compR); compPos = old.compPos
+    }
+    internal fun clearCompensation() { compL.fill(0f); compR.fill(0f); compPos = 0 }
+    /** Delays the processed block in place by [compensation] frames. */
+    internal fun compensate(frames: Int) {
+        val n = compensation
+        if (n == 0) return
+        var p = compPos
+        for (i in 0 until frames) {
+            val y = compL[p]; compL[p] = left[i]; left[i] = y
+            if (stereo) { val z = compR[p]; compR[p] = right[i]; right[i] = z }
+            p++; if (p == n) p = 0
+        }
+        compPos = p
+    }
 }
 
 /** Per-track DSP channels. Rebuilt only when sounds or effect chains change, so reverb tails survive note edits. */
 class ChannelRack internal constructor(internal val channels: Array<Channel>, internal val master: Array<Effect>, val signature: String) {
+    /** The slowest channel's effect latency; every other channel, the metronome and the clips are delayed to it. */
+    val latencyFrames: Int = channels.maxOfOrNull { it.latency } ?: 0
+    init { for (ch in channels) ch.setCompensation(latencyFrames - ch.latency) }
     companion object {
         fun signature(project: Project): String = project.tracks.joinToString("|") { t -> "${t.instrument.kind}:${TonePresets.forTrack(t).id}:${TonePresets.effectiveChain(t)}" } + "#" + project.mix.master.effects
         fun build(project: Project, sampleRate: Int, maxBlock: Int, includeMasterFx: Boolean = true): ChannelRack {
@@ -120,6 +155,16 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
     /** Per-sample decay of the stolen-voice residual: 1/e after 4 ms. */
     private val residualDecay = Dsp.timeCoefficient(0.004, sampleRate)
     private val masterR = FloatArray(maxBlock)
+    /**
+     * Metronome and reference clips (QA cycle 20): they are mixed here and reach the master delayed by the rack latency, like
+     * every channel with less effect latency than the slowest one, so they stay on the frame of the cabinet-convolved guitars.
+     */
+    private val auxL = FloatArray(maxBlock)
+    private val auxR = FloatArray(maxBlock)
+    private val auxDelayL = FloatArray(MAX_COMPENSATION)
+    private val auxDelayR = FloatArray(MAX_COMPENSATION)
+    private var auxDelay = 0
+    private var auxPos = 0
     private var program: EngineProgram? = null
     private var clipSet: ClipSet = ClipSet.EMPTY
     /** Reference-audio level relative to the synth (0 = synth only). */
@@ -163,13 +208,20 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
         // Plain index loop: `indices.all { }` allocated an IntRange and its iterator on the audio thread (QA cycle 20).
         var compatible = old != null && old.channels.size == next.channels.size
         if (compatible) for (t in next.channels.indices) if (old!!.channels[t].voiceSignature != next.channels[t].voiceSignature) { compatible = false; break }
+        setAuxDelay(next.latencyFrames)
         if (!compatible) { releaseAll(fast = true); rack = next; return }
         for (t in next.channels.indices) {
             val a = old!!.channels[t]; val b = next.channels[t]
             for (i in b.effects.indices) if (i < a.effects.size && i < a.units.size && i < b.units.size && a.units[i] == b.units[i]) b.effects[i] = a.effects[i]
             b.idleBlocks = a.idleBlocks; b.lastGainL = a.lastGainL; b.lastGainR = a.lastGainR; b.gainPrimed = a.gainPrimed; b.residualL = a.residualL; b.residualR = a.residualR; b.silentBlocks = a.silentBlocks; b.effectsCleared = a.effectsCleared
+            b.takeCompensationFrom(a)
         }
         rack = next
+    }
+    private fun setAuxDelay(frames: Int) {
+        val d = frames.coerceIn(0, MAX_COMPENSATION)
+        if (d == auxDelay) return
+        auxDelay = d; auxPos = 0; auxDelayL.fill(0f); auxDelayR.fill(0f)
     }
     fun setMix(next: MixState) { mix = next }
     fun currentRack(): ChannelRack? = rack
@@ -239,6 +291,7 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
         val r = rack
         if (r != null) for (ch in r.channels) { ch.left.fill(0f, 0, frames); if (ch.stereo) ch.right.fill(0f, 0, frames) }
         masterL.fill(0f, 0, frames); masterR.fill(0f, 0, frames)
+        auxL.fill(0f, 0, frames); auxR.fill(0f, 0, frames)
         var done = 0
         while (done < frames) {
             var segEnd = frames
@@ -265,7 +318,7 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
                 if (!loopActive && position < end) limit = minOf(limit, end)
                 segEnd = (done + (limit - position)).toInt().coerceIn(done + 1, frames)
                 renderVoices(done, segEnd - done)
-                if (clipSet.exactSpeed && clipLevel > 0f) for (c in clipSet.voices) c.mix(masterL, masterR, done, segEnd - done, position, clipLevel)
+                if (clipSet.exactSpeed && clipLevel > 0f) for (c in clipSet.voices) c.mix(auxL, auxR, done, segEnd - done, position, clipLevel)
                 position += (segEnd - done)
                 if (loopActive && position >= loopEnd) {
                     position = loopStart
@@ -292,7 +345,7 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
         for (v in samples) if (v.active) { val ch = r.channels.getOrNull(v.track); if (ch == null) v.kill() else { v.render(ch.left, offset, count, now); ch.idleBlocks = 0; used++ } }
         for (v in keys) if (v.active) { val ch = r.channels.getOrNull(v.track); if (ch == null) v.kill() else { v.render(ch.left, offset, count, now); ch.idleBlocks = 0; used++ } }
         for (v in drums) if (v.active) { val ch = r.channels.getOrNull(v.track); if (ch == null) v.kill() else { v.render(ch.left, ch.right, offset, count, now); ch.idleBlocks = 0; used++ } }
-        for (v in clicks) if (v.active) v.render(masterL, masterR, offset, count, mix.metronome.coerceAtLeast(0.6f))
+        for (v in clicks) if (v.active) v.render(auxL, auxR, offset, count, mix.metronome.coerceAtLeast(0.6f))
         for (ch in r.channels) if (ch.residualL != 0f || ch.residualR != 0f) {
             var rl = ch.residualL; var rr = ch.residualR
             for (k in offset until offset + count) {
@@ -306,6 +359,18 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
     }
 
     private fun mixDown(frames: Int) {
+        // Metronome and clips first (the order the master sum always had), delayed to the rack latency.
+        val d = auxDelay
+        if (d == 0) { auxL.copyInto(masterL, 0, 0, frames); auxR.copyInto(masterR, 0, 0, frames) }
+        else {
+            var p = auxPos
+            for (i in 0 until frames) {
+                masterL[i] = auxDelayL[p]; auxDelayL[p] = auxL[i]
+                masterR[i] = auxDelayR[p]; auxDelayR[p] = auxR[i]
+                p++; if (p == d) p = 0
+            }
+            auxPos = p
+        }
         val r = rack ?: return
         // A channel is skipped once its voices are gone and its processed output has been silent long enough to cover the
         // longest delay gap; then its effects are cleared so no frozen tail comes back on the next note.
@@ -319,11 +384,12 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
             val targetL = g * cos(angle) * 1.414f
             val targetR = g * sin(angle) * 1.414f
             if (ch.idleBlocks > idleMin && ch.silentBlocks > silentLimit && ch.lastGainL == targetL && ch.lastGainR == targetR) {
-                if (!ch.effectsCleared) { for (fx in ch.effects) fx.reset(); ch.effectsCleared = true }
+                if (!ch.effectsCleared) { for (fx in ch.effects) fx.reset(); ch.clearCompensation(); ch.effectsCleared = true }
                 ch.idleBlocks++; continue
             }
             ch.effectsCleared = false
             for (fx in ch.effects) fx.process(ch.left, if (ch.stereo) ch.right else null, frames)
+            ch.compensate(frames)
             var peak = 0f
             for (i in 0 until frames) { val v = abs(ch.left[i]); if (v > peak) peak = v }
             if (ch.stereo) for (i in 0 until frames) { val v = abs(ch.right[i]); if (v > peak) peak = v }
@@ -469,5 +535,9 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
         return best
     }
 
-    companion object { const val MAX_TRACKS = 64 }
+    companion object {
+        const val MAX_TRACKS = 64
+        /** Longest latency compensation (frames); a chain of 64 cabinets would exceed it. */
+        const val MAX_COMPENSATION = 4096
+    }
 }

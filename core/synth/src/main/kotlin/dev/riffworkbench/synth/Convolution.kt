@@ -56,6 +56,8 @@ internal class PartitionedConvolver(ir: FloatArray, private val block: Int = 64)
     private val accRe = FloatArray(n)
     private val accIm = FloatArray(n)
     private var fill = 0
+    /** Output lags the input by one partition. */
+    val latency: Int get() = block
 
     init {
         for (p in 0 until parts) {

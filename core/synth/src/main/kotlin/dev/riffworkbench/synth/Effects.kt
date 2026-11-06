@@ -13,6 +13,8 @@ import kotlin.math.sin
 internal interface Effect {
     fun process(left: FloatArray, right: FloatArray?, n: Int)
     fun reset()
+    /** Frames by which the output lags the input (the cabinet convolver's partition); the engine compensates the other sources. */
+    val latencyFrames: Int get() = 0
 }
 
 internal fun EffectUnit.p(name: String, default: Double, range: ClosedFloatingPointRange<Double>): Double =
@@ -173,6 +175,7 @@ internal class Cabinet(sr: Int, private val model: Int, customIr: FloatArray? = 
     private val ir = customIr ?: if (model == 4) null else CabinetIr.design(model, sr)
     private val l = ir?.let { PartitionedConvolver(it) }
     private val r = ir?.let { PartitionedConvolver(it) }
+    override val latencyFrames: Int = l?.latency ?: 0
     override fun process(left: FloatArray, right: FloatArray?, n: Int) {
         val cl = l ?: return
         cl.process(left, n)
