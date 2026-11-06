@@ -222,8 +222,8 @@ Aktuelle native Speicherung garantiert atomare Sichtbarkeit eines vollständig g
 
 - Grenze: OfflineRenderer → EngineTransport/`OfflineMixdown`; streamt WAV über ByteSink.
 - Ein-/Ausgabe: Projekt + Samplerate/Bit-Tiefe/Tail → WAV-Mix oder isolierte Spur. Stems-ZIP: eine WAV pro Spur ohne Master-Limiter, Mix mit Master-Kette, MIDI mit Tempo-Map, Liesmich.
-- Ausführung und Fehler: Derselbe Compiler, dieselbe Engine und Effektkette wie die Wiedergabe. Alle Stems beginnen bei Frame 0 der aufgelösten Route und sind gleich lang. Abbruch liefert CANCELLED statt einer leeren Datei.
-- Abnahme: Längen/Startpunkte getestet (SynthEngineTest, AudioAdapterTest). Import in Cubase und Vergleich gegen den Mix ausstehend.
+- Ausführung und Fehler: Derselbe Compiler, dieselbe Engine und Effektkette wie die Wiedergabe. Alle Stems beginnen bei Frame 0 der aufgelösten Route und sind gleich lang. Die Effektlatenz (Cabinet-Faltung 64 Frames, ggf. Master-Kette) ist ausgeglichen wie in einer DAW: Planframe 0 liegt auf Frame 0 der Datei, Plan + Ausklang sind vollständig enthalten; Exportframe i = Live-Frame i + Latenz. Jede Spur hat ihren eigenen Rausch-Seed, daher ergibt die Summe der Stems den Mix ohne Master-Kette (bis auf Rundung und Stimmenraub bei vollen Stimmenpools). Abbruch liefert CANCELLED statt einer leeren Datei.
+- Abnahme: Längen/Startpunkte getestet (SynthEngineTest, AudioAdapterTest, Qa21ExportAlignmentTest: Zeitlage, Σ Stems = Mix). Import in Cubase und Vergleich gegen den Mix ausstehend.
 
 ## C-MIDI
 

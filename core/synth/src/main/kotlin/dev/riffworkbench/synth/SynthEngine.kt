@@ -90,6 +90,8 @@ internal class Channel(val kind: ChannelKind, val stringTone: StringTone, val ke
 class ChannelRack internal constructor(internal val channels: Array<Channel>, internal val master: Array<Effect>, val signature: String) {
     /** The slowest channel's effect latency; every other channel, the metronome and the clips are delayed to it. */
     val latencyFrames: Int = channels.maxOfOrNull { it.latency } ?: 0
+    /** Total delay from a plan frame to the rack's output: the slowest channel plus the master chain (a cabinet on the master). */
+    val outputLatencyFrames: Int = latencyFrames + master.sumOf { it.latencyFrames }
     init { for (ch in channels) ch.setCompensation(latencyFrames - ch.latency) }
     companion object {
         fun signature(project: Project): String = project.tracks.joinToString("|") { t -> "${t.instrument.kind}:${TonePresets.forTrack(t).id}:${TonePresets.effectiveChain(t)}" } + "#" + project.mix.master.effects
@@ -189,7 +191,8 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
     private var countInElapsed = 0L
     private var countInClicks = LongArray(0)
     private var countInIndex = 0
-    private var seed = 0x1234567
+    /** Noise seed per track (slot [MAX_TRACKS] for tracks beyond it); see [trigger]. */
+    private val seeds = IntArray(MAX_TRACKS + 1) { 0x1234567 }
 
     /** Monotonic count of rendered frames. */
     var clock = 0L; private set
@@ -471,7 +474,12 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
         if (t < mix.gains.size && mix.gains[t] <= 0f) return
         val now = clock + offset
         val endClock = now + duration.coerceAtLeast(1)
-        seed = seed * 1103515245 + 12345 + note.frame.toInt() * 31 + note.soundingPitch.toInt()
+        // One noise seed per track (QA cycle 21): a track draws the same excitation/drum noise in the full mix as alone, so
+        // the stem exports (one track soloed) sum to the mix. With one shared seed a stem skipped the other tracks' steps and
+        // its snare noise differed from the mix by up to -2.7 dBFS.
+        val slot = if (t in 0 until MAX_TRACKS) t else MAX_TRACKS
+        val seed = seeds[slot] * 1103515245 + 12345 + note.frame.toInt() * 31 + note.soundingPitch.toInt()
+        seeds[slot] = seed
         when (ch.kind) {
             ChannelKind.STRING -> {
                 if (t >= MAX_TRACKS) return

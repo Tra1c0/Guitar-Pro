@@ -63,7 +63,7 @@ Project besitzt Metadaten, globale Measures, Tracks/Staffs/Bars/Voices/Beats/Not
 - **Engine:** Der Plan ist unveränderlich, auf die Geräterate gerechnet und mit Geschwindigkeit skaliert. `EngineProgram` legt Ereignisse vorab in Arrays ab. `SynthEngine` rendert ohne Allokation, I/O oder Locks: Stimmenpools (72 Saiten, 48 Drums, 48 Keys), ein Kanal pro Spur mit Ton-Preset und Effektkette, Master-Limiter, Flush-to-Zero gegen Subnormalzahlen.
 - **Host:** `RealtimeHost` besitzt den Renderthread mit Audio-Priorität. Befehle laufen über eine lock-freie Queue; neue Pläne werden blockgenau getauscht und behalten die musikalische Position. Seek rekonstruiert klingende Noten (Chase).
 - **Uhr:** Die Position stammt aus den AudioTrack-Zeitstempeln (präsentierter Frame) und wird über den Plan in Takt, Offset und Durchlauf zurückgerechnet. Keine UI-Uhr treibt den Transport.
-- **Offline:** `OfflineMixdown` nutzt denselben Compiler und dieselbe Engine für WAV-Mix und Stems; Stems teilen Startframe und Länge.
+- **Offline:** `OfflineMixdown` nutzt denselben Compiler und dieselbe Engine für WAV-Mix und Stems; Stems teilen Startframe und Länge. Die Effektlatenz ist ausgeglichen (Planframe 0 = Dateiframe 0), die Stems summieren sich zum Mix ohne Master-Kette.
 
 ## Notensatz
 

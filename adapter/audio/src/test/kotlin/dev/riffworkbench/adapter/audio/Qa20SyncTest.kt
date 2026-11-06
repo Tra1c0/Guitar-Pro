@@ -193,16 +193,18 @@ class Qa20SyncTest {
             if (worstSpread > TOL) failures += "${run.label}: Quellen $worstSpread Frames auseinander (Schlag bei Ausgabeframe $worstAt)"
             if (measured < beats.size * 9 / 10) failures += "${run.label}: nur $measured von ${beats.size} Schlägen messbar"
 
-            // Live against offline (offline has no metronome, count-in, loop or speed): same onsets per source.
+            // Live against offline (offline has no metronome, count-in, loop or speed): same onsets per source. The export
+            // compensates the effect latency (QA cycle 21), so a live onset lies the rack latency after the export's.
             if (run.speed == 1.0 && run.loop == null && run.changeAfterBlocks < 0) {
                 val shift = if (run.countIn > 0) beats.first() - plan(p).clicks.first { it.frame >= caps.getValue(GUITAR).from }.frame else 0L
+                val lat = ChannelRack.build(p, SR, 1024).outputLatencyFrames
                 var worst = 0; var worstSrc = ""
                 for (s in sources - CLICK) {
                     val off = offline(p, s, pcm)
                     for (e in beats) {
                         val a = onset(caps.getValue(s).left, e) ?: continue
                         val b = onset(off, e - shift) ?: run { failures += "${run.label}: ${names[s]} offline ohne Schlag bei ${e - shift}"; null } ?: continue
-                        if (abs(a - b) > worst) { worst = abs(a - b); worstSrc = names[s] }
+                        if (abs(a - (b + lat)) > worst) { worst = abs(a - (b + lat)); worstSrc = names[s] }
                     }
                 }
                 println("Q20S ${run.label}: live gegen offline größte Onset-Abweichung $worst Frames ($worstSrc)")

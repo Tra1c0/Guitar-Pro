@@ -377,15 +377,19 @@ class Qa18FirstBeatTest {
         }
     }
 
-    /** Live (256-frame blocks) and export (1024-frame blocks) agree on the onset of the first note. */
+    /**
+     * Live (256-frame blocks) and export (1024-frame blocks) agree on the onset of the first note. The export compensates
+     * the effect latency (QA cycle 21: export frame 0 = live frame [ChannelRack.outputLatencyFrames], the cabinet's 64).
+     */
     @Test fun liveAndExportStartsAgree() = runBlocking {
         for ((preset, b, name) in variants()) {
             val x = offline(project(preset), b, frames = QUARTER)
+            val lat = ChannelRack.build(project(preset), SR, 1024).outputLatencyFrames
             val rig = Rig(b)
             rig.t.prepare(project(preset), plain); rig.t.play()
             val m = rig.mark()
             rig.render(16)
-            assertOnset("live vs export, A at frame 0 [$name]", onset(x, 0), onset(rig.left(), m), db = tol(preset, b), frames = frameTol(preset, b))
+            assertOnset("live vs export, A at frame 0 [$name]", onset(x, 0), onset(rig.left(), m + lat), db = tol(preset, b), frames = frameTol(preset, b))
             rig.close()
         }
     }
