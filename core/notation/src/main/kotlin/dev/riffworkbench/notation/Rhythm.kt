@@ -35,15 +35,14 @@ internal object Rhythm {
     private const val NESTED_SIZE = 8f
 
     /**
-     * Depth of the rhythm ink below the lowest TAB string: stems and beams always (also for empty bars, so the first note
-     * does not move the next system), tuplet numbers only where the [bars] hold tuplets.
+     * Depth of the rhythm lane below the lowest TAB string. Fixed per style, so entering notes, dots, beams or a tuplet
+     * never moves the next system (QA 20): stems, beams and one row of tuplet numbers are always reserved, also in empty
+     * bars. Only nested tuplets (imports; the editor writes one tuplet level) add their second number row.
      */
     fun extent(style: LayoutStyle, bars: List<Bar>): Float {
         val stemEnd = style.tabLine * 0.45f + STEM
-        var depth = stemEnd + 0.4f // beam: bottom - 2.2, 2.6 high
-        val beats = bars.asSequence().flatMap { it.voices }.flatMap { it.beats }
-        if (beats.any { it.duration.tuplets.isNotEmpty() }) depth = maxOf(depth, stemEnd + TUPLET_Y + TUPLET_SIZE * ScoreLayouter.DESCENT)
-        if (beats.any { it.duration.tuplets.size > 1 }) depth = maxOf(depth, stemEnd + TUPLET_Y + NESTED_Y + NESTED_SIZE * ScoreLayouter.DESCENT)
+        var depth = maxOf(stemEnd + 0.4f /* beam: bottom - 2.2, 2.6 high */, stemEnd + TUPLET_Y + TUPLET_SIZE * ScoreLayouter.DESCENT)
+        if (bars.any { b -> b.voices.any { v -> v.beats.any { it.duration.tuplets.size > 1 } } }) depth = maxOf(depth, stemEnd + TUPLET_Y + NESTED_Y + NESTED_SIZE * ScoreLayouter.DESCENT)
         return depth
     }
 

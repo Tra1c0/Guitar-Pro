@@ -22,17 +22,16 @@ data class LayoutStyle(
     /** Staff and string line width. The editor draws them heavier on the dark surface; READ (pages, SVG, PDF) keeps the fine 0.8. */
     val lineWidth: Float = 1.2f,
     /**
-     * Minimum height of the top lane (bar number, section, tempo, endings, jump marks) above the staves. A TAB-only system
-     * without effect rows starts its top string right below the lane and moves it down only as far as the ink above the top
-     * string (fret chips, arcs, bends) needs where it meets a lane label (QA 20 / Partitur-Kopf).
+     * Minimum height of the top lane (bar number, section, tempo, endings, jump marks) above the staves. With the TAB on top
+     * the top string sits a fixed distance below the lane that fits a fret chip under every label (QA 20 / Partitur-Kopf).
      */
     val numberLane: Float = 18f,
-    /** TAB with rhythm: space between the lowest rhythm ink (stems, beams, tuplet numbers) and the next system. */
-    val inkGap: Float = 14f,
+    /** TAB with rhythm: space between the rhythm lane (stems, beams, one row of tuplet numbers) and the next system. */
+    val inkGap: Float = 10f,
 ) {
     companion object {
         val EDIT = LayoutStyle()
-        val READ = LayoutStyle(tabLine = 13f, staffSpace = 7f, fretText = 10.5f, column16 = 19f, measurePadding = 8f, systemGap = 20f, lineWidth = 0.8f, numberLane = 22f, inkGap = 12f)
+        val READ = LayoutStyle(tabLine = 13f, staffSpace = 7f, fretText = 10.5f, column16 = 19f, measurePadding = 8f, systemGap = 20f, lineWidth = 0.8f, numberLane = 22f, inkGap = 8f)
     }
 }
 
@@ -373,8 +372,8 @@ object ScoreLayouter {
             rows = effectRows(list)
             val effectsLane = if (showTab) rows.total * style.fretText * 0.72f + style.fretText * 0.4f + bendHeadroom() else 0f
             y += effectsLane
-            // TAB on top without effect rows: the top string sits right under the lane unless ink above it meets a label.
-            if (showTab && !showStandard && rows.total == 0) y = top + topLead(list)
+            // TAB on top: a fixed lead per style, so entering notes, chips or arcs never moves a system (QA 20, Bericht 1 §4).
+            if (showTab && !showStandard) y = top + topLead(list, effectsLane)
             val tabTop = y
             val tabBottom = if (showTab) y + (strings - 1) * style.tabLine else y
             val stringY = if (showTab) FloatArray(strings) { s -> tabBottom - s * style.tabLine } else FloatArray(0)
@@ -436,79 +435,91 @@ object ScoreLayouter {
         fun bendHeadroom(): Float = headroom
 
         // ---------------------------------------------------------------- top lane geometry
-        /** Horizontal extent of one top-lane item and its lowest ink below the system top. */
-        class LaneSpan(val x0: Float, val x1: Float, val bottom: Float)
         /** Horizontal extent of ink above the top TAB string and how far it rises above the top string line. */
         class AboveSpan(val x0: Float, val x1: Float, val rise: Float)
 
         /**
-         * Distance from the system top to the top TAB string for a TAB-only system without effect rows: at least the lane,
-         * every item above the top string stays inside the system, and where such an item lies under a lane label (same x)
-         * the string moves down until the item clears the label by [LABEL_CLEAR].
+         * Distance from the system top to the top TAB string when the TAB is the top staff. It depends only on the style
+         * and on what a system holds structurally, never on its notes: a fret chip of the top string fits under every lane
+         * label ([LANE_INK] + [LABEL_CLEAR] + chip); systems with effect rows keep their lane ([effectsLane]), systems with
+         * a bend/whammy, a repeat count or an ending bracket get the room those need. Arcs of the top string fit into the
+         * lead; where one runs under a label, the label moves sideways ([lane]).
          */
-        fun topLead(list: List<MeasureSpec>): Float {
-            val lanes = list.flatMap { lane(it, 0f, 0f, emit = false) }
-            var lead = max(style.numberLane, (lanes.maxOfOrNull { it.bottom } ?: 0f) + LANE_AIR)
-            for (a in list.flatMap { aboveTab(it) }) {
-                lead = max(lead, a.rise + 1f)
-                for (l in lanes) if (a.x0 < l.x1 && l.x0 < a.x1) lead = max(lead, l.bottom + LABEL_CLEAR + a.rise)
-            }
+        fun topLead(list: List<MeasureSpec>, effectsLane: Float): Float {
+            val chip = style.fretText * 0.67f
+            var lead = max(style.numberLane, LANE_INK + LABEL_CLEAR + chip)
+            if (rows.total > 0) lead = max(lead, style.numberLane + effectsLane)
+            if (headroom > 0f) lead = max(lead, LANE_INK + LABEL_CLEAR + bendRise())
+            if (list.any { (it.measure.repeat.endCount ?: 0) > 2 }) lead = max(lead, LANE_INK + LABEL_CLEAR + 4f + 10f * ASCENT)
+            if (list.any { it.measure.repeat.alternateEndings.isNotEmpty() }) lead = max(lead, ENDING_Y + 0.5f + LABEL_CLEAR + arcRise(true))
             return lead
         }
+        /** Rise of a bend above the top string: curve top 1.3 × fret text, arrow and amount label (or "w/bar"). */
+        fun bendRise(): Float = style.fretText * 1.3f + max(6f + style.fretText * 0.6f * ASCENT, 4f + style.fretText * 0.55f * ASCENT)
+        /** Rise of an arc of the top string above the line: arc ends, curve and (with [label]) the H/P/sl. label, see [arc]. */
+        fun arcRise(label: Boolean): Float = style.tabLine * 0.45f + if (label) style.tabLine * 0.28f * 0.75f + ARC_LABEL_GAP + style.fretText * 0.55f * ASCENT else style.tabLine * 0.28f
 
         /**
-         * Top lane of a bar (number, section, tempo, endings, jump marks) at [top]; draws it when [emit] and returns the
-         * extent of each item. [hookEnd]: lowest y of the ending bracket's hook (just above the first staff line).
+         * Top lane of a bar (number, section, tempo, endings, jump marks) at [top]. [lead]: distance from [top] to the top
+         * TAB string (TAB on top), or null when the TAB is not the top staff. Labels that start a lane item move right past
+         * ink of the top string that would reach them (arcs; [lead] already holds chips), as long as they stay in the bar.
+         * [hookEnd]: lowest y of the ending bracket's hook (just above the first staff line).
          */
-        fun lane(s: MeasureSpec, top: Float, hookEnd: Float, emit: Boolean): List<LaneSpan> {
+        fun lane(s: MeasureSpec, top: Float, hookEnd: Float, lead: Float?) {
             val m = s.measure
             val right = s.x + s.width
-            val spans = ArrayList<LaneSpan>(4)
-            val number = "${s.index + 1}"
-            if (emit) glyphs += TextGlyph(s.x + 3f, top + 9f, number, 8.5f, Ink.MUTED, Align.START)
-            spans += LaneSpan(s.x + 3f, s.x + 3f + TextMetrics.width(number, 8.5f), 9f + 8.5f * DESCENT)
+            glyphs += TextGlyph(s.x + 3f, top + NUMBER_Y, "${s.index + 1}", 8.5f, Ink.MUTED, Align.START)
+            val navLabel = { nav: NavigationMark -> when (nav.kind) { NavigationKind.DA_CAPO -> "D.C."; NavigationKind.DAL_SEGNO -> "D.S."; NavigationKind.SEGNO -> "Segno"; NavigationKind.TO_CODA -> "To Coda"; NavigationKind.CODA -> "Coda"; NavigationKind.FINE -> "Fine" } }
+            val atEnd = { nav: NavigationMark -> nav.kind == NavigationKind.DA_CAPO || nav.kind == NavigationKind.DAL_SEGNO || nav.kind == NavigationKind.TO_CODA || nav.kind == NavigationKind.FINE }
+            // End marks stack leftwards from the barline; start labels must not run into them either.
+            val endXs = HashMap<Int, Float>()
+            var endX = right - 4f
+            m.navigation.forEachIndexed { k, nav -> if (atEnd(nav)) { endXs[k] = endX; endX -= TextMetrics.width(navLabel(nav), 9.5f, true) + 6f } }
+            val blocks = ArrayList<Pair<Float, Float>>() // x ranges a start label must avoid
+            if (endXs.isNotEmpty()) blocks += (endX + 6f) to right
+            val reach = if (lead == null) emptyList() else aboveTab(s)
+            /** Leftmost x >= [x] where a label of width [w] whose ink ends [bottom] below the top clears every arc reaching it. */
+            fun place(x: Float, w: Float, bottom: Float): Float {
+                val avoid = blocks + reach.filter { lead != null && it.rise > lead - bottom - LABEL_CLEAR + 0.01f }.map { it.x0 to it.x1 }
+                if (avoid.isEmpty()) return x
+                var cx = x
+                var moved = true
+                while (moved) { moved = false; for ((a, b) in avoid) if (cx < b + LABEL_CLEAR && a - LABEL_CLEAR < cx + w) { cx = b + LABEL_CLEAR; moved = true } }
+                return if (cx + w <= right - 2f) cx else x
+            }
             var laneX = s.x + 16f
             sectionByMeasure[m.id]?.let { sec ->
                 val w = TextMetrics.width(sec.label, 10f, true) + 10f
-                if (emit) {
-                    glyphs += RectGlyph(laneX, top + 1f, w, 14f, Ink.SECTION, fill = true, radius = 3f)
-                    glyphs += TextGlyph(laneX + w / 2, top + 11.5f, sec.label, 10f, Ink.ON_SECTION, bold = true)
-                }
-                spans += LaneSpan(laneX, laneX + w, 15f)
-                laneX += w + 6f
+                val x = place(laneX, w, PILL_H)
+                glyphs += RectGlyph(x, top, w, PILL_H, Ink.SECTION, fill = true, radius = 3f)
+                glyphs += TextGlyph(x + w / 2, top + PILL_TEXT_Y, sec.label, 10f, Ink.ON_SECTION, bold = true)
+                laneX = x + w + 6f
             }
             tempoByMeasure[m.id]?.forEach { t ->
-                val tx = if (t.position.offset == Fraction.ZERO) laneX else (xFor(s, t.position.offset) - 8f)
                 val text = "♩ = ${formatBpm(t.quarterNotesPerMinute)}"
-                if (emit) glyphs += TextGlyph(tx, top + 11f, text, 9.5f, Ink.TEXT, Align.START, bold = true)
                 val w = TextMetrics.width(text, 9.5f, true)
-                spans += LaneSpan(tx, tx + w, 11f + 9.5f * DESCENT)
+                val tx = place(if (t.position.offset == Fraction.ZERO) laneX else (xFor(s, t.position.offset) - 8f), w, LANE_INK)
+                glyphs += TextGlyph(tx, top + LANE_TEXT_Y, text, 9.5f, Ink.TEXT, Align.START, bold = true)
                 laneX = tx + w + 6f
             }
             if (m.repeat.alternateEndings.isNotEmpty()) {
-                val y = top + 17f
+                val y = top + ENDING_Y
                 val label = m.repeat.alternateEndings.sorted().joinToString(", ") + "."
-                if (emit) {
-                    glyphs += LineGlyph(s.x + 2f, y, right - 3f, y, 1f, Ink.TEXT)
-                    glyphs += LineGlyph(s.x + 2f, y, s.x + 2f, max(y + 1f, min(y + 6f, hookEnd)), 1f, Ink.TEXT)
-                    glyphs += TextGlyph(laneX, y - 2f, label, 9f, Ink.TEXT, Align.START, bold = true)
-                }
-                spans += LaneSpan(s.x + 1.5f, right - 2.5f, 17.5f)
-                laneX += TextMetrics.width(label, 9f, true) + 6f
+                val w = TextMetrics.width(label, 9f, true)
+                val x = place(laneX, w, ENDING_Y - 2f + 9f * DESCENT)
+                glyphs += LineGlyph(s.x + 2f, y, right - 3f, y, 1f, Ink.TEXT)
+                glyphs += LineGlyph(s.x + 2f, y, s.x + 2f, max(y + 1f, min(y + 6f, hookEnd)), 1f, Ink.TEXT)
+                glyphs += TextGlyph(x, y - 2f, label, 9f, Ink.TEXT, Align.START, bold = true)
+                laneX = x + w + 6f
             }
-            var endX = right - 4f
-            m.navigation.forEach { nav ->
-                val label = when (nav.kind) { NavigationKind.DA_CAPO -> "D.C."; NavigationKind.DAL_SEGNO -> "D.S."; NavigationKind.SEGNO -> "Segno"; NavigationKind.TO_CODA -> "To Coda"; NavigationKind.CODA -> "Coda"; NavigationKind.FINE -> "Fine" }
-                val atEnd = nav.kind == NavigationKind.DA_CAPO || nav.kind == NavigationKind.DAL_SEGNO || nav.kind == NavigationKind.TO_CODA || nav.kind == NavigationKind.FINE
-                // Several marks in one bar: start marks continue the lane to the right, end marks stack leftwards from the barline.
+            m.navigation.forEachIndexed { k, nav ->
+                val label = navLabel(nav)
                 val tw = TextMetrics.width(label, 9.5f, true)
-                val w = tw + 6f
-                val x = if (atEnd) endX else laneX
-                if (emit) glyphs += TextGlyph(x, top + 11f, label, 9.5f, Ink.ACCENT, if (atEnd) Align.END else Align.START, bold = true, italic = true)
-                spans += if (atEnd) LaneSpan(x - tw, x, 11f + 9.5f * DESCENT) else LaneSpan(x, x + tw, 11f + 9.5f * DESCENT)
-                if (atEnd) endX -= w else laneX += w
+                val end = endXs[k]
+                val x = end ?: place(laneX, tw, LANE_INK)
+                glyphs += TextGlyph(x, top + LANE_TEXT_Y, label, 9.5f, Ink.ACCENT, if (end != null) Align.END else Align.START, bold = true, italic = true)
+                if (end == null) laneX = x + tw + 6f
             }
-            return spans
         }
 
         /**
@@ -531,12 +542,12 @@ object ScoreLayouter {
                     val cw = max(w + size * 0.6f, size * 1.34f)
                     if (size * 0.67f - depth > 0f) out += AboveSpan(x - cw / 2, x + cw / 2, size * 0.67f - depth)
                     for ((nx, arcLabel) in arcsOf(s, v, b, n)) {
-                        val rise = style.tabLine * 0.45f + style.tabLine * 0.28f + (if (arcLabel != null) 2f + style.fretText * 0.55f * ASCENT else 0f) - depth
+                        val rise = arcRise(arcLabel != null) - depth
                         if (rise > 0f) out += AboveSpan(x + 3f, nx - 3f, rise)
                     }
                     bendSpan(n, b, s, x)?.let { (startX, w2) ->
                         val whammy = n.articulations.none { it is Articulation.Bend }
-                        val rise = style.fretText * 1.3f + max(6f + style.fretText * 0.6f * ASCENT, if (whammy) 4f + style.fretText * 0.55f * ASCENT else 0f)
+                        val rise = bendRise()
                         val x1 = max(startX + w2 + 11f, if (whammy) startX + TextMetrics.width("w/bar", style.fretText * 0.55f) else 0f)
                         out += AboveSpan(startX - 10f, x1, rise)
                     }
@@ -571,7 +582,7 @@ object ScoreLayouter {
                 repeatDots(x + 9f, sys)
             }
             // Top lane: number, section, tempo, endings, navigation
-            lane(s, sys.top, (if (showStandard) sys.staffTop else sys.tabTop) - 1f, emit = true)
+            lane(s, sys.top, (if (showStandard) sys.staffTop else sys.tabTop) - 1f, if (showTab && !showStandard) sys.tabTop - sys.top else null)
             // Time signature
             val showTime = s.showTime || first
             if (showTime) {
@@ -720,7 +731,8 @@ object ScoreLayouter {
             val h = style.tabLine * 0.28f * if (down) 1f else -1f
             val a = x0 + 3f; val b = x1 - 3f
             glyphs += PathGlyph.Builder().move(a, y).cubic(a + (b - a) * 0.25f, y + h, a + (b - a) * 0.75f, y + h, b, y).build(ink, false, 1.1f)
-            if (label != null) glyphs += TextGlyph((a + b) / 2, y + h - 2f, label, style.fretText * 0.55f, ink, italic = true)
+            // Label just above the curve's peak (0.75 × control height), so an arc of the top string fits under the lane.
+            if (label != null) glyphs += TextGlyph((a + b) / 2, if (down) y + h - 2f else y + h * 0.75f - ARC_LABEL_GAP, label, style.fretText * 0.55f, ink, italic = true)
         }
 
         fun bend(sys: SystemBox, n: Note, b: Beat, s: MeasureSpec, x: Float, y: Float, ink: Ink) {
@@ -820,10 +832,18 @@ object ScoreLayouter {
         }
     }
 
-    /** Air between the lowest lane label and the top staff line when nothing above the staff meets a label. */
-    internal const val LANE_AIR = 3f
-    /** Clearance between a lane label and ink rising above the top TAB string below it. */
+    /** Top lane geometry below the system top: bar number and text baselines, section pill (from the top), ending line. */
+    internal const val NUMBER_Y = 9f
+    internal const val LANE_TEXT_Y = 9.5f
+    internal const val PILL_H = 11.5f
+    internal const val PILL_TEXT_Y = 9.3f
+    internal const val ENDING_Y = 17f
+    /** Lowest ink of the lane's labels (tempo/jump-mark text; the pill ends at [PILL_H]). */
+    internal const val LANE_INK = LANE_TEXT_Y + 9.5f * 0.22f
+    /** Clearance between a lane label and ink rising above the top TAB string below it (also sideways). */
     internal const val LABEL_CLEAR = 2f
+    /** Gap between the peak of an arc and its H/P/sl. label. */
+    internal const val ARC_LABEL_GAP = 1.3f
     /** Text ascent/descent as fractions of the size (same estimate as the layout property tests). */
     internal const val ASCENT = 0.78f
     internal const val DESCENT = 0.22f

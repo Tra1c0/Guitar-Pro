@@ -223,22 +223,23 @@ class Qa20ScoreHeaderLayoutTest {
     }
 
     /**
-     * (2a) Leerraum über dem ersten System. Vorher lag die erste TAB-Linie immer 24 Einheiten unter dem Systemanfang (Spur
-     * 18 + pauschal 6 für Bünde der hohen Saite), bei y = 30 mit Rand 6 — auch ohne eine Note auf der hohen Saite.
-     * Jetzt: direkt unter der Kopfspur (18), wenn keine Tinte über der hohen Saite ein Kopf-Label trifft.
+     * (2a) Leerraum über dem ersten System. Vorher lag die erste TAB-Linie 24 Einheiten unter dem Systemanfang (y = 30 mit
+     * Rand 6), und ein Bund der hohen Saite unter „Riff A“ überlappte den Abschnitt. Jetzt fest (unabhängig von den Noten):
+     * Kopf-Labels oben bündig (Pill 0..11,5, Texte bis 11,6), darunter Abstand 2 und ein ganzer Bund-Chip (10,05) — die
+     * erste TAB-Linie liegt nicht tiefer als vorher, in allen Fixtures ohne Effektzeile/Bend im ersten System.
      */
-    @Test fun firstTabLineSitsRightUnderTheLane() {
-        for (name in listOf("Standard leer", "Demo")) for (w in listOf("∞", "360", "411")) {
+    @Test fun firstTabLineIsNotLowerThanBefore() {
+        for (name in listOf("Standard leer", "Standard + Noten", "Demo", "Demo + Noten")) for (w in listOf("360", "411")) {
             val l = layoutOf("$name @$w")
-            assertTrue("$name @$w: erste TAB-Linie bei y=${l.systems[0].tabTop}, erwartet ≤ ${editorMargin + 18f} (vorher 30)", l.systems[0].tabTop <= editorMargin + 18f + 0.01f)
+            assertTrue("$name @$w: erste TAB-Linie bei y=${l.systems[0].tabTop}, erwartet ≤ 30 (vorher 30)", l.systems[0].tabTop <= 30f)
         }
     }
 
     /**
      * (2b) Systemabstand nur so groß wie der Inhalt: unter dem Rhythmus (Hälse/Balken bei tabBottom + 31,2, Triolenziffern
      * bis + 42,7) blieben vorher 35,0 (ohne Triolen) bzw. 23,7 Einheiten bis zum Systemende (Rhythmusspur pauschal 40,4 +
-     * Abstand 26). Jetzt Rhythmus nach Inhalt + 14: Luft unten ≤ 15; Systemhöhen je Takt (umbrochen ein Takt pro System)
-     * mindestens 15 Einheiten kleiner als vorher, auch dort, wo Bünde unter „Riff A“/„Riff B“ die TAB etwas tiefer setzen.
+     * Abstand 26). Jetzt eine feste Rhythmusspur (Hälse, Balken und eine Reihe Triolenziffern, 42,7) + 10: Luft unten ≤ 22
+     * (≈ 10 mit Triolen); Systemhöhen je Takt (umbrochen ein Takt pro System) mindestens 13 Einheiten kleiner als vorher.
      */
     @Test fun systemPitchFollowsTheContent() {
         // Takt → Höhe vorher (Messung vor der Änderung, Journal Zyklus 20): 1 Bünde unter Abschnitt/Tempo, 2 Palm-Mute-Zeile, 3 wie 1, 4 Triolen.
@@ -248,17 +249,17 @@ class Qa20ScoreHeaderLayoutTest {
             assertEquals("ein Takt pro System", 4, l.systems.size)
             for (s in l.systems) {
                 val air = s.bottom - inkBottom(l, s)
-                assertTrue("@$w System ${s.index}: Luft unten $air (vorher 35,0 bzw. 23,7 mit Triolen)", air <= 15f)
+                assertTrue("@$w System ${s.index}: Luft unten $air (vorher 35,0 bzw. 23,7 mit Triolen)", air <= 22f)
                 val bar = l.measures.single { it.system == s.index }.index
-                assertTrue("@$w Takt ${bar + 1}: Höhe ${s.bottom - s.top}, vorher ${before[bar]}", s.bottom - s.top <= before[bar] - 15f)
+                assertTrue("@$w Takt ${bar + 1}: Höhe ${s.bottom - s.top}, vorher ${before[bar]}", s.bottom - s.top <= before[bar] - 13f)
             }
         }
         // Leeres Standardprojekt (Systemhöhe ohne Inhalt): vorher 210,4.
         val empty = layoutOf("Standard leer @∞").systems[0]
-        assertTrue("Standard leer: Systemhöhe ${empty.bottom - empty.top} (vorher 210,4)", empty.bottom - empty.top <= 184f)
+        assertTrue("Standard leer: Systemhöhe ${empty.bottom - empty.top} (vorher 210,4)", empty.bottom - empty.top <= 197f)
         // Ohne Umbruch (Standardansicht im Editor): 7-saitiges Demo vorher 246,4 Einheiten hoch.
         val demo = layoutOf("Demo @∞")
-        assertTrue("Demo @∞: Layouthöhe ${demo.height} (vorher 246,4)", demo.height <= 222f)
+        assertTrue("Demo @∞: Layouthöhe ${demo.height} (vorher 246,4)", demo.height <= 233f)
     }
 
     /** (2c) Bend-Vorhalt (27 Einheiten) nur in Systemen mit Bend/Whammy; vorher in jedem System der Spur, sobald irgendwo ein Bend stand. */
