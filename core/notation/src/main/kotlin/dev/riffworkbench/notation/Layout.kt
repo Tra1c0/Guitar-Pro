@@ -117,7 +117,9 @@ class ScoreLayout(val width: Float, val height: Float, val glyphs: List<Glyph>, 
 object ScoreLayouter {
     fun layout(r: LayoutRequest): ScoreLayout = Builder(r).build()
 
-    internal class ColumnSpec(val offset: Fraction, val duration: Fraction, val virtual: Boolean, val minWidth: Float)
+    internal class ColumnSpec(val offset: Fraction, val duration: Fraction, val virtual: Boolean, val minWidth: Float,
+                              /** Standard-notation ink left/right of the anchor (heads, displaced seconds, ledger lines, ...); 0 without heads. */
+                              val headLeft: Float = 0f, val headRight: Float = 0f)
     internal class MeasureSpec(val index: Int, val measure: Measure, val bar: Bar?, val columns: List<ColumnSpec>, val showTime: Boolean, val showKey: Boolean, var x: Float = 0f, var width: Float = 0f, var system: Int = 0, var columnXs: FloatArray = FloatArray(0), var columnWs: FloatArray = FloatArray(0), var contentX: Float = 0f)
 
     internal class PendingTie(val target: EntityId, val x: Float, val y: Float, val system: Int, val systemEnd: Float, val height: Float, val ink: Ink, val standard: Boolean)
@@ -201,13 +203,15 @@ object ScoreLayouter {
                 }
             }
             val sorted = offsets.keys.sorted()
+            val multiVoice = (bar?.voices?.count { it.beats.isNotEmpty() } ?: 0) > 1
             val cols = sorted.mapIndexed { k, o ->
                 val next = sorted.getOrNull(k + 1) ?: len
                 val d = next + o * Fraction.of(-1)
                 val content = bar?.voices?.flatMap { v -> v.beats.filter { it.offset == o } }.orEmpty()
                 val digits = content.flatMap { it.notes }.maxOfOrNull { (it.fret ?: 0).toString().length + if (Articulation.Mark(NoteMark.GHOST) in it.articulations || it.articulations.any { a -> a is Articulation.Harmonic } || isTieTarget(it)) 2 else 0 } ?: 1
                 val grace = content.any { b -> b.notes.any { n -> n.articulations.any { it is Articulation.Grace } } }
-                ColumnSpec(o, d, offsets[o] == true && content.isEmpty(), digits * style.fretText * 0.62f + style.fretText * 0.9f + if (grace) style.fretText else 0f)
+                val (headLeft, headRight) = if (showStandard && content.isNotEmpty()) Standard.headExtent(this, bar?.voices?.flatMap { v -> v.beats.filter { it.offset == o }.map { v.index to it } }.orEmpty(), m.key, multiVoice) else 0f to 0f
+                ColumnSpec(o, d, offsets[o] == true && content.isEmpty(), digits * style.fretText * 0.62f + style.fretText * 0.9f + if (grace) style.fretText else 0f, headLeft, headRight)
             }
             val prev = p.measures.getOrNull(i - 1)
             return MeasureSpec(i, m, bar, cols, prev == null || prev.signature != m.signature, prev == null || prev.key != m.key)
@@ -245,7 +249,7 @@ object ScoreLayouter {
             if (width == null) {
                 var x = start
                 specs.forEachIndexed { i, s ->
-                    s.system = 0; s.x = x; s.width = natural(s, i == 0) + if (i == 0) firstExtras(s) else 0f
+                    s.system = 0; s.x = x; s.width = natural(s, i == 0) + (if (i == 0) firstExtras(s) else 0f) + headShift(s, 1f)
                     place(s, i == 0); x += s.width
                 }
                 return listOf(specs)
@@ -253,10 +257,11 @@ object ScoreLayouter {
             val result = ArrayList<MutableList<MeasureSpec>>()
             var line = ArrayList<MeasureSpec>(); var used = 0f
             val avail = width - start - r.margin
+            // Line breaks count the room noteheads need at the natural spacing (headShift), so a full line still fits.
             specs.forEach { s ->
-                val w = natural(s, line.isEmpty()) + if (line.isEmpty()) firstExtras(s) else 0f
+                val w = natural(s, line.isEmpty()) + (if (line.isEmpty()) firstExtras(s) else 0f) + headShift(s, 1f)
                 if (line.isNotEmpty() && (used + w > avail || s.measure.forcedSystemBreak)) { result += line; line = ArrayList(); used = 0f }
-                val ww = natural(s, line.isEmpty()) + if (line.isEmpty()) firstExtras(s) else 0f
+                val ww = natural(s, line.isEmpty()) + (if (line.isEmpty()) firstExtras(s) else 0f) + headShift(s, 1f)
                 line += s; used += ww
             }
             if (line.isNotEmpty()) result += line
@@ -266,9 +271,17 @@ object ScoreLayouter {
                 // (compressing them pushed signatures onto the clef/TAB letters and columns past the barline).
                 val fixed = list.mapIndexed { k, s -> fixedWidth(s, k == 0) }
                 val total = naturalWidths.sum(); val fixedTotal = fixed.sum()
-                val stretch = if (si < result.lastIndex || total > avail * 0.7f) ((avail - fixedTotal) / (total - fixedTotal).coerceAtLeast(1f)).coerceIn(0.5f, 3f) else 1f
+                fun widthAt(k: Int, st: Float) = fixed[k] + (naturalWidths[k] - fixed[k]) * st + headShift(list[k], st)
+                var stretch = if (si < result.lastIndex || total > avail * 0.7f) ((avail - fixedTotal) / (total - fixedTotal).coerceAtLeast(1f)).coerceIn(0.5f, 3f) else 1f
+                // Head shifts grow as the columns shrink; the line width is non-decreasing in the stretch, so the largest
+                // stretch that still fits is found by bisection (only where shifts would push the line past the width).
+                if (list.indices.sumOf { widthAt(it, stretch).toDouble() } > avail + 0.25f && stretch > 0.5f) {
+                    var lo = 0.5f; var hi = stretch
+                    repeat(24) { val mid = (lo + hi) / 2; if (list.indices.sumOf { widthAt(it, mid).toDouble() } > avail) hi = mid else lo = mid }
+                    stretch = lo
+                }
                 var x = start
-                list.forEachIndexed { k, s -> s.system = si; s.x = x; s.width = fixed[k] + (naturalWidths[k] - fixed[k]) * stretch; place(s, k == 0, stretch); x += s.width }
+                list.forEachIndexed { k, s -> s.system = si; s.x = x; s.width = widthAt(k, stretch); place(s, k == 0, stretch); x += s.width }
             }
             return result
         }
@@ -277,6 +290,39 @@ object ScoreLayouter {
                 (if (s.measure.repeat.starts) 8f else 0f) + (if (s.measure.repeat.endCount != null) 8f else 0f)
         fun firstExtras(s: MeasureSpec): Float = (if (showStandard) keyWidth(s.measure.key) else 0f) + if (s.showTime || true) timeWidth() else 0f
 
+        /**
+         * Column anchors from the content start [x0] at [stretch]; writes them into [xs]/[ws] when given and returns the
+         * content end. Compression never pushes the noteheads of neighbouring beats into each other (QA 19: a 1/32 drum bar
+         * on a phone compressed its columns to 11.4 units and heads with displaced seconds overlapped by 7.7): an anchor
+         * moves right until the previous beat's ink, a gap and its own ink fit, and every later column moves with it.
+         */
+        fun sweep(s: MeasureSpec, x0: Float, stretch: Float, xs: FloatArray?, ws: FloatArray?): Float {
+            val gap = style.staffSpace * 0.4f
+            var x = x0; var end = x0
+            var lastAnchor = Float.NEGATIVE_INFINITY; var lastRight = 0f
+            s.columns.forEachIndexed { k, c ->
+                val w = columnWidth(c) * stretch
+                var anchor = x + w * 0.5f.coerceAtMost(14f / w.coerceAtLeast(1f)).coerceAtLeast(0.32f)
+                if (c.headLeft > 0f || c.headRight > 0f) {
+                    val need = max(lastAnchor + lastRight + gap + c.headLeft, x0 + c.headLeft)
+                    if (anchor < need) { x += need - anchor; anchor = need }
+                    lastAnchor = anchor; lastRight = c.headRight
+                    end = max(end, anchor + c.headRight + gap)
+                }
+                if (xs != null) xs[k] = anchor
+                if (ws != null) ws[k] = w
+                x += w
+                end = max(end, x)
+            }
+            return end
+        }
+        /** Extra content width the head shifts of [sweep] add at [stretch] (0 without standard-notation heads). */
+        fun headShift(s: MeasureSpec, stretch: Float): Float {
+            if (!showStandard || s.columns.none { it.headLeft > 0f || it.headRight > 0f }) return 0f
+            val nominal = s.columns.sumOf { (columnWidth(it) * stretch).toDouble() }.toFloat()
+            return (sweep(s, 0f, stretch, null, null) - nominal).coerceAtLeast(0f)
+        }
+
         fun place(s: MeasureSpec, first: Boolean, stretch: Float = 1f) {
             var x = s.x + style.measurePadding
             if (first) x += firstExtras(s)
@@ -284,7 +330,7 @@ object ScoreLayouter {
             if (s.measure.repeat.starts) x += 8f
             s.contentX = x
             s.columnXs = FloatArray(s.columns.size); s.columnWs = FloatArray(s.columns.size)
-            s.columns.forEachIndexed { k, c -> val w = columnWidth(c) * stretch; s.columnXs[k] = x + w * 0.5f.coerceAtMost(14f / w.coerceAtLeast(1f)).coerceAtLeast(0.32f); s.columnWs[k] = w; x += w }
+            sweep(s, x, stretch, s.columnXs, s.columnWs)
         }
 
         // ---------------------------------------------------------------- systems
