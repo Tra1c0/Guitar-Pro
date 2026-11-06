@@ -371,8 +371,8 @@ private fun drawCursor(nc: android.graphics.Canvas, l: ScoreLayout, c: ScoreCurs
     }
     // Start marker: a small ▶ above the column tells where Play will begin (the orange playhead is drawn only while playing/paused).
     if (startMarker) {
-        // Kept inside the layout: with the TAB right under the lane (QA 20) the column of the first system starts ~10 units
-        // below the layout top, so the cap moves down onto the column instead of being cut off at the canvas edge.
+        // Kept inside the layout: should the column of the first system start less than 12 units below the layout top
+        // (small margin), the cap moves down onto the column instead of being cut off at the canvas edge.
         val capBottom = maxOf(top, 12f)
         val cap = paints.path.apply { rewind(); moveTo(x - 4f, capBottom - 12f); lineTo(x + 6f, capBottom - 6f); lineTo(x - 4f, capBottom); close() }
         nc.drawPath(cap, paints.marker)
