@@ -9,3 +9,16 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.coroutines.test)
 }
+// Audio-thread allocation tests run in their own JVM without escape analysis (QA cycle 24). ART on Android does not
+// scalar-replace objects, so this is the stricter and more faithful check; with escape analysis on, HotSpot
+// re-materialises eliminated objects when it deoptimises compiled code and charges them to the thread, which made the
+// check fail once in a while (896 B at a loop wrap) although the render path allocates nothing.
+val allocTest = tasks.register<Test>("allocTest") {
+    description = "Audio-thread allocation tests without escape analysis."
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    include("**/*Alloc*Test*")
+    jvmArgs("-XX:-DoEscapeAnalysis")
+}
+tasks.test { exclude("**/*Alloc*Test*"); dependsOn(allocTest) }
