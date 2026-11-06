@@ -32,16 +32,6 @@ import dev.riffworkbench.ui.components.R
     }
 }
 
-/** The ViewModel notice inside a bottom sheet: the page's notice row lies behind the sheet's scrim. */
-@Composable internal fun SheetNotice(vm: WorkspaceViewModel, notice: String) {
-    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }) {
-        Row(Modifier.padding(start = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(notice, Modifier.weight(1f).padding(vertical = 8.dp), color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
-            TextButton(onClick = { vm.showNotice(null) }) { Text(stringResource(R.string.dismiss)) }
-        }
-    }
-}
-
 /** Tempo in effect at bar [index]: the last tempo mark at or before it (bar 1 always carries one). */
 internal fun tempoInEffect(p: Project, index: Int): Double? =
     p.tempo.filter { t -> p.measures.indexOfFirst { it.id == t.position.measureId } <= index }
@@ -80,7 +70,8 @@ internal fun signatureSetInBar(p: Project, index: Int): Int? {
 
 /**
  * Bottom sheet opened by a long press on a time signature (or a tap on the bar info in the header): signature and tempo
- * of [measureId]. The ViewModel notice is shown inside the sheet, because the page's notice row is behind the scrim.
+ * of [measureId]. The ViewModel notice is shown over the top of the sheet (SheetNoticeOverlay), because the page's notice
+ * lies behind the scrim; it does not push the controls down (QA 23).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable internal fun SignatureSheet(vm: WorkspaceViewModel, measureId: EntityId, onDismiss: () -> Unit) {
@@ -93,13 +84,15 @@ internal fun signatureSetInBar(p: Project, index: Int): Int? {
     val bpm = tempoInEffect(p, index)
     val inherited = signatureSetInBar(p, index)
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface, modifier = Modifier.testTag("signature-sheet")) {
+      Box(Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             BigTitle("${stringResource(R.string.measure)} ${index + 1}", "${measure.signature.numerator}/${measure.signature.denominator}" + (bpm?.let { " · ${it.toInt()} BPM" } ?: ""), size = 22)
             if (inherited != null) Text(tr("Taktart übernommen aus Takt $inherited – eine Änderung gilt ab Takt ${index + 1}.", "Time signature carried over from bar $inherited – a change applies from bar ${index + 1}."),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            ws.notice?.let { SheetNotice(vm, it) }
             SignatureTempoControls(vm, p, measure, index)
             Button(onClick = onDismiss, modifier = Modifier.align(Alignment.End).height(48.dp).testTag("signature-done"), shape = RoundedCornerShape(24.dp)) { Text(tr("Fertig", "Done")) }
         }
+        SheetNoticeOverlay(vm)
+      }
     }
 }

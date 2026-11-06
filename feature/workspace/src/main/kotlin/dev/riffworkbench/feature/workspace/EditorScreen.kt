@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.riffworkbench.editor.*
 import dev.riffworkbench.model.*
+import dev.riffworkbench.notation.ScoreScale
 import dev.riffworkbench.ui.components.*
 import dev.riffworkbench.ui.components.R
 import dev.riffworkbench.ui.score.ScoreCanvas
@@ -54,6 +55,7 @@ import dev.riffworkbench.ui.score.pitchName
     // Bar whose signature/tempo sheet is open (EntityId is a value class over String, so the id itself is saveable).
     var signatureEditor by rememberSaveable { mutableStateOf<String?>(null) }
     val track = state.project.tracks.first { it.id == state.selection.trackId }
+    ProbeComposition("EditorScreen")
     // Long press on a drawn time signature (or a tap on the bar info in the header): select that bar and open its sheet.
     val editSignature: (EntityId) -> Unit = { id ->
         // selectCell, not select: in range mode select() would only move the range end (Zyklus 23).
@@ -71,7 +73,9 @@ import dev.riffworkbench.ui.score.pitchName
             Controls(vm, state, track, input) { moreTools = true }
         }
     }
-    if (moreTools) ModalBottomSheet(onDismissRequest = { moreTools = false }, containerColor = MaterialTheme.colorScheme.surface) { MoreTools(vm, state, input) }
+    if (moreTools) ModalBottomSheet(onDismissRequest = { moreTools = false }, containerColor = MaterialTheme.colorScheme.surface) {
+        Box(Modifier.fillMaxWidth()) { MoreTools(vm, state, input); SheetNoticeOverlay(vm) }
+    }
     signatureEditor?.let { id -> SignatureSheet(vm, EntityId(id), onDismiss = { signatureEditor = null }) }
 }
 
@@ -82,8 +86,7 @@ import dev.riffworkbench.ui.score.pitchName
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun EditorHeader(vm: WorkspaceViewModel, state: EditorState, onEditSignature: (EntityId) -> Unit) {
-    val transport by vm.transport.state.collectAsStateWithLifecycle()
-    val practice by vm.practice.collectAsStateWithLifecycle()
+    ProbeComposition("EditorHeader")
     val p = state.project
     val index = p.measures.indexOfFirst { it.id == state.selection.measureId }
     val bpm = tempoInEffect(p, index)
@@ -92,9 +95,7 @@ import dev.riffworkbench.ui.score.pitchName
     val info = "${stringResource(R.string.measure)} ${index + 1} · $sig" + (bpm?.let { " · ${it.toInt()} BPM" } ?: "")
     Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         BigTitle(p.metadata.title, null, Modifier.weight(1f), size = 22)
-        val playing = transport.status == TransportStatus.PLAYING && !transport.countingIn
-        val beat = transport.position?.let { pos -> p.measures.firstOrNull { it.id == pos.position.measureId }?.let { it.signature to pos.position.offset } }
-        if (practice.visualMetronome && playing && beat != null) BeatDots(beat.first, beat.second)
+        HeaderBeatDots(vm, p)
         val action = stringResource(R.string.bar_settings)
         // Touch target 40 dp instead of Material's 48 (QA 20 / Partitur-Kopf): the 32-dp pill set the height of the whole
         // title row; 40 dp keeps the agreed minimum and gives the score 8 dp.
@@ -107,6 +108,18 @@ import dev.riffworkbench.ui.score.pitchName
             }
         }
     }
+}
+
+/**
+ * Visual metronome of the header. It reads the transport itself, so a poll (~30 Hz while playing) recomposes only the dots,
+ * not the title row with its bar-info chip (QA 23).
+ */
+@Composable private fun HeaderBeatDots(vm: WorkspaceViewModel, p: Project) {
+    val transport by vm.transport.state.collectAsStateWithLifecycle()
+    val practice by vm.practice.collectAsStateWithLifecycle()
+    val playing = transport.status == TransportStatus.PLAYING && !transport.countingIn
+    val beat = transport.position?.let { pos -> p.measures.firstOrNull { it.id == pos.position.measureId }?.let { it.signature to pos.position.offset } }
+    if (practice.visualMetronome && playing && beat != null) BeatDots(beat.first, beat.second)
 }
 
 /** Overview strip: one rounded bar per measure, height by note count, the current one bright. Tap jumps there. */
@@ -129,58 +142,74 @@ import dev.riffworkbench.ui.score.pitchName
 }
 
 @Composable private fun TabCard(vm: WorkspaceViewModel, state: EditorState, modifier: Modifier, onEditSignature: (EntityId) -> Unit) {
-    val layout by vm.layout.collectAsStateWithLifecycle()
-    val view by vm.view.collectAsStateWithLifecycle()
-    val transport by vm.transport.state.collectAsStateWithLifecycle()
-    val density = LocalDensity.current
+    ProbeComposition("TabCard")
     val selection = state.selection
     val track = state.project.tracks.first { it.id == selection.trackId }
     val fretted = track.instrument.tuning.isNotEmpty()
-    val measureNumber = state.project.measures.indexOfFirst { it.id == selection.measureId } + 1
     val input by vm.input.collectAsStateWithLifecycle()
-    val playing = transport.status == TransportStatus.PLAYING
     // Paddings 4/6 instead of 6/12: the canvas is the scarce part of a phone screen (Bericht 1 §9); QA 20: row top 4.
     TabinoCard(modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
         Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TrackMenu(vm, state)
             InfoPill(selectionInfo(vm, state, input), if (fretted) Tabino.stringColor(selection.string, track.instrument.tuning.size) else null, Modifier.weight(1f))
         }
-        val playhead = transport.position?.takeIf { playing || transport.status == TransportStatus.PAUSED }
-            ?.let { it.position.measureId to it.position.offset.toDouble() }
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            ScoreCanvas(
-                layout = layout,
-                cursor = ScoreCursor(selection.measureId, selection.offset, selection.string.takeIf { fretted }, selection.rangeEnd),
-                playhead = playhead,
-                follow = view.follow && playing,
-                followSuspended = view.followSuspended,
-                zoom = view.zoom,
-                onZoom = vm::setZoom,
-                // While playing, a tap also moves playback there: cursor and playhead stay together instead of fighting over the view.
-                // While paused, the moved cursor becomes the start of the next Play (WorkspaceViewModel.navigatedSincePause).
-                onTap = { tap -> vm.tap(tap.measureId, tap.offset, tap.string); if (transport.status == TransportStatus.PLAYING) vm.seekToCursor() },
-                onMoveNote = { from, to -> vm.moveNote(from.measureId, from.offset, from.string, to.measureId, to.offset, to.string) },
-                onSignatureLongPress = onEditSignature,
-                // Long press on a bar + drag: bar range with haptics (Bericht 1 §5). Selection only, never a seek, also while playing.
-                onRangeStart = vm::beginRange,
-                onRangeExtend = vm::extendRange,
-                onRangeEnd = vm::endRange,
-                // A pan/zoom/drag while following: the view stays where the finger put it until the chip (or Play/seek/stop) resumes.
-                onUserScroll = vm::suspendFollow,
-                // No top padding: the layout's own margin (EDITOR_MARGIN) already separates the score from the row above (QA 20).
-                modifier = Modifier.fillMaxSize().padding(start = 4.dp, end = 4.dp, bottom = 4.dp).clip(RoundedCornerShape(20.dp)).testTag("score-canvas").onSizeChanged { with(density) { vm.setViewportWidth(it.width.toDp().value) } },
-                description = tr("Partitur, Takt $measureNumber, Position ${selection.offset}, Saite ${selection.string + 1}", "Score, bar $measureNumber, position ${selection.offset}, string ${selection.string + 1}") +
-                    tr(". Lange auf die Taktart drücken, um Taktart und Tempo zu ändern", ". Long-press the time signature to change signature and tempo") +
-                    tr(". Lange auf einen Takt drücken und ziehen, um Takte auszuwählen", ". Long-press a bar and drag to select bars"),
-            )
-            if (view.followSuspended && playing) {
-                // Following is paused after a manual pan: say so, and offer the way back (Bericht 1 §4 "klar erkennbare Rückkehr").
-                Surface(onClick = vm::resumeFollow, shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 10.dp, end = 10.dp).height(36.dp).testTag("follow-resume")) {
-                    Row(Modifier.padding(start = 10.dp, end = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(TabinoIcons.Play, null, Modifier.size(16.dp))
-                        Text(stringResource(R.string.follow_resume), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                    }
+        ScoreArea(vm, state, fretted, onEditSignature, Modifier.weight(1f).fillMaxWidth())
+    }
+}
+
+/**
+ * The score of the editor card. It alone reads the transport, so a poll (~30 Hz while playing) recomposes the canvas with
+ * its playhead and the follow chip, not the card row, the track menu or the controls (QA 23). Drawn at [ScoreScale.EDITOR];
+ * pinch zoom only with the setting "Zoomen per Geste" (AppSettings.pinchZoom), otherwise two fingers pan.
+ */
+@Composable private fun ScoreArea(vm: WorkspaceViewModel, state: EditorState, fretted: Boolean, onEditSignature: (EntityId) -> Unit, modifier: Modifier) {
+    ProbeComposition("ScoreArea")
+    val layout by vm.layout.collectAsStateWithLifecycle()
+    val view by vm.view.collectAsStateWithLifecycle()
+    val transport by vm.transport.state.collectAsStateWithLifecycle()
+    val settings by vm.appSettings.collectAsStateWithLifecycle()
+    val density = LocalDensity.current
+    val selection = state.selection
+    val measureNumber = state.project.measures.indexOfFirst { it.id == selection.measureId } + 1
+    val playing = transport.status == TransportStatus.PLAYING
+    val playhead = transport.position?.takeIf { playing || transport.status == TransportStatus.PAUSED }
+        ?.let { it.position.measureId to it.position.offset.toDouble() }
+    Box(modifier) {
+        ScoreCanvas(
+            layout = layout,
+            cursor = ScoreCursor(selection.measureId, selection.offset, selection.string.takeIf { fretted }, selection.rangeEnd),
+            playhead = playhead,
+            follow = view.follow && playing,
+            followSuspended = view.followSuspended,
+            zoom = view.zoom,
+            onZoom = vm::setZoom,
+            // While playing, a tap also moves playback there: cursor and playhead stay together instead of fighting over the view.
+            // While paused, the moved cursor becomes the start of the next Play (WorkspaceViewModel.navigatedSincePause).
+            onTap = { tap -> vm.tap(tap.measureId, tap.offset, tap.string); if (transport.status == TransportStatus.PLAYING) vm.seekToCursor() },
+            onMoveNote = { from, to -> vm.moveNote(from.measureId, from.offset, from.string, to.measureId, to.offset, to.string) },
+            onSignatureLongPress = onEditSignature,
+            // Long press on a bar + drag: bar range with haptics (Bericht 1 §5). Selection only, never a seek, also while playing.
+            onRangeStart = vm::beginRange,
+            onRangeExtend = vm::extendRange,
+            onRangeEnd = vm::endRange,
+            // A pan/zoom/drag while following: the view stays where the finger put it until the chip (or Play/seek/stop) resumes.
+            onUserScroll = vm::suspendFollow,
+            scale = ScoreScale.EDITOR,
+            zoomGesture = settings.pinchZoom,
+            // No top padding: the layout's own margin (EDITOR_MARGIN) already separates the score from the row above (QA 20).
+            // The width goes to the ViewModel in zoom-1 units (dp / display scale): wrapped systems fit the drawn width.
+            modifier = Modifier.fillMaxSize().padding(start = 4.dp, end = 4.dp, bottom = 4.dp).clip(RoundedCornerShape(20.dp)).testTag("score-canvas").onSizeChanged { with(density) { vm.setViewportWidth(it.width.toDp().value / ScoreScale.EDITOR) } },
+            description = tr("Partitur, Takt $measureNumber, Position ${selection.offset}, Saite ${selection.string + 1}", "Score, bar $measureNumber, position ${selection.offset}, string ${selection.string + 1}") +
+                tr(". Lange auf die Taktart drücken, um Taktart und Tempo zu ändern", ". Long-press the time signature to change signature and tempo") +
+                tr(". Lange auf einen Takt drücken und ziehen, um Takte auszuwählen", ". Long-press a bar and drag to select bars"),
+        )
+        if (view.followSuspended && playing) {
+            // Following is paused after a manual pan: say so, and offer the way back (Bericht 1 §4 "klar erkennbare Rückkehr").
+            Surface(onClick = vm::resumeFollow, shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 10.dp, end = 10.dp).height(36.dp).testTag("follow-resume")) {
+                Row(Modifier.padding(start = 10.dp, end = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(TabinoIcons.Play, null, Modifier.size(16.dp))
+                    Text(stringResource(R.string.follow_resume), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -193,6 +222,7 @@ private val HeaderTouchTarget = 40.dp
 /** Track (with colour dot) and voice chooser in one chip. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun TrackMenu(vm: WorkspaceViewModel, state: EditorState) {
+    ProbeComposition("TrackMenu")
     var open by remember { mutableStateOf(false) }
     val i = state.project.tracks.indexOfFirst { it.id == state.selection.trackId }.coerceAtLeast(0)
     val track = state.project.tracks[i]
@@ -208,6 +238,7 @@ private val HeaderTouchTarget = 40.dp
             }
         }
         DropdownMenu(open, { open = false }) {
+            ProbeComposition("TrackMenu.items")
             state.project.tracks.forEachIndexed { k, t -> DropdownMenuItem(text = { Text(t.name) }, leadingIcon = { ColorDot(Tabino.Accents[k % Tabino.Accents.size]) },
                 onClick = { open = false; vm.selectTrack(t.id) }) }
             HorizontalDivider()
@@ -238,6 +269,7 @@ private val HeaderTouchTarget = 40.dp
 
 /** Durations, techniques and the fret pad (or the note keypad for unfretted tracks). */
 @Composable private fun Controls(vm: WorkspaceViewModel, state: EditorState, track: Track, input: NoteInput, onMore: () -> Unit) {
+    ProbeComposition("Controls")
     val tuning = track.instrument.tuning
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         DurationRow(vm, state, input)
@@ -273,6 +305,7 @@ private val HeaderTouchTarget = 40.dp
         Box(Modifier.weight(1f).fillMaxHeight()) {
             ChoiceTile("Slide", hasType { it is Articulation.Slide }, { slideMenu = true }, Modifier.fillMaxSize(), icon = TabinoIcons.Slide)
             DropdownMenu(slideMenu, { slideMenu = false }) {
+                ProbeComposition("SlideMenu.items")
                 listOf(SlideKind.SHIFT to tr("Shift-Slide", "Shift slide"), SlideKind.LEGATO to tr("Legato-Slide", "Legato slide"), SlideKind.INTO_FROM_BELOW to tr("Von unten hinein", "Slide in from below"),
                     SlideKind.INTO_FROM_ABOVE to tr("Von oben hinein", "Slide in from above"), SlideKind.OUT_DOWN to tr("Heraus nach unten", "Slide out down"), SlideKind.OUT_UP to tr("Heraus nach oben", "Slide out up")).forEach { (kind, label) ->
                     DropdownMenuItem(text = { Text(label) }, onClick = { slideMenu = false; vm.articulation(Articulation.Slide(kind)) })
@@ -356,16 +389,16 @@ private val HeaderTouchTarget = 40.dp
 
 /** Everything that is not needed for every note: further techniques, rhythm extras and bar tools. */
 @Composable private fun MoreTools(vm: WorkspaceViewModel, state: EditorState, input: NoteInput) {
-    val ws by vm.state.collectAsStateWithLifecycle()
     val practice by vm.practice.collectAsStateWithLifecycle()
     val note = vm.selectedNote(state)
     fun has(kind: NoteMark) = note?.articulations?.contains(Articulation.Mark(kind)) == true
     fun hasType(predicate: (Articulation) -> Boolean) = note?.articulations?.any(predicate) == true
     val beat = vm.selectedBeat(state)
+    ProbeComposition("MoreTools")
+    // Feedback of these tools (e.g. "Zuerst eine Note wählen") is shown over the top of the sheet by the caller's
+    // SheetNoticeOverlay (QA 21: not behind the scrim; QA 23: without pushing the tiles down).
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         BigTitle(tr("Werkzeuge", "Tools"), tr("Techniken, Rhythmus, Takte", "Techniques, rhythm, bars"), size = 22)
-        // Feedback of these tools (e.g. "Zuerst eine Note wählen") would otherwise land in the page's notice row behind the scrim (QA 21).
-        ws.notice?.let { SheetNotice(vm, it) }
         @Composable fun section(title: String) = Text(title.uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
         @Composable fun grid(items: List<Triple<String, Boolean, () -> Unit>>) {
             items.chunked(4).forEach { row -> Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {

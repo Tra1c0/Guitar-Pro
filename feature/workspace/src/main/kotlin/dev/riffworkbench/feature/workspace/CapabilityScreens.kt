@@ -39,6 +39,7 @@ import kotlin.math.roundToLong
     val practice by vm.practice.collectAsStateWithLifecycle()
     val transport by vm.transport.state.collectAsStateWithLifecycle()
     val view by vm.view.collectAsStateWithLifecycle()
+    val appSettings by vm.appSettings.collectAsStateWithLifecycle()
     val tuner by vm.tuner.collectAsStateWithLifecycle()
     var speed by remember(practice.speed) { mutableFloatStateOf(practice.speed.toFloat()) }
     val layout by vm.layout.collectAsStateWithLifecycle()
@@ -70,6 +71,8 @@ import kotlin.math.roundToLong
             val playhead = transport.position?.takeIf { playing || transport.status == TransportStatus.PAUSED }?.let { it.position.measureId to it.position.offset.toDouble() }
             ws.editor?.let { e -> dev.riffworkbench.ui.score.ScoreCanvas(layout = layout, cursor = dev.riffworkbench.ui.score.ScoreCursor(e.selection.measureId, e.selection.offset, null, e.selection.rangeEnd),
                 playhead = playhead, follow = view.follow && playing, zoom = view.zoom, onZoom = vm::setZoom, onTap = { tap -> vm.tap(tap.measureId, tap.offset, tap.string); vm.seekToCursor() },
+                // Same display scale and pinch setting as the editor (QA 23).
+                scale = dev.riffworkbench.notation.ScoreScale.EDITOR, zoomGesture = appSettings.pinchZoom,
                 modifier = Modifier.weight(1f).fillMaxWidth().padding(6.dp), description = tr("Partitur mit Wiedergabeposition", "Score with playback position")) }
         }
         Row(Modifier.fillMaxWidth().height(84.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -157,7 +160,10 @@ import kotlin.math.roundToLong
 
 @Composable fun AudioScreen(vm: WorkspaceViewModel, state: EditorState, onImport: () -> Unit) {
     val practice by vm.practice.collectAsStateWithLifecycle()
-    val transport by vm.transport.state.collectAsStateWithLifecycle()
+    // Only the reason: the whole transport state changes on every poll while playing and recomposed the page with its
+    // clip sliders 30 times a second (QA 23).
+    val transport = vm.transport.state.collectAsStateWithLifecycle()
+    val transportReason by remember(transport) { derivedStateOf { transport.value.reason } }
     val ui by vm.state.collectAsStateWithLifecycle()
     val clips = state.project.audio.clips
     ScrollPage(stringResource(R.string.audio), stringResource(R.string.audio_hint)) {
@@ -170,7 +176,7 @@ import kotlin.math.roundToLong
                 TextButton(onClick = { vm.setSpeed(1.0) }) { Text("100 %") }
             }
         }
-        transport.reason?.takeIf { it.startsWith("Referenz-Audio") }?.let { NoticeCard(it, true) }
+        transportReason?.takeIf { it.startsWith("Referenz-Audio") }?.let { NoticeCard(it, true) }
         if (clips.isEmpty()) Text(stringResource(R.string.audio_empty), style = MaterialTheme.typography.titleMedium)
         clips.forEach { clip -> ClipCard(vm, clip) }
         if (clips.isNotEmpty()) Text(tr("Ausrichten: „Takt 1 im Audio bei“ ist die Stelle der Aufnahme, an der Takt 1 der Partitur beginnt. Solo gilt gemeinsam für Spuren und Clips. Loops, Sprünge und Count-in bleiben sample-genau synchron, solange das Partitur-Tempo zur Aufnahme passt.",

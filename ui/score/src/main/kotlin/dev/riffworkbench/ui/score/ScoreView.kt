@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -95,6 +96,10 @@ fun ScoreCanvas(
     onRangeExtend: ((EntityId) -> Boolean)? = null,
     /** Release (or cancel) after [onRangeStart]: the range stays selected. */
     onRangeEnd: (() -> Unit)? = null,
+    /** Display scale on top of density × [zoom] (QA 23: the editor draws the score larger, ScoreScale.EDITOR). */
+    scale: Float = 1f,
+    /** Pinch zoom (QA 23: off by default in the app, "Zoomen per Geste" in the settings). Off, two fingers only pan. */
+    zoomGesture: Boolean = true,
 ) {
     val density = LocalDensity.current.density
     val palette = rememberInkPalette()
@@ -104,10 +109,17 @@ fun ScoreCanvas(
     var viewport by remember { mutableStateOf(IntSize.Zero) }
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
-    val factor = density * zoom
-    val currentFactor by rememberUpdatedState(factor)
+    // Zoom drawn right now (QA 23). A pinch writes it together with the offsets, so no frame combines the new offsets with
+    // the old factor, and each step multiplies the live value. Before, every step read the ViewModel's zoom, which comes
+    // back one or two frames later: steps compounded on a stale factor and the content jumped while pinching. The owner
+    // hears the zoom once, when the last finger lifts ([pendingZoom]); a zoom set elsewhere (layout page) replaces it.
+    var liveZoom by remember { mutableFloatStateOf(zoom) }
+    var pendingZoom by remember { mutableFloatStateOf(Float.NaN) }
+    LaunchedEffect(zoom) { if (pendingZoom.isNaN()) liveZoom = zoom }
+    val factor = density * scale * liveZoom
+    val currentScale by rememberUpdatedState(scale)
+    val currentZoomGesture by rememberUpdatedState(zoomGesture)
     val currentLayout by rememberUpdatedState(layout)
-    val currentZoom by rememberUpdatedState(zoom)
     val currentOnZoom by rememberUpdatedState(onZoom)
     val currentOnTap by rememberUpdatedState(onTap)
     val currentCursor by rememberUpdatedState(cursor)
@@ -132,10 +144,13 @@ fun ScoreCanvas(
     var resumeMinimal by remember { mutableStateOf(false) }
     var wasSuspended by remember { mutableStateOf(false) }
     val overlay = remember(selectionColor, palette) { OverlayPaints(selectionColor.toArgb(), palette.of(Ink.PLAYHEAD)) }
+    /** The factor of the current frame, for gesture and draw code that runs between compositions. */
+    fun factorNow(): Float = density * currentScale * liveZoom
     fun clamp() {
         val l = currentLayout ?: return
-        offsetX = ViewportScroll.clamp(offsetX, l.width * currentFactor, viewport.width.toFloat())
-        offsetY = ViewportScroll.clamp(offsetY, l.height * currentFactor, viewport.height.toFloat())
+        val f = factorNow()
+        offsetX = ViewportScroll.clamp(offsetX, l.width * f, viewport.width.toFloat())
+        offsetY = ViewportScroll.clamp(offsetY, l.height * f, viewport.height.toFloat())
     }
     fun userScrolled() { if (currentFollow && !currentSuspended) currentOnUserScroll?.invoke() }
     // The selected note under (x, y) in layout units, i.e. where the note-drag detector below would start a drag.
@@ -146,7 +161,7 @@ fun ScoreCanvas(
         return note.measureId == c.measureId && note.offset == c.offset && (note.string == null || note.string == c.string)
     }
     // Keep the edit cursor visible after taps, arrows and auto-advance.
-    LaunchedEffect(cursor?.measureId, cursor?.offset, cursor?.string, layout, zoom, viewport) {
+    LaunchedEffect(cursor?.measureId, cursor?.offset, cursor?.string, layout, factor, viewport) {
         val l = layout ?: return@LaunchedEffect
         val c = cursor ?: return@LaunchedEffect
         // Before the first measure pass the viewport is 0×0: every position looks off-screen and the view would jump.
@@ -156,7 +171,7 @@ fun ScoreCanvas(
         if (currentFollow) return@LaunchedEffect
         // The rule itself (minimal shift, paging, the pinch exception) is JVM-tested in core:notation (ViewportScrollTest, Qa21ViewportCursorTest).
         val step = ViewportScroll.cursor(l, c.measureId, c.offset, c.string, offsetX, offsetY, viewport.width.toFloat(), viewport.height.toFloat(),
-            factor, density, lastCursorKey, zoomedByGesture = zoomSetByGesture == zoom) ?: return@LaunchedEffect
+            factor, density, lastCursorKey, zoomedByGesture = zoomSetByGesture == liveZoom) ?: return@LaunchedEffect
         lastCursorKey = step.key
         offsetX = step.offsetX
         offsetY = step.offsetY
@@ -165,21 +180,17 @@ fun ScoreCanvas(
         if (followSuspended) wasSuspended = true else if (wasSuspended) { wasSuspended = false; resumeMinimal = true }
     }
     // Follow the playhead while playing.
-    LaunchedEffect(playhead, follow, followSuspended, layout, zoom) {
+    LaunchedEffect(playhead, follow, followSuspended, layout, factor) {
         val l = layout ?: return@LaunchedEffect
         val p = playhead ?: return@LaunchedEffect
         if (!follow || followSuspended || viewport.width == 0 || viewport.height == 0) return@LaunchedEffect
-        val x = (l.xFor(p.first, p.second) ?: return@LaunchedEffect) * factor
-        val margin = ViewportScroll.MARGIN * density
-        offsetX = ViewportScroll.follow(x, 6f * density, offsetX, viewport.width.toFloat(), l.width * factor, resumeMinimal, margin)
+        // The rule (x: run and re-place; y: the band the playhead runs through, stable when it is taller than the canvas)
+        // is JVM-tested in core:notation (ViewportScrollTest, Qa23FollowZoomTest).
+        val step = ViewportScroll.playhead(l, p.first, p.second, offsetX, offsetY, viewport.width.toFloat(), viewport.height.toFloat(), factor, density, resumeMinimal)
+            ?: return@LaunchedEffect
         resumeMinimal = false
-        val sys = l.measures.firstOrNull { it.measureId == p.first }?.let { m -> l.systems.getOrNull(m.system) }
-        if (sys != null) {
-            // The band the playhead runs through (TAB, or the staff without TAB), not the whole system.
-            val (top, bottom) = if (sys.stringY.isNotEmpty()) sys.tabTop to sys.tabBottom else sys.staffTop to sys.staffBottom
-            offsetY = ViewportScroll.vertical((top + bottom) / 2 * factor, ((bottom - top) / 2 + 12f) * factor, offsetY, viewport.height.toFloat(), l.height * factor, margin)
-        }
-        clamp()
+        offsetX = step.offsetX
+        offsetY = step.offsetY
     }
     Box(modifier.clipToBounds().onSizeChanged { viewport = it; clamp() }
         .semantics {
@@ -192,19 +203,23 @@ fun ScoreCanvas(
                 cx?.let { it * factor }, cy?.let { it * factor })
         }
         .pointerInput(Unit) {
-            detectTransformGestures { centroid, pan, gestureZoom, _ ->
-                val old = currentFactor
-                val nextZoom = (currentZoom * gestureZoom).coerceIn(0.5f, 2.5f)
-                if (gestureZoom != 1f) {
-                    val nf = density * nextZoom
+            detectTransformGestures { centroid, pan, zoomChange, _ ->
+                // Without the zoom setting two fingers only pan (QA 23).
+                val change = if (currentZoomGesture) zoomChange else 1f
+                val nextZoom = (liveZoom * change).coerceIn(0.5f, 2.5f)
+                val zoomed = nextZoom != liveZoom
+                if (zoomed) {
+                    val old = factorNow()
+                    val nf = density * currentScale * nextZoom
                     // Keep the content under the fingers fixed while zooming.
                     offsetX = (offsetX + centroid.x) * nf / old - centroid.x
                     offsetY = (offsetY + centroid.y) * nf / old - centroid.y
                     zoomSetByGesture = nextZoom
-                    currentOnZoom(nextZoom)
+                    liveZoom = nextZoom
+                    pendingZoom = nextZoom
                 }
                 offsetX -= pan.x; offsetY -= pan.y
-                if (pan != Offset.Zero || gestureZoom != 1f) userScrolled()
+                if (pan != Offset.Zero || zoomed) userScrolled()
                 clamp()
             }
         }
@@ -213,8 +228,8 @@ fun ScoreCanvas(
             // After a long press it consumes every change until release, which also ends pan/zoom for that gesture.
             detectTapGestures(onLongPress = { pos: Offset ->
                 val l = currentLayout ?: return@detectTapGestures
-                val x = (pos.x + offsetX) / currentFactor
-                val y = (pos.y + offsetY) / currentFactor
+                val x = (pos.x + offsetX) / factorNow()
+                val y = (pos.y + offsetY) / factorNow()
                 // The drawn time signature has priority: it opens the signature/tempo sheet.
                 val signature = currentOnSignature
                 if (signature != null) {
@@ -237,8 +252,8 @@ fun ScoreCanvas(
                 start(bar.measureId)
             }) { pos: Offset ->
                 val l = currentLayout ?: return@detectTapGestures
-                val x = (pos.x + offsetX) / currentFactor
-                val y = (pos.y + offsetY) / currentFactor
+                val x = (pos.x + offsetX) / factorNow()
+                val y = (pos.y + offsetY) / factorNow()
                 // Nearest column; a fret number wins where it is the closer target (ScoreLayout.tapAt, JVM-tested in core:notation).
                 val hit = l.tapAt(x, y) ?: return@detectTapGestures
                 currentOnTap(ScoreTap(hit.measureId, hit.offset, hit.string, hit.noteId))
@@ -251,7 +266,7 @@ fun ScoreCanvas(
                 val l = currentLayout ?: return@awaitEachGesture
                 val c = currentCursor ?: return@awaitEachGesture
                 if (currentOnMove == null) return@awaitEachGesture
-                val hx = (down.position.x + offsetX) / currentFactor; val hy = (down.position.y + offsetY) / currentFactor
+                val hx = (down.position.x + offsetX) / factorNow(); val hy = (down.position.y + offsetY) / factorNow()
                 val note = l.notes.firstOrNull { hx >= it.x && hx <= it.x + it.w && hy >= it.y && hy <= it.y + it.h } ?: return@awaitEachGesture
                 // A notehead in the standard staff has no string: it stands for the selected note of that beat.
                 if (note.measureId != c.measureId || note.offset != c.offset || (note.string != null && note.string != c.string)) return@awaitEachGesture
@@ -270,13 +285,13 @@ fun ScoreCanvas(
                         change.consume(); last = change.position; dragAt = last; userScrolled()
                         // Zyklus 23: the target is the note's own place moved by the finger travel, with a dead zone
                         // (ScoreLayout.dropTarget), so a slip while tapping the selected note does not move it.
-                        dragDrop = l.dropTarget(note, fromString, (last.x - down.position.x) / currentFactor, (last.y - down.position.y) / currentFactor)
+                        dragDrop = l.dropTarget(note, fromString, (last.x - down.position.x) / factorNow(), (last.y - down.position.y) / factorNow())
                             ?.let { ScoreCursor(it.measureId, it.offset, it.string) }
                     }
                 }
                 if (!dragging) return@awaitEachGesture
                 dragAt = null; dragDrop = null
-                val target = l.dropTarget(note, fromString, (last.x - down.position.x) / currentFactor, (last.y - down.position.y) / currentFactor) ?: return@awaitEachGesture
+                val target = l.dropTarget(note, fromString, (last.x - down.position.x) / factorNow(), (last.y - down.position.y) / factorNow()) ?: return@awaitEachGesture
                 currentOnMove?.invoke(ScoreTap(note.measureId, note.offset, fromString, note.noteId), ScoreTap(target.measureId, target.offset, target.string ?: fromString, null))
             }
         }
@@ -292,7 +307,7 @@ fun ScoreCanvas(
                         if (!change.pressed) break
                         if (!range.active) continue
                         val l = currentLayout ?: continue
-                        val bar = l.measureNear((change.position.x + offsetX) / currentFactor, (change.position.y + offsetY) / currentFactor) ?: continue
+                        val bar = l.measureNear((change.position.x + offsetX) / factorNow(), (change.position.y + offsetY) / factorNow()) ?: continue
                         if (bar.measureId == range.last) continue
                         range.last = bar.measureId
                         // A light tick per bar change, only when the owner actually moved the range end.
@@ -306,9 +321,21 @@ fun ScoreCanvas(
                     }
                 }
             }
+        }
+        .pointerInput(Unit) {
+            // End of a pinch: once the last finger lifts (or the gesture is cancelled), the owner hears the final zoom — one
+            // ViewModel update (and one re-wrap of wrapped systems) per pinch instead of one per step (QA 23). Only reads.
+            awaitEachGesture {
+                awaitFirstDown(requireUnconsumed = false)
+                do { val event = awaitPointerEvent(PointerEventPass.Final) } while (event.changes.any { it.pressed })
+                val z = pendingZoom
+                if (!z.isNaN()) { pendingZoom = Float.NaN; currentOnZoom(z) }
+            }
         }) {
         Canvas(Modifier.fillMaxSize()) {
             val l = layout ?: return@Canvas
+            // Read here, not captured from the composition: the frame a pinch step lands in draws offsets and factor together.
+            val factor = factorNow()
             drawIntoCanvas { canvas ->
                 val nc = canvas.nativeCanvas
                 nc.save()

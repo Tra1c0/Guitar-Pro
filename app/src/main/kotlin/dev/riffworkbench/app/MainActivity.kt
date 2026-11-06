@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -97,12 +98,10 @@ object AppRoutes {
         else if (uri != null) notice = "Export nach Prozessneustart bitte erneut starten."
     }
     LaunchedEffect(container) { when (val result = container.settings.load()) { is Outcome.Failure -> notice = result.message; is Outcome.Success -> Unit } }
-    RiffTheme(settings.darkTheme) { Surface(Modifier.fillMaxSize()) { Column {
-        notice?.let { message -> Surface(color = MaterialTheme.colorScheme.surfaceVariant) { Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars)) {
-            Text(message, Modifier.weight(1f).padding(12.dp))
-            TextButton(onClick = { notice = null }) { Text("×") }
-        } } }
-        NavHost(navController = nav, startDestination = AppRoutes.LIBRARY, modifier = Modifier.weight(1f)) {
+    // The app-level notice (export result, unreadable settings) lies over the screen above the navigation bar and closes
+    // itself (QA 23); before, it was a row above the NavHost that pushed every screen down until "×" was tapped.
+    RiffTheme(settings.darkTheme) { Surface(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize()) {
+        NavHost(navController = nav, startDestination = AppRoutes.LIBRARY, modifier = Modifier.fillMaxSize()) {
             composable(AppRoutes.LIBRARY) {
                 val vm: LibraryViewModel = viewModel(factory = factory { LibraryViewModel(container.projects, container.nativeExchange, container.ids, container.formats, container.assets) })
                 // A double tap during the transition must not stack two sessions of the same project.
@@ -141,6 +140,10 @@ object AppRoutes {
                 // A second tap during the exit transition must not pop the screen below (library or project without leave()).
                 SettingsScreen(vm, onBack = { if (nav.currentBackStackEntry == entry) nav.popBackStack() })
             }
+        }
+        notice?.let { message ->
+            TransientNotice(message, NoticeTiming.millis(message), { if (notice == message) notice = null },
+                Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.navigationBars).padding(start = 12.dp, end = 12.dp, bottom = 88.dp))
         }
     } } }
 }

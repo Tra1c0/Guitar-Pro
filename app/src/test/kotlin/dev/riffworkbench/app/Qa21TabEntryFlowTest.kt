@@ -167,14 +167,27 @@ class Qa21TabEntryFlowTest {
                 compose.onAllNodes(hasText("Gitarre") and hasClickAction()).onFirst().performClick()
             }
             // Pinch zoom at the right side of the score, away from the cursor at bar 1: the content under the fingers stays.
-            val before = viewport()
             val canvasNode = compose.onNodeWithTag("score-canvas")
             var focusX = 0f; var focusY = 0f
-            canvasNode.performTouchInput {
+            fun pinchRight() = canvasNode.performTouchInput {
                 focusX = width * 0.85f; focusY = height * 0.5f
                 val near = minOf(width, height) * 0.08f; val far = minOf(width, height) * 0.3f
                 pinch(Offset(focusX - near, focusY), Offset(focusX - far, focusY), Offset(focusX + near, focusY), Offset(focusX + far, focusY), 400)
             }
+            // QA 23: pinch zoom is off by default (fixed, readable scale): the same pinch neither zooms nor moves the view
+            // (symmetric fingers, the centroid stands still) ...
+            val unzoomed = viewport()
+            pinchRight()
+            val stillUnzoomed = viewport()
+            log += "pinch with zoom off → view (${stillUnzoomed.offsetX}, ${stillUnzoomed.offsetY}) ×${stillUnzoomed.factor}"
+            assertEquals("zoom off: the pinch does not zoom", unzoomed.factor, stillUnzoomed.factor, 0.0001f)
+            assertEquals("zoom off: the view does not move (x)", unzoomed.offsetX, stillUnzoomed.offsetX, 1f)
+            assertEquals("zoom off: the view does not move (y)", unzoomed.offsetY, stillUnzoomed.offsetY, 1f)
+            // ... and with the setting "Zoomen per Geste" it zooms around the fingers as before.
+            runBlocking { container.settings.update(container.settings.settings.value.copy(pinchZoom = true)) }
+            compose.waitForIdle()
+            val before = viewport()
+            pinchRight()
             val after = viewport()
             log += "pinch → view (${after.offsetX}, ${after.offsetY}) ×${after.factor}"
             assertTrue("pinch zoomed in: ${before.factor} → ${after.factor}", after.factor > before.factor * 1.2f)

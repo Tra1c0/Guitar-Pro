@@ -112,6 +112,8 @@
     <string name="snapshots_empty">Noch keine benannten Schnappschüsse</string>
     <string name="history_hint">Jede bestätigte Änderung ist ein Undo-Schritt. Wiederherstellen lässt sich ebenfalls rückgängig machen.</string>
     <string name="dark_theme">Dunkles Design</string>
+    <string name="pinch_zoom">Zoomen per Geste</string>
+    <string name="pinch_zoom_hint">Partitur mit zwei Fingern vergrößern und verkleinern. Aus: feste, gut lesbare Größe; Verschieben bleibt.</string>
     <string name="strict_rhythm">Strikte Rhythmusprüfung</string>
     <string name="settings_hint">Diese Einstellungen werden lokal auf diesem Gerät gespeichert.</string>
     <string name="strict_hint">Die strikte Prüfung ist noch nicht schaltbar; der Editor markiert unvollständige Takte bereits.</string>
