@@ -21,7 +21,10 @@ object TonePresets {
             fx(EffectKind.CABINET_IR, "model" to 1.0),
             fx(EffectKind.REVERB, "size" to 0.35, "damping" to 0.5, "mix" to 0.08))),
         TonePreset("rw.guitar.clean", "E-Gitarre · Clean", "Electric · clean", TonePreset.Family.GUITAR, listOf(
-            fx(EffectKind.COMPRESSOR, "thresholdDb" to -30.0, "ratio" to 3.0, "makeupDb" to 6.0),
+            // QA cycle 22: make-up 9 dB (was 6): the Clean amp's power stage holds the v127 chord peaks, so Clean gains 1.3 LU at the
+            // same stem peak; body gain reduction of a held v127 chord 4.0 dB, attack 8 ms (default) lets the pick transient through;
+            // amp input of a v96 note -12.7 dBFS (budget -12), THD 1.6 %. A 3 ms attack spread the levels across the neck 5.8 dB (budget 5.5).
+            fx(EffectKind.COMPRESSOR, "thresholdDb" to -30.0, "ratio" to 3.0, "makeupDb" to 9.0),
             fx(EffectKind.AMP, "gain" to 0.08, "bass" to 1.0, "treble" to 2.0, "presence" to 1.0, "level" to 3.0),
             fx(EffectKind.CABINET_IR, "model" to 2.0),
             fx(EffectKind.CHORUS, "rateHz" to 0.7, "depthMs" to 2.5, "mix" to 0.1),
@@ -80,19 +83,21 @@ object TonePresets {
     internal fun isSampledGuitar(preset: TonePreset) = preset.id == "rw.guitar.highgain" || preset.id == "rw.guitar.crunch" || preset.id == "rw.guitar.clean"
     /**
      * Input trim of the normalised DI samples (SampleBank.Region.gain: -23 dBFS RMS over the first 400 ms, peaks <= -3 dBFS) per preset,
-     * measured in QA cycle 18: a v96 note reaches the Clean amp around -16 dBFS (no saturation), Crunch sits near its knee so
+     * measured in QA cycle 18: a v96 note reached the Clean amp around -16 dBFS (-12.7 dBFS since the cycle-22 compressor make-up; no
+     * saturation), Crunch sits near its knee so
      * pick dynamics survive, High Gain stays fully saturated while a single v127 note peaks below -6 dBFS before the gate.
      */
     internal fun sampleGain(preset: TonePreset): Float = when (preset.id) { "rw.guitar.highgain" -> 0.6f; "rw.guitar.crunch" -> 0.28f; else -> 0.3f }
     /**
-     * Output trim of a sampled preset (QA cycle 22), applied after its effect chain while the sample bank plays it: equal track
-     * volume gives equal loudness. Measured on a reference phrase (open chords, single notes, PM riff, power chords) at the master,
-     * ITU-R BS.1770-4 integrated: Clean -23.2, Crunch -17.0, High Gain -15.9 LUFS before (7.2 LU apart), -25.7 / -25.0 / -24.9 with
-     * these trims. Normalised downwards only: stems have no limiter, and Clean v127 chords at the highest track fader (1.0) reached
-     * +1.6 dBFS untrimmed; -2.5 dB keeps them at -0.9 dBFS, the others follow Clean. A level after the chain changes nothing of the
-     * preset's character (amp drive, THD, dynamics, ring-out). The modelled fallback (no bank) is untouched.
+     * Output trim of a sampled preset (QA cycle 22), applied after its effect chain while the sample bank plays it; never above
+     * 0 dB. Reference phrase at the master, ITU-R BS.1770-4 integrated: Clean -23.2, Crunch -17.0, High Gain -15.9 LUFS before,
+     * -24.3 / -18.0 / -17.9 with these trims (and the Clean compressor make-up above). High Gain and Crunch are lowered only as far as the
+     * standard band keeps its cycle-21 guitar-to-bass/drums balance and loudness; Clean is held by its stem headroom (v127 chords at
+     * the highest track fader 1.0: -0.8 dBFS). The 3 LU spread target is not reachable that way: Clean's peaks are its
+     * pick transients, which the compressor lets through by design (6.4 LU). A level after the chain changes nothing of the character.
+     * The modelled fallback (no bank) is untouched.
      */
-    internal fun outputTrimDb(preset: TonePreset): Double = when (preset.id) { "rw.guitar.highgain" -> -9.5; "rw.guitar.crunch" -> -8.0; "rw.guitar.clean" -> -2.5; else -> 0.0 }
+    internal fun outputTrimDb(preset: TonePreset): Double = when (preset.id) { "rw.guitar.highgain" -> -2.5; "rw.guitar.crunch" -> -1.0; "rw.guitar.clean" -> -4.0; else -> 0.0 }
     /** Modelled harmonics inside a sampled preset follow the sample trim, so a pinch harmonic sits ~3 dB under a picked note at the amp input. */
     internal fun harmonicGain(preset: TonePreset): Float = when (preset.id) { "rw.guitar.highgain" -> 0.45f; "rw.guitar.crunch" -> 0.2f; else -> 0.22f }
     internal fun keysMode(preset: TonePreset): KeysMode = when (preset.id) {
