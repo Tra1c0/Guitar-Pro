@@ -126,7 +126,7 @@ fun ScoreCanvas(
     // Cursor geometry of the last cursor-effect run: a relayout that keeps the cursor in place must not move the view.
     var lastCursorKey by remember { mutableStateOf<ViewportScroll.CursorKey?>(null) }
     // Zoom last set by a pinch: a factor change that comes from the fingers keeps the focus point (ViewportScroll.cursor).
-    var gestureZoom by remember { mutableFloatStateOf(Float.NaN) }
+    var zoomSetByGesture by remember { mutableFloatStateOf(Float.NaN) }
     // After a suspended follow resumes, the first scroll uses the minimal shift instead of the 25 % re-centre.
     var resumeMinimal by remember { mutableStateOf(false) }
     var wasSuspended by remember { mutableStateOf(false) }
@@ -155,7 +155,7 @@ fun ScoreCanvas(
         if (currentFollow) return@LaunchedEffect
         // The rule itself (minimal shift, paging, the pinch exception) is JVM-tested in core:notation (ViewportScrollTest, Qa21ViewportCursorTest).
         val step = ViewportScroll.cursor(l, c.measureId, c.offset, c.string, offsetX, offsetY, viewport.width.toFloat(), viewport.height.toFloat(),
-            factor, density, lastCursorKey, zoomedByGesture = gestureZoom == zoom) ?: return@LaunchedEffect
+            factor, density, lastCursorKey, zoomedByGesture = zoomSetByGesture == zoom) ?: return@LaunchedEffect
         lastCursorKey = step.key
         offsetX = step.offsetX
         offsetY = step.offsetY
@@ -199,7 +199,7 @@ fun ScoreCanvas(
                     // Keep the content under the fingers fixed while zooming.
                     offsetX = (offsetX + centroid.x) * nf / old - centroid.x
                     offsetY = (offsetY + centroid.y) * nf / old - centroid.y
-                    gestureZoom = nextZoom
+                    zoomSetByGesture = nextZoom
                     currentOnZoom(nextZoom)
                 }
                 offsetX -= pan.x; offsetY -= pan.y
