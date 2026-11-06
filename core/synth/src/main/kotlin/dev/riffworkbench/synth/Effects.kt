@@ -5,6 +5,8 @@ import dev.riffworkbench.model.EffectUnit
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.exp
+import kotlin.math.ln
 import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.sin
@@ -135,6 +137,21 @@ internal class AmpSim(sr: Int, maxBlock: Int, gain: Double, bass: Double, mid: D
     private val reso = Biquad().apply { peak(95.0, 1.0, 1.5 + 1.5 * gain, sr) }
     private val output = (Dsp.dbToGain(levelDb) * (if (gain > 0.3) 0.8 else 1.5)).toFloat()
     private val dc = DcBlocker()
+    /**
+     * Drive memory of the saturated cascade (QA cycle 22, three-stage amps only): a static clipper turns the +6..+12 dB pick
+     * transient of a new note into +0.3..+0.6 dB, so a picked change and a hammer-on came out alike. In a tube preamp the grid
+     * current of a driven stage charges its coupling capacitor and shifts the bias within a few tens of ms, so a sudden rise of the
+     * drive passes with more gain until the bias follows. Modelled as a gain on the amp output that follows [SHIFT_DEPTH] x the
+     * rise of the input's short-term level (2 x 2.5 ms) over its 40 ms level, 0..+4.5 dB. Only the rising edge: the falling edge
+     * (less gain while a note decays) was measured to make a palm-muted riff brighter (centroid +11 %) and is not modelled. A held
+     * note (equal levels) is unchanged, and the ratio does not depend on the level, so the pick dynamics (v40 -> v127) stay.
+     */
+    private val shiftDepth = if (stages == 3) SHIFT_DEPTH else 0f
+    private val fastA = Dsp.timeCoefficient(0.0025, sr)
+    private val slowA = Dsp.timeCoefficient(0.040, sr)
+    private val shiftMax = Dsp.dbToGain(SHIFT_MAX_DB).toFloat()
+    private var fast1 = 0f; private var fast2 = 0f; private var slow = 0f
+    private var shiftGain = 1f; private var shiftTarget = 1f; private var shiftTick = 0
     override fun process(left: FloatArray, right: FloatArray?, n: Int) {
         processChannel(left, n)
         if (right != null) System_arraycopy(left, right, n)
@@ -155,15 +172,29 @@ internal class AmpSim(sr: Int, maxBlock: Int, gain: Double, bass: Double, mid: D
                 if (phase == 0) acc = u
             }
             val t = pres.process(high.process(mids.process(low.process(dc.process(acc)))))
+            var g = 1f
+            if (shiftDepth > 0f) {
+                val p = x * x
+                fast1 = ftz(p + (fast1 - p) * fastA); fast2 = ftz(fast1 + (fast2 - fast1) * fastA); slow = ftz(fast2 + (slow - fast2) * slowA)
+                // Control rate: the target gain every 8 samples (counted across blocks), smoothed per sample.
+                if (shiftTick == 0) shiftTarget = if (slow > 1e-12f && fast2 > slow) exp(0.5 * shiftDepth * ln((fast2 / slow).toDouble())).toFloat().coerceAtMost(shiftMax) else 1f
+                shiftTick = (shiftTick + 1) and 7
+                shiftGain += (shiftTarget - shiftGain) * 0.25f
+                g = shiftGain
+            }
             // Power stage: mild saturation and speaker-resonance bump.
-            buf[i] = reso.process(Dsp.softClip(t * 1.4f) * 0.72f) * output
+            buf[i] = reso.process(Dsp.softClip(t * 1.4f) * 0.72f) * output * g
         }
     }
     override fun reset() {
         tight.reset(); push.reset(); low.reset(); mids.reset(); high.reset(); pres.reset(); reso.reset(); dc.reset()
+        fast1 = 0f; fast2 = 0f; slow = 0f; shiftGain = 1f; shiftTarget = 1f; shiftTick = 0
         for (f in up) f.reset(); for (f in down) f.reset(); for (f in couple) f.reset(); for (f in miller) f.reset()
     }
 }
+
+private const val SHIFT_DEPTH = 0.9f
+private const val SHIFT_MAX_DB = 4.5
 
 private fun System_arraycopy(from: FloatArray, to: FloatArray, n: Int) { for (i in 0 until n) to[i] = from[i] }
 
