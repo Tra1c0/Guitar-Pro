@@ -43,7 +43,7 @@ import dev.riffworkbench.ui.components.R
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item { Row(Modifier.fillMaxWidth().padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Logo()
-                    Text("RiffWorkbench", fontFamily = Tabino.Display, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, modifier = Modifier.weight(1f))
+                    Text("ArtiFret", fontFamily = Tabino.Display, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, modifier = Modifier.weight(1f))
                     RoundIconButton(TabinoIcons.Open, stringResource(R.string.open_native), onImport, enabled = !busy)
                     RoundIconButton(TabinoIcons.Settings, stringResource(R.string.settings), onSettings)
                 } }
@@ -67,7 +67,7 @@ import dev.riffworkbench.ui.components.R
                 // Every project, including the one on the "continue" card: the list is where projects are deleted.
                 items(projects, key = { it.id.value }) { project -> ProjectRow(project, projects.indexOf(project), onOpen = { onOpen(project.id) }, onDelete = { confirmDelete = project }) }
                 item { Text(if (en) "Opens Guitar Pro 3–8 (.gp3/.gp4/.gp5/.gpx/.gp), MusicXML (.musicxml/.mxl), MIDI and RiffWorkbench projects (.riffproj). The original file is kept with the project." else
-                    "Öffnet Guitar Pro 3–8 (.gp3/.gp4/.gp5/.gpx/.gp), MusicXML (.musicxml/.mxl), MIDI und RiffWorkbench-Projekte (.riffproj). Die Originaldatei bleibt im Projekt erhalten.",
+                    "Öffnet Guitar Pro 3–8 (.gp3/.gp4/.gp5/.gpx/.gp), MusicXML (.musicxml/.mxl), MIDI und ArtiFret-Projekte (.riffproj). Die Originaldatei bleibt im Projekt erhalten.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) }
             }
             PillNavBar(

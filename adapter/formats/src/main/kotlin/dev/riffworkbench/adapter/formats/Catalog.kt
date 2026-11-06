@@ -63,5 +63,5 @@ class DefaultFormatCatalog(private val importers: Map<String, ScoreImporter> = e
         }
     }
 
-    companion object { val NATIVE = FormatInfo("riffproj", "RiffWorkbench-Projekt", "riffproj", "native") }
+    companion object { val NATIVE = FormatInfo("riffproj", "ArtiFret-Projekt", "riffproj", "native") }
 }

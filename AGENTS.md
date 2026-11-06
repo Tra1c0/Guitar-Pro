@@ -1,4 +1,4 @@
-# RiffWorkbench contributor instructions
+# ArtiFret (code: RiffWorkbench, dev.riffworkbench) contributor instructions
 
 This is the phase-1 Android skeleton for the attached mobile score-editor briefing. Read README.md, docs/ARCHITECTURE.md, docs/CONTRACTS.md and spec/features.json before extending a subsystem.
 

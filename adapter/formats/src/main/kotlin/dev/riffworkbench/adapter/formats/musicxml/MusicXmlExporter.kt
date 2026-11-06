@@ -183,7 +183,7 @@ private class MusicXmlWriter(private val project: Project, private val losses: L
         if (meta.artist.isNotBlank()) x.leaf("creator", meta.artist, "type" to "artist")
         if (meta.copyright.isNotBlank()) x.leaf("rights", meta.copyright)
         x.start("encoding")
-        x.leaf("software", "RiffWorkbench")
+        x.leaf("software", "ArtiFret")
         for (element in listOf("accidental", "beam", "stem")) x.leaf("supports", null, "element" to element, "type" to "no")
         x.end()
         if (meta.album.isNotBlank() || meta.notes.isNotBlank()) {

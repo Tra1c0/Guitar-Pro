@@ -32,7 +32,7 @@ Android Lint muss ohne Fehler bestehen. Hinweise auf neuere Bibliotheksversionen
 
 ## Manuelle Abnahme auf Android
 
-1. Debug-APK installieren (eine ältere RiffWorkbench-Debug-APK vorher deinstallieren; Projekte vorher als `.riffproj` sichern). Bibliothek ohne Netzwerk öffnen, Projekt anlegen.
+1. Debug-APK installieren (eine ältere Debug-APK (früher „RiffWorkbench“) vorher deinstallieren; Projekte vorher als `.riffproj` sichern). Bibliothek ohne Netzwerk öffnen, Projekt anlegen.
 2. Riff auf der tiefen A-Saite eingeben: Bünde 0/12 mit Commit, 1/16, Palm-Mute, Dead Note, Bend, Slide. Jede Note muss beim Eintragen hörbar sein.
 3. Wiedergabe ab Cursor, Loop über zwei Takte, Count-in, 70 %, Speed-Trainer. Playhead und Zählzeit-Punkte müssen dem Klang folgen, ohne Aussetzer.
 4. Kopfhörer abziehen und Anruf simulieren: Wiedergabe muss pausieren. App in den Hintergrund: Wiedergabe pausiert, Stand ist gespeichert.

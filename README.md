@@ -1,4 +1,4 @@
-# RiffWorkbench
+# ArtiFret
 
 Android-first Offline-Editor für TAB und Partitur mit eigenem Notensatz, eigener Klangerzeugung und Guitar-Pro-Austausch. Die App läuft komplett offline; es werden keine fremden Tabs, RSE-Inhalte oder Impulsantworten mitgeliefert; einzige mitgelieferte Klangbank sind die CC0-lizenzierten DI-Gitarrensamples Karoryfer Emilyguitar (siehe [DEPENDENCIES](docs/DEPENDENCIES.md)). Grundlage ist das [Briefing](docs/BRIEFING.md); welche Merkmale in welcher Tiefe fertig sind, steht in der [Paritätsmatrix](docs/PARITY.md).
 
@@ -31,7 +31,7 @@ Android-first Offline-Editor für TAB und Partitur mit eigenem Notensatz, eigene
 
 | Format | Import | Export |
 |---|---|---|
-| RiffWorkbench `.riffproj` | ja, vollständig | ja, vollständig inklusive Originale und Audio |
+| ArtiFret `.riffproj` | ja, vollständig | ja, vollständig inklusive Originale und Audio |
 | Guitar Pro 3, 4, 5 (`.gp3/.gp4/.gp5`) | ja | – |
 | Guitar Pro 6 (`.gpx`) | experimentell | – |
 | Guitar Pro 7/8 (`.gp`) | ja (GP8-Extras wie Backing Track landen im Verlustbericht) | GP7-kompatibel |
@@ -63,7 +63,7 @@ Jede offene Fähigkeit meldet in der App einen erklärten Status mit Vertrags-ID
 
 ## Installieren
 
-Die CI baut bei jedem Push eine Debug-APK (Artefakt `riffworkbench-debug-apk` im jeweiligen Lauf unter *Actions*). Eine vorher installierte RiffWorkbench-Debug-APK mit anderer Signatur muss zuerst deinstalliert werden; Projekte vorher als `.riffproj` exportieren und danach wieder öffnen. Release-Signatur und Veröffentlichung sind nicht eingerichtet.
+Die CI baut bei jedem Push eine Debug-APK (Artefakt `riffworkbench-debug-apk` im jeweiligen Lauf unter *Actions*). Eine vorher installierte Debug-APK (früher „RiffWorkbench“) mit anderer Signatur muss zuerst deinstalliert werden; Projekte vorher als `.riffproj` exportieren und danach wieder öffnen. Release-Signatur und Veröffentlichung sind nicht eingerichtet.
 
 ## Bauen und prüfen
 

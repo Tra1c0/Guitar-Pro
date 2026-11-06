@@ -246,7 +246,7 @@ import dev.riffworkbench.ui.score.pitchName
                     TonePresets.all.filter { it.family == family || family == TonePreset.Family.KEYS }.forEach { option ->
                         DropdownMenuItem(text = { Text(if (en) option.labelEn else option.labelDe) }, onClick = {
                             presetMenu = false
-                            vm.command(EditorCommand.SetSound(track.id, track.sound.copy(presetId = option.id, mappingDescription = "RiffWorkbench-Synthese: ${option.labelDe}")))
+                            vm.command(EditorCommand.SetSound(track.id, track.sound.copy(presetId = option.id, mappingDescription = "ArtiFret-Klang: ${option.labelDe}")))
                             vm.command(EditorCommand.SetMix(track.id, track.mix.copy(effects = emptyList())))
                         })
                     }
