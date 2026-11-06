@@ -464,3 +464,69 @@ Methode wie Zyklus 18: Messung gegen die D2-Pegelstruktur (48 kHz, Werks-Mix, Ma
 3. *Raster/Layout:* Ohne TAB setzt der Editor die Drum-Spur nur mit Köpfen; ein 32tel-Takt auf 360 dp mit Raster 1/32 wurde auf Spalten von 11,4 Einheiten gestaucht (Stauchung 0,5 auf alle Spalten), Köpfe mit versetzten Sekunden überlappten um 7,7 Einheiten; im Lesemodus Ankerabstand 8,6 < Kopfbreite 8,7. → `Standard.headExtent` (Köpfe, Sekunden, Hilfslinien, Ghost-Klammern, Vorzeichen, Punkte) und `ScoreLayouter.sweep`: Anker rücken, bis Tinte + 0,4 Linienabstand passen; Zeilenumbruch zählt die Verschiebung, Stauchung per Bisektion begrenzt (Qa15 P6wide bleibt grün). Nachher kleinste Kopflücke 3,2 (EDIT) / 2,8 (READ), Ankerabstand ≥ 13,1 bzw. 11,5. TAB-only-Layouts unverändert. DrumScreen: Elementnamen in fester Spalte (scrollten bei 1/32 mit weg), Zählzeit-Lineal, Abstand je Schlag; Zellen bleiben 48 dp (nur CI-prüfbar).
 
 **Offen:** Hörprüfung des Drum-Trims gegen die Gitarren (Drums RMS jetzt 3,4 dB unter der HG-Gitarre, Spitzen 4,8 dB darüber); ein 32tel-Takt ist auf 360 dp jetzt 573 Einheiten breit (Schwenken/Zoom 0,6) und die Spalten-Trefferfläche im Notenbild bleibt < 40 dp (Eingabe dichter Raster über den DrumScreen); das Werks-Kit hat keine Toms; Gerätetest des ersten Hits (AudioTrack) steht aus.
+
+
+### Zyklus 19 / Gitarren-Artikulationen
+
+Anlass: Nutzerziel für die drei gesampelten Presets (Clean glasklar mit realistischen Natural-/Pinch-Harmonics, Crunch definiert und dynamisch, High Gain tight mit präziser Tontrennung); Open, Palm Mute, Dead Note, Harmonics, Bends/Slides und Übergänge sollen klar unterscheidbar sein, nicht nur im Pegel. Methode: Offline-Renders durch die echte Kette (ScorePlaybackCompiler → SynthEngine mit Bank v2 → Preset-Kette → Master, 48 kHz, E-Standard, 120 BPM), dieselben Noten je Preset: E2 (Saite 6 leer), A3 (D-Saite Bund 7), E4 (hohe E leer), v64/v96/v127; Analyse-Kit `Qa19ArticulationAnalysis` (FFT, YIN-Tonhöhe, Hüllkurve, THD, nur stdlib). Tests: `Qa19ArticulationTest` (6 Prüfungen + Mess-Sonden, die die Tabellen drucken: Präfixe `Q19`, `Q19A`–`Q19E`, `Q19H`, `Q19P`, `Q19T`), `Qa19LiveVsOfflineTest` (adapter/audio). Alle Zahlen unten sind Messwerte nach den Reparaturen (Commit efd013b), „vorher“ = 2dd925f. Kein Hörtest: Klangurteile stehen aus.
+
+Kennzahlen: Attack = RMS der ersten 20 ms gegen den Körper 20–200 ms; Decay = Zeit vom lautesten 10-ms-Fenster bis zum endgültigen Unterschreiten von −20/−30/−40 dB (Ganze Note = 2 s, d. h. ~2000 ms heißt „klingt bis Note-off“); Schwerpunkt und Anteil > 2 kHz im Fenster 30–200 ms; Periodizität = normierte Autokorrelation bei der Nennperiode (±6 %) im Fenster 5–45 ms; Teilton-Anteil = Leistungsanteil der ersten 12 Teiltöne der Note (±50 Cent) in den ersten 85 ms.
+
+**Messtabelle (v96, Ausgang wie gehört; vollständige Tabelle mit v64/v127 druckt `probe_articulationTable`):**
+
+| Preset | Ton | Artik. | Peak dBFS | Attack dB | −20/−30/−40 dB ms | Schwerpunkt Hz | > 2 kHz % | Periodizität | Teilton-Anteil |
+|---|---|---|---|---|---|---|---|---|---|
+| clean | E2 | open | -13.0 | 2.8 | 2025/2045/2145 | 363 | 0.00 | 0.92 | 0.72 |
+| clean | E2 | PM | -14.7 | 12.1 | 115/200/410 | 281 | 0.01 | 0.90 | 0.84 |
+| clean | E2 | dead | -19.5 | 25.3 | 20/115/265 | 433 | 0.09 | 0.35 | 0.39 |
+| clean | A3 | open | -13.1 | 1.2 | 2005/2030/2225 | 561 | 1.34 | 0.98 | 0.96 |
+| clean | A3 | PM | -15.9 | 14.0 | 70/235/350 | 570 | 2.08 | 0.98 | 0.94 |
+| clean | A3 | dead | -17.1 | 29.7 | 20/25/280 | 1042 | 1.68 | 0.74 | 0.20 |
+| clean | E4 | open | -13.6 | 2.1 | 2030/2055/2125 | 813 | 5.32 | 0.94 | 0.96 |
+| clean | E4 | PM | -16.6 | 15.7 | 65/140/415 | 707 | 2.23 | 0.89 | 0.94 |
+| clean | E4 | dead | -18.6 | 29.9 | 20/90/340 | 1700 | 21.76 | 0.58 | 0.34 |
+| crunch | E2 | open | -9.1 | 1.1 | 2030/2050/2160 | 428 | 0.26 | 0.91 | 0.68 |
+| crunch | E2 | PM | -10.3 | 9.4 | 130/205/300 | 286 | 0.02 | 0.93 | 0.84 |
+| crunch | E2 | dead | -14.0 | 24.5 | 25/35/180 | 470 | 0.18 | -0.01 | 0.26 |
+| crunch | A3 | open | -10.4 | -0.1 | 1960/1980/2155 | 611 | 1.86 | 0.98 | 0.95 |
+| crunch | A3 | PM | -12.3 | 11.9 | 80/140/295 | 537 | 0.32 | 0.98 | 0.95 |
+| crunch | A3 | dead | -13.2 | 34.4 | 15/20/260 | 914 | 2.10 | 0.90 | 0.30 |
+| crunch | E4 | open | -9.8 | 0.8 | 2035/2055/2140 | 752 | 2.57 | 0.94 | 0.97 |
+| crunch | E4 | PM | -10.6 | 13.1 | 85/115/260 | 664 | 0.48 | 0.91 | 0.95 |
+| crunch | E4 | dead | -13.8 | 33.9 | 10/15/195 | 1530 | 11.34 | 0.59 | 0.30 |
+| highgain | E2 | open | -9.1 | 0.1 | 2105/2145/2155 | 1171 | 16.91 | 0.81 | 0.31 |
+| highgain | E2 | PM | -9.2 | 2.6 | 240/265/300 | 371 | 1.17 | 0.79 | 0.65 |
+| highgain | E2 | dead | -10.2 | 9.0 | 40/55/65 | 125 | 0.00 | 0.27 | 0.33 |
+| highgain | A3 | open | -9.7 | -0.7 | 1985/2000/2040 | 1719 | 43.25 | 0.82 | 0.83 |
+| highgain | A3 | PM | -10.4 | 4.5 | 130/145/165 | 730 | 4.95 | 0.84 | 0.87 |
+| highgain | A3 | dead | -10.4 | 23.8 | 20/25/35 | 714 | 1.50 | 0.85 | 0.28 |
+| highgain | E4 | open | -9.8 | 0.0 | 1095/1110/1125 | 1447 | 16.72 | 0.91 | 0.97 |
+| highgain | E4 | PM | -9.9 | 4.0 | 130/145/170 | 919 | 4.79 | 0.91 | 0.97 |
+| highgain | E4 | dead | -10.7 | 42.1 | 15/20/25 | 714 | 1.91 | 0.80 | 0.04 |
+
+Lesart: Clean A3 PM „> 2 kHz 2,08 % > open“ ist die Hallfahne des hellen Anschlags (Clean-Hall 0,12), nachdem der gedämpfte Ton nach 70 ms um 20 dB gefallen ist; solange die PM-Note klingt (20–105 ms), hat sie ×0,25 des Anteils > 1 kHz der offenen Note. Die hohe Periodizität der A3-Dead-Notes stammt von der Eigenresonanz der Dead-Note-Samples (~207/415/830 Hz, Vielfache fallen ins ±6-%-Fenster); die Tonhöhenverfolgung (10-ms-Fenster, 0–100 ms) trifft 220 Hz in 0 von 10 Fenstern.
+
+**Harmonics, Übergänge, Preset-Charakter (v96):**
+- Natural Harmonic 12/7/5 auf E2-, D3-, E4-Saite: Tonhöhe = 2/3/4 × Leersaite (alle 27 Fälle ±15 Cent, z. B. E2-NH7 247,3 Hz), Oberton trägt 50–99 % der Leistung (HG D3-NH7 49,8 %) und ist der stärkste Teilton, Leersaiten-Grundton 0,00 %. Vorher (Rauschimpuls-Anregung) 23 von 27 Fällen rot: der Oberton war nicht der stärkste Teilton bzw. < 20 % (Clean E2-NH7 0,7 % am Oberton, 38 % an dessen 3. Teilton; Crunch E2-NH7 1,3 %/64 %).
+- Pinch (Leersaite, 3. Oberton) gegen NH7 derselben Saite (gleiche Tonhöhe): Schwerpunkt Clean 1289/283 Hz (E2) und 1016/487 Hz (D3), Crunch 728/298 und 852/535 Hz, High Gain 1564/345 und 1848/1218 Hz; Obertöne 2–8 × relativ zum Oberton +7,0/+9,9 (Clean), +6,7/+7,7 (Crunch), +9,4/+4,7 dB (HG). Vorher waren Pinch und NH dieselbe modellierte Stimme (alle Werte gleich bis 0,1 dB). Hohe E-Saite (Oberton 989 Hz): Clean +10,3 dB, Crunch +3,0 dB, HG +0,2 dB — nur gedruckt.
+- Übergänge D-Saite A3 → B3: Pitch nach Hammer-on/Legato-Slide/Bend 247,3–247,7 Hz (B3 246,9 Hz) in allen Presets; Bend erreicht 246,8–246,9 Hz. HF-Sprung (Leistung > 2 kHz 21 ms nach/vor dem Wechsel) gepickt/Hammer/Legato-Slide: Clean 35,2/30,3/28,5 dB, Crunch 23,6/17,5/15,8 dB, **High Gain 2,8/3,4/2,1 dB**.
+- Preset-Charakter: Schwerpunkt (A3+E2, v96) Clean 462 < Crunch 519 < HG 1445 Hz; THD eines 220-Hz-Sinus auf dem eigenen Eingangspegel (Kette) Clean 1,1 % < Crunch 20,8 % < HG 24,3 %; Dynamik v40→v127 Clean 12,8, Crunch 8,5, HG 1,4 dB; Ausklingen nach Note-off bis −50 dB unter Peak (PM-Achtel E2, Staccato-Achtel E2, PM-Achtel A3, Mittel) Clean 192, Crunch 125, HG 67 ms.
+
+**Defizite und Reparaturen (rot → grün, rot auf 2dd925f):**
+1. *Natural Harmonics klangen nicht am Oberton* (s. o.). → `StringVoice`: Natural Harmonics werden mit einer zupfförmigen Dreieckswelle (Scheitel bei 30 % der Periode, Teiltöne ~1/k², 4 % Rauschen) angeregt, Schleifenfilter wie ein gezupfter Ton (`naturalHarmonicsSoundAtTheirOvertone`, 23 Fehler → 0).
+2. *Pinch = Natural Harmonic* (s. o.). → Pinch behält die helle Rauschanregung (keine Mindest-Weichheit 0,82, Pick-Geräusch ×3); zusätzlich spielt in den gesampelten Presets das aufgenommene Sample der gegriffenen Note durch einen Oberton-Kamm (`SampleVoice`, Summe von n Kopien im Abstand Periode/n: nur Vielfache des n-ten Teiltons bleiben, Anschlag, Saitengeräusch und Ausklingen sind die der Bank), in den ersten ms der volle Ton (Daumen erreicht den Knoten nach dem Plektrum, 6 ms), danach 10 % Grundton-Rest; ebenso für Artificial/Tapped-Harmonics (n aus dem Intervall). Kein neues Asset, keine Allokation im Render-Pfad (`pinchHarmonicIsBrighterThanTheNaturalHarmonic`, 12 Fehler → 0).
+3. *Palm Mute nicht dunkel genug* (feste Tiefpass-Grenze 700 + 1500 v Hz): solange die Note klingt (20–105 ms), Anteil > 1 kHz Clean E2 v127 ×0,78, Clean A3 v127 ×0,68, Crunch E4 v96 ×0,75 der offenen Note; High Gain E2 v96/v127 nur 4,1/4,3 dB weniger Leistung > 2 kHz (20–190 ms). → Tiefpass öffnet für den Anschlag (2000 + 1500 v Hz) und gleitet in ~18 ms auf das 2–5-Fache des Grundtons (250–1200 Hz). Nachher Clean ×0,10–0,46, Crunch ×0,05–0,59 (E4 v96 knapp an der Grenze 0,6), HG > 2 kHz −9,0…−19,1 dB (Anteil > 1 kHz ×0,13–0,84, nur gedruckt); Decay −20 dB PM 40–255 ms gegen ≥ 1,1 s offen (`palmMuteDecaysFasterAndIsDarkerThanTheOpenNote`, 7 Fehler → 0).
+4. Grün ohne Änderung: Dead Notes (−30 dB nach 15–115 ms, Tonhöhe der Note in ≤ 1 von 10 Fenstern, Teilton-Anteil ≤ 0,6 × offen; `deadNotesAreShortAndCarryNoPitchLine`), Preset-Charakter (`presetsDifferInTimbreDistortionDynamicsAndRingOut`), Übergänge Clean/Crunch (`pickedAndLegatoTransitionsDiffer`).
+5. *Live vs. Offline*: dieselbe Artikulations-Phrase (14 Noten, 5 s) je Preset über `EngineTransport` → `RealtimeHost.renderBlock` (FakeSink, Blöcke 192/256/480, Start bei 0 und nach Seek in Takt 2) gegen `OfflineMixdown` (1024er-Blöcke, 32-bit float): Versatz 0 Frames, alle Onsets identisch, RMS-Differenz 0,000 dB, **bitidentisch** (max |Δ| = 0). Kein Fehler, keine Reparatur (`Qa19LiveVsOfflineTest`).
+6. Gain-Struktur (Zyklus 18) unverändert grün: Standardband Limiter 0 %; 4-Spur-Demoband (2 × HG mit PM-Riffs und Pinch) Limiter > 0,5 dB 5,5 % → 3,1 %, max. GR 2,4 → 1,3 dB; Stems ohne Clipping. Volle Suiten core/synth (86 Tests) und adapter/audio (96 Tests) lokal grün (JVM-Harness).
+
+**Offen / Restrisiken (nur mit Gehör oder neuen Samples zu entscheiden):**
+- *Clean „glasklar“ ist mit dieser Bank begrenzt*: Quelle sind Flatwound-Saiten, DI, beide Tonabnehmer; schon das trockene Sample E2 hat 0,00 % > 2 kHz (30–200 ms), A3 0,7 %, E4 2,3 %. EQ kann fehlende Obertöne nicht erzeugen; brillanter Clean braucht eine Roundwound-/Steg-PU-Aufnahme (lizenziert) oder eine Hörentscheidung über Höhenanhebung/Exciter.
+- *High Gain: gepickter und gebundener Übergang messbar gleich* (HF-Sprung 2,8 vs. 3,4 dB; trocken +15 dB gepickt): die drei gesättigten Vorstufen (≈ 58 dB) löschen den Plektrum-Transienten. Versuche: 1,5-ms-Abriss des alten Tons beim Neuanschlag — keine messbare Wirkung (verworfen); Tight-Hochpass vor der Vorstufe 400 statt 122 Hz — 5,0 vs. 2,6 dB, aber PM-Chug heller (E2 v96 ×0,19 → ×0,51) und weniger Tiefbass: Klangentscheidung per Hörtest, nicht übernommen. Test prüft HG nur gedruckt.
+- High Gain Dynamik 1,4 dB und Attack-Verhältnis aller Artikulationen −1…+1 dB (Sättigung, Designcharakter); Unterscheidung dort über Decay, Spektrum und Tonhöhe. Pinch vs. NH auf der hohen E-Saite in Crunch/HG kaum verschieden (Schwerpunkt +4 %/+1 %).
+- Natural Harmonics bleiben modelliert (die Bank hat keine Flageolett-Samples): Klangfarbe/Anschlag von NH und der Pinch-Mischung (Kamm-Pegel 2,2, Grundton-Rest 10 %) brauchen einen Hörtest.
+- Clean-Hallfahne des Anschlags macht den PM-Ausklang hell (20–190 ms inkl. Hall: ×0,22–0,73 statt ×0,10–0,46); Clean-Dead-Note E2 erreicht −30 dB erst nach 115 ms (Hall), knapp unter der 120-ms-Grenze.
+- Bank: High-Gain E4 offen v64/v96 fällt nach 1,1–1,2 s um 20 dB (v127 hält 2 s) — Layer-Unterschied der Samples, nicht geändert.
+- Live = Offline gilt für den Kotlin-Pfad; AudioTrack/Gerät (Puffer, Unterläufe) ist nicht abgedeckt.
+
+Ergebnis Zyklus 19: **3 Artikulationsdefizite mit roten Tests behoben** (Natural Harmonics, Pinch vs. Natural, Palm-Mute-Klangfarbe), Dead Notes/Preset-Charakter/Übergänge Clean+Crunch und Live = Offline messbar bestätigt; HG-Übergänge und Clean-Brillanz als Hör-/Sample-Restrisiko dokumentiert.

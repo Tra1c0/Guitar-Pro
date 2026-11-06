@@ -4,6 +4,7 @@ import dev.riffworkbench.model.*
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.ln
 import kotlin.math.sin
 
 /** Immutable event program for the audio thread, prepared off-thread from a [PlaybackPlan]. */
@@ -406,6 +407,18 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
                 // With a bank the modelled string only plays harmonics next to the samples, at their trimmed level.
                 strings[index].start(note, t, if (b != null && ch.sampled) ch.harmonicTone else ch.stringTone, now, endClock, seed)
                 if (key >= 0) stringMap[key] = index
+                // Picked harmonics (pinch, artificial, tapped) also sound the recorded fretted note through the harmonic comb:
+                // its pick attack, string noise and natural overtone series ride on the modelled overtone (QA cycle 19).
+                val n = if (b != null && ch.sampled) pickedHarmonicNumber(note) else 1
+                if (n > 1 && b != null) {
+                    val si = allocate(samples, { it.active }, { it.releasing }, { it.startClock })
+                    if (samples[si].active) stolen(r, samples[si].track, samples[si].lastOut, 0f)
+                    samples[si].kill()
+                    val rr = if (key >= 0) (roundRobin[key]++ + (s ?: 0)) and 0xFFFF else seed ushr 16 and 0xFFFF
+                    val pinch = note.harmonic == HarmonicKind.PINCH
+                    samples[si].start(note, t, b, now, endClock, rr, ch.sampleGain, harmonic = n, combGain = if (pinch) 2.2f else 1.4f, combBleed = if (pinch) 0.1f else 0.04f)
+                    if (key >= 0) sampleMap[key] = si
+                }
             }
             ChannelKind.DRUMS -> {
                 val midi = note.soundingPitch.toInt()
@@ -422,6 +435,19 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
                 keys[index].start(note, t, ch.keysMode, now, endClock)
             }
         }
+    }
+
+    /**
+     * Overtone number of a picked harmonic (pinch +19.02 = 3rd, artificial/tapped +12 = 2nd) from its sounding pitch above
+     * the written (fretted) one; 1 for natural/semi harmonics (sounding at the node's overtone of the open string, played
+     * modelled only) and for anything that is not a whole overtone.
+     */
+    private fun pickedHarmonicNumber(note: ScheduledNote): Int {
+        val h = note.harmonic ?: return 1
+        if (h != HarmonicKind.PINCH && h != HarmonicKind.ARTIFICIAL && h != HarmonicKind.TAPPED) return 1
+        val interval = note.soundingPitch - (note.pitch.midiNumber + note.pitch.cents / 100.0)
+        for (k in 2..6) if (abs(interval - 12.0 * ln(k.toDouble()) / ln(2.0)) < 0.3) return k
+        return 1
     }
 
     /** A voice taken from a full pool stops at once; its last output fades out in its track buffer instead of jumping to 0. */
