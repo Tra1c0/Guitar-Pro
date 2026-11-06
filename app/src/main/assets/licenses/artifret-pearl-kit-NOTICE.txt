@@ -1,0 +1,35 @@
+ArtiFret Pearl Kit
+=================
+
+The drum sounds of this app (file assets/banks/artifret-pearl-kit.rwdk) are a
+modified version of the sample library "AVL Black Pearl 4" from the AVL-Drumkits.
+
+Original sample library
+  AVL-Drumkits, Black Pearl 4
+  Created by: Glen MacArthur 2015
+  Website: http://www.bandshed.net/avldrumkits/
+  Contact: info@bandshed.net
+  Source used: Black_Pearl_4_LV2.sf2 from https://github.com/x42/avldrums.lv2
+  (commit 9389f16f139410d9a55f9006976bd54cbd8b7806,
+  SHA-256 e0542ec19f2816ef4e0d00aeb087e7aa311e888d6f4805f971688bb267c6d405)
+  The complete readme of the original is included unchanged as
+  licenses/avl-drumkits-README.txt.
+
+Modifications (tools/make_drum_bank.py)
+  - converted from SoundFont 2 to the app's own drum-kit format (RWDK),
+  - General MIDI drum notes mapped onto the kit; some toms are played transposed,
+    the China cymbal plays crash 3, rimshots play the recorded edge hits,
+  - leading near-silence and the silent end of each sample removed, short fades
+    added, cymbal samples shortened to at most 6 seconds,
+  - samples not used by the mapping (crash/ride chokes, hi-hat swish) left out.
+  Sample rate (44.1 kHz) and resolution (16 bit) are unchanged.
+
+Licence
+  Like the original, the modified sample library is licensed under the
+  Creative Commons Attribution-ShareAlike 3.0 licence (CC BY-SA 3.0),
+  http://creativecommons.org/licenses/by-sa/3.0/
+  with the exception stated in the original readme: the by-sa condition applies
+  to the samples and to sample libraries made from them; music produced with
+  them and other non-sample-library works (such as this app) can be licensed
+  freely. As the readme requires for a modified version, it is distributed
+  under a different name ("ArtiFret Pearl Kit").

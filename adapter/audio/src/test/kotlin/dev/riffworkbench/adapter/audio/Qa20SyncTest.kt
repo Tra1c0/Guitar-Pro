@@ -23,7 +23,9 @@ import org.junit.Test
  * a hit is only measured when the 20 ms before it stay below that threshold. Expected output frames come from the plan's
  * beat grid (its metronome clicks) mapped through count-in, loop wraps and speed changes.
  */
-class Qa20SyncTest {
+open class Qa20SyncTest {
+    /** Drum kit under test: null = the synthetic kit (fallback); Qa24SampledDrumSyncTest repeats the run with the sampled kit. */
+    protected open val drumKit: DrumKit? get() = null
     private val kit = Qa20Kit("q20s")
     companion object {
         const val BLOCK = 192
@@ -69,8 +71,8 @@ class Qa20SyncTest {
         val seconds = if (run.seconds > 0) run.seconds else pl.totalFrames.toDouble() / SR + 1.0 + run.countIn * 4 * 60.0 / 90.0 / run.speed
         val frames = (seconds * SR).toInt()
         val sink = Qa20Sink(BLOCK, frames + BLOCK)
-        val host = RealtimeHost({ sink }, threadStarter = { _, _ -> Thread {} }, idleStopSeconds = 1000.0, bankProvider = { Qa18FirstBeatTest.bank })
-        val t = EngineTransport(host, clipLoader = { _, _ -> Outcome.Success(pcm) }, pollMillis = 1_000_000)
+        val host = RealtimeHost({ sink }, threadStarter = { _, _ -> Thread {} }, idleStopSeconds = 1000.0, bankProvider = { Qa18FirstBeatTest.bank }, drumKitProvider = { drumKit })
+        val t = EngineTransport(host, clipLoader = { _, _ -> Outcome.Success(pcm) }, pollMillis = 1_000_000, drumKitProvider = { drumKit })
         try {
             t.prepare(q, PracticeSettings(speed = run.speed, countInBars = run.countIn, metronome = source == CLICK, loop = loopRange))
             if (run.startBar > 0 || run.startOffset != Fraction.ZERO) t.seek(PlaybackOccurrence(ScorePosition(q.measures[run.startBar].id, run.startOffset), 1, routeIndexOf(pl, run.startBar)))
@@ -116,7 +118,7 @@ class Qa20SyncTest {
         val q = solo(p, source)
         val bytes = java.io.ByteArrayOutputStream()
         val clips = ClipSet.build(q, mapOf(Qa20Kit.CLIP_HASH to pcm), SR, 1.0)
-        val r = OfflineMixdown(ScorePlaybackCompiler(), Qa18FirstBeatTest.bank).render(q, RenderOptions(sampleRate = SR, bitDepth = 32, tailSeconds = 1.0), { b, o, l -> bytes.write(b, o, l) }, clips = clips)
+        val r = OfflineMixdown(ScorePlaybackCompiler(), Qa18FirstBeatTest.bank, drumKit).render(q, RenderOptions(sampleRate = SR, bitDepth = 32, tailSeconds = 1.0), { b, o, l -> bytes.write(b, o, l) }, clips = clips)
         check(r is Outcome.Success)
         val d = bytes.toByteArray(); val frames = (d.size - 44) / 8
         return FloatArray(frames) { i -> val o = 44 + i * 8; Float.fromBits((d[o].toInt() and 0xFF) or ((d[o + 1].toInt() and 0xFF) shl 8) or ((d[o + 2].toInt() and 0xFF) shl 16) or (d[o + 3].toInt() shl 24)) }

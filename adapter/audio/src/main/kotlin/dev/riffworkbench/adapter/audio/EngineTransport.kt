@@ -32,6 +32,8 @@ class EngineTransport(
     private val pollMillis: Long = 33,
     /** Scratch blocks rendered off the audio thread after a rack build so the JIT has seen the DSP paths (0 = off). */
     private val warmUpBlocks: Int = WARM_UP_BLOCKS,
+    /** Sampled drum kit for offline renders and the warm-up (live playback gets it from the host); null = synthetic kit. */
+    private val drumKitProvider: () -> DrumKit? = { null },
 ) : Transport, PreviewPlayer, OfflineRenderer {
     companion object {
         /** Warm-up: 8 blocks of 256 frames (43 ms of audio) per host start and rack signature, capped by [WARM_UP_MAX_NANOS]. */
@@ -201,7 +203,7 @@ class EngineTransport(
 
     private fun warmUp(project: Project, rate: Int, maxBlock: Int) {
         val t0 = System.nanoTime()
-        val scratch = SynthEngine(rate, maxBlock, bankProvider())
+        val scratch = SynthEngine(rate, maxBlock, bankProvider(), drumKitProvider())
         scratch.installRack(ChannelRack.build(project, rate, maxBlock))
         // Every channel audible (mute/solo would skip its voice) at the project's pans.
         scratch.setMix(MixState.from(project.copy(tracks = project.tracks.map { it.copy(mix = it.mix.copy(mute = false, solo = false)) })))
@@ -453,7 +455,7 @@ class EngineTransport(
         for (solo in targets) {
             ensureActive()
             val out = ByteArrayOutputStream()
-            when (val r = OfflineMixdown(compiler, bankProvider()).render(project, options, { b, o, l -> out.write(b, o, l) }, solo, { !isActive }, progress)) {
+            when (val r = OfflineMixdown(compiler, bankProvider(), drumKitProvider()).render(project, options, { b, o, l -> out.write(b, o, l) }, solo, { !isActive }, progress)) {
                 is Outcome.Failure -> return@withContext r
                 is Outcome.Success -> results += ExportResult(out.toByteArray(), "audio/wav", if (solo == null) "$name.wav" else "${name}_${(solo + 1).toString().padStart(2, '0')}_${project.tracks[solo].name.replace(Regex("[^\\p{L}\\p{N}_-]"), "_")}.wav", emptyList())
             }
@@ -463,7 +465,7 @@ class EngineTransport(
 
     override suspend fun renderTo(project: Project, options: RenderOptions, sink: ByteSink, soloTrack: Int?, progress: (OperationProgress) -> Unit): Outcome<RenderSummary> {
         val clips = if (soloTrack == null) mutex.withLock { clipsFor(project, options.sampleRate).let { ClipSet.build(project, it.voices.associate { v -> project.audio.clips.first { c -> c.id == v.clipId }.asset to v.pcm }, options.sampleRate, 1.0) } } else ClipSet.EMPTY
-        return withContext(Dispatchers.Default) { OfflineMixdown(compiler, bankProvider()).render(project, options, sink, soloTrack, { !isActive }, progress, clips) }
+        return withContext(Dispatchers.Default) { OfflineMixdown(compiler, bankProvider(), drumKitProvider()).render(project, options, sink, soloTrack, { !isActive }, progress, clips) }
     }
 
     /** Live measurements of the running output (null before the device was opened). */

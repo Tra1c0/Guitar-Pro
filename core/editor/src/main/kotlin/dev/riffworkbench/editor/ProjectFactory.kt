@@ -34,7 +34,7 @@ class ProjectFactory(private val ids: IdSource) {
         val instrument = when (kind) {
             InstrumentKind.GUITAR -> guitar
             InstrumentKind.BASS -> InstrumentDefinition(kind = kind, tuning = listOf(28, 33, 38, 43), capoByString = List(4) { 0 }, midiProgram = 33)
-            InstrumentKind.PERCUSSION -> InstrumentDefinition(kind = kind, tuning = emptyList(), capoByString = emptyList(), midiProgram = 0)
+            InstrumentKind.PERCUSSION -> InstrumentDefinition(kind = kind, tuning = emptyList(), capoByString = emptyList(), midiProgram = 0, drumKit = factoryDrumKit())
             InstrumentKind.PIANO -> InstrumentDefinition(kind = kind, tuning = emptyList(), capoByString = emptyList(), midiProgram = 0)
             InstrumentKind.OTHER -> InstrumentDefinition(kind = kind, tuning = emptyList(), capoByString = emptyList(), midiProgram = 48)
         }

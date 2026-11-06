@@ -21,7 +21,9 @@ import org.junit.Test
  * Budgets (Auftrag Zyklus 19): Spitze je Spur ≤ −3 dBFS, Limiter in der Standardband ≤ 5 % der Zeit aktiv (> 0,5 dB),
  * keine geclippten Samples; erster Treffer auf Takt 1 Zählzeit 1 vollständig und pegelgleich zu späteren Treffern.
  */
-class Qa19DrumLevelTest {
+open class Qa19DrumLevelTest {
+    /** Kit under test: null = the synthetic kit (fallback); Qa24SampledDrumLevelTest runs every check with the sampled kit. */
+    protected open val drumKit: DrumKit? get() = null
     private var n = 0
     private fun id() = EntityId("d19-${n++}")
     private fun f(a: Long, b: Long) = Fraction.of(a, b)
@@ -56,7 +58,7 @@ class Qa19DrumLevelTest {
     /** Engine wie OfflineMixdown (1024er-Blöcke, MixState.from, Rack mit oder ohne Master-Limiter). */
     private fun render(p: Project, seconds: Double, includeMasterFx: Boolean = false, bk: SampleBank? = null, solo: Int? = null): Pair<FloatArray, FloatArray> {
         val plan = (ScorePlaybackCompiler().compileNow(p, SR) as Outcome.Success).value
-        val engine = SynthEngine(SR, BLOCK, bk)
+        val engine = SynthEngine(SR, BLOCK, bk, drumKit)
         engine.installRack(ChannelRack.build(p, SR, BLOCK, includeMasterFx = includeMasterFx && solo == null)); engine.setMix(MixState.from(p, 0f, solo)); engine.install(EngineProgram.prepare(plan)); engine.play(0)
         val frames = (seconds * SR).toInt(); val l = FloatArray(frames); val r = FloatArray(frames); val buf = FloatArray(BLOCK * 2)
         var done = 0
@@ -67,7 +69,7 @@ class Qa19DrumLevelTest {
     private fun dry(p: Project, seconds: Double): FloatArray {
         val ch = Channel(ChannelKind.DRUMS, TonePresets.stringTone(TonePresets.find("rw.drums.rock")!!), KeysMode.PIANO, emptyArray(), BLOCK, voiceSignature = "dry")
         val plan = (ScorePlaybackCompiler().compileNow(p, SR) as Outcome.Success).value
-        val engine = SynthEngine(SR, BLOCK, null)
+        val engine = SynthEngine(SR, BLOCK, null, drumKit)
         engine.installRack(ChannelRack(arrayOf(ch), emptyArray(), "dry")); engine.setMix(MixState(floatArrayOf(1f), floatArrayOf(0f), 2f, 0f)); engine.install(EngineProgram.prepare(plan)); engine.play(0)
         val frames = (seconds * SR).toInt(); val out = FloatArray(frames); val buf = FloatArray(BLOCK * 2); var done = 0
         while (done < frames) { val k = minOf(BLOCK, frames - done); engine.render(buf, k); for (i in 0 until k) out[done + i] = maxOf(abs(buf[2 * i]), abs(buf[2 * i + 1])); done += k }
@@ -130,7 +132,7 @@ class Qa19DrumLevelTest {
         val failures = ArrayList<String>()
         for ((label, bars) in listOf("v96, Akzente v127" to groove(), "alles v127" to groove(127, 127), "v80, Akzente v110" to groove(80, 110))) {
             val p = drumsOnly(bars)
-            val res = (OfflineMixdown(bank = null).render(p, RenderOptions(sampleRate = SR, bitDepth = 16, tailSeconds = 1.0), { _, _, _ -> }, soloTrack = 0) as Outcome.Success).value
+            val res = (OfflineMixdown(bank = null, drumKit = drumKit).render(p, RenderOptions(sampleRate = SR, bitDepth = 16, tailSeconds = 1.0), { _, _, _ -> }, soloTrack = 0) as Outcome.Success).value
             val (l, r) = render(p, 4.2)
             val input = db(dry(p, 4.2).maxOrNull()!!.toDouble())
             val rmsL = db(rms(l, 0, 2 * BAR))

@@ -787,8 +787,10 @@ private class MusicXmlWriter(private val project: Project, private val losses: L
         if (track.mix.effects.isNotEmpty()) losses.add("effects", "Effektketten der Spur werden nicht exportiert", id)
         if (track.sound.bankId != null || track.sound.presetId != null || track.sound.originalRseData != null)
             losses.add("sound_assignment", "Klangzuordnung wird nur als MIDI-Programm exportiert", id)
-        if (track.instrument.kind == InstrumentKind.PERCUSSION && track.instrument.drumKit != defaultDrumKit() && track.instrument.drumKit.any { it.chokeGroup != null || it.volume != 1.0 || it.pan != 0.0 })
-            losses.add("drum_kit", "Choke-Gruppen, Lautstärke und Panorama einzelner Drum-Elemente werden nicht exportiert", id)
+        // QA 24: MusicXML carries no kit; the import always starts from defaultDrumKit(). So every other kit (also the larger
+        // factory kit of new drum tracks) is a loss - not only one with custom chokes or element mix.
+        if (track.instrument.kind == InstrumentKind.PERCUSSION && track.instrument.drumKit != defaultDrumKit())
+            losses.add("drum_kit", "Kit-Elemente, Choke-Gruppen, Lautstärke und Panorama einzelner Drum-Elemente werden nicht exportiert (der Import nutzt das Standard-Kit)", id)
         if (track.instrument.maxFret != 24 && fretted(track)) losses.add("max_fret", "Bundanzahl des Instruments wird nicht exportiert", id)
         for (staff in track.staves) for (bar in staff.bars) for (voice in bar.voices) for (beat in voice.beats) for (note in beat.notes)
             if (note.articulations.any { it is Articulation.Grace && it.duration.tuplets.isNotEmpty() }) losses.add("grace_tuplet", "Tuplet-Angaben von Vorschlagsnoten werden nicht exportiert", id)

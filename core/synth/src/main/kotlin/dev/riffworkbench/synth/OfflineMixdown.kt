@@ -14,7 +14,7 @@ import kotlin.math.roundToLong
  * (nothing is cut at the end), and mix and stems line up although the stems have no master chain. The engine renders the
  * same blocks as before, so export frame i is bit-identical to live/engine frame i + latency.
  */
-class OfflineMixdown(private val compiler: ScorePlaybackCompiler = ScorePlaybackCompiler(), private val bank: SampleBank? = null) {
+class OfflineMixdown(private val compiler: ScorePlaybackCompiler = ScorePlaybackCompiler(), private val bank: SampleBank? = null, private val drumKit: DrumKit? = null) {
     fun framesFor(project: Project, options: RenderOptions): Outcome<Long> = when (val plan = compiler.compileNow(project, options.sampleRate)) {
         is Outcome.Failure -> plan
         is Outcome.Success -> Outcome.Success(plan.value.totalFrames + (options.tailSeconds.coerceIn(0.0, 30.0) * options.sampleRate).roundToLong())
@@ -29,7 +29,7 @@ class OfflineMixdown(private val compiler: ScorePlaybackCompiler = ScorePlayback
         // WAV sizes are 32-bit: a very long route must fail as a typed limit, not throw from the header writer.
         if (Wav.dataBytes(total, 2, options.bitDepth) + 36 > 0xFFFFFFFFL) return Outcome.Failure(FailureCode.RESOURCE_LIMIT, "Audio-Export wäre größer als 4 GiB (WAV-Grenze); bitte kürzer oder mit geringerer Bittiefe exportieren", contractId = "C-RENDER")
         val block = 1024
-        val engine = SynthEngine(options.sampleRate, block, bank)
+        val engine = SynthEngine(options.sampleRate, block, bank, drumKit)
         val rack = ChannelRack.build(project, options.sampleRate, block, includeMasterFx = options.includeMasterFx && soloTrack == null)
         engine.installRack(rack)
         // A stem is for the DAW: the master fader is a listening level, not part of it (QA 22). Stems render at the factory

@@ -28,6 +28,7 @@ class Qa20AudioThreadAllocTest {
     }
     private val kit = Qa20Kit("q20al")
     private val bank get() = Qa18FirstBeatTest.bank
+    private val drumKit get() = Qa24AudioKit.kit
 
     /** A labelled step on the audio thread; [run] must only touch prepared objects. */
     private class Step(val label: String, val run: () -> Unit)
@@ -90,26 +91,30 @@ class Qa20AudioThreadAllocTest {
     @Test fun engineRendersEveryNewPathWithoutAllocation() {
         val failures = ArrayList<String>()
         println("Q20A JVM ${System.getProperty("java.vm.name")} ${System.getProperty("java.version")}, args ${java.lang.management.ManagementFactory.getRuntimeMXBean().inputArguments.filter { it.startsWith("-XX") }}")
-        for (withBank in listOf(true, false)) {
+        // QA cycle 24: also with the sampled drum kit (velocity layers, exclusive-class chokes, rimshot, choke stroke, restartDrums).
+        for ((withBank, withKit) in listOf(true to false, false to false, true to true, false to true)) {
             val bk = if (withBank) bank else null
+            val dk = if (withKit) drumKit else null
             if (withBank && bk == null) { println("Q20A sample bank not found, sampled paths skipped"); continue }
+            if (withKit && dk == null) { println("Q20A drum kit not found, sampled drum paths skipped"); continue }
             for (block in listOf(192, 256)) {
-                repeat(WARM_UPS) { val w = SynthEngine(SR, maxOf(1024, block), bk); for (s in engineSteps(w, block)) s.run() }
-                val e = SynthEngine(SR, maxOf(1024, block), bk)
+                repeat(WARM_UPS) { val w = SynthEngine(SR, maxOf(1024, block), bk, dk); for (s in engineSteps(w, block)) s.run() }
+                val e = SynthEngine(SR, maxOf(1024, block), bk, dk)
                 val steps = engineSteps(e, block)
                 val (total, worst) = measure(steps)
-                println("Q20A engine (bank=${bk != null}, block $block, ${steps.size} steps): allocated $total B on the audio thread ${if (worst.isEmpty()) "" else worst.toString()}")
-                if (total != 0L) failures += "bank=${bk != null} block $block: $total B $worst"
+                println("Q20A engine (bank=${bk != null}, drum kit=${dk != null}, block $block, ${steps.size} steps): allocated $total B on the audio thread ${if (worst.isEmpty()) "" else worst.toString()}")
+                if (total != 0L) failures += "bank=${bk != null} kit=${dk != null} block $block: $total B $worst"
             }
         }
         assertTrue("allocation on the audio thread: $failures", failures.isEmpty())
     }
 
     /** Host scenario: commands posted from the control side (allocation there is fine), drained and applied by renderBlock(). */
-    private fun hostRun(block: Int, measureIt: Boolean): Pair<Long, List<String>> {
+    private fun hostRun(block: Int, measureIt: Boolean, withKit: Boolean = false): Pair<Long, List<String>> {
         val bk = bank
+        val dk = if (withKit) drumKit else null
         val sink = Qa20Sink(block)
-        val host = RealtimeHost({ sink }, threadStarter = { _, _ -> Thread {} }, idleStopSeconds = 1000.0, bankProvider = { bk })
+        val host = RealtimeHost({ sink }, threadStarter = { _, _ -> Thread {} }, idleStopSeconds = 1000.0, bankProvider = { bk }, drumKitProvider = { dk })
         check(host.start() is Outcome.Success)
         val p = kit.everything()
         val pl = plan(p); val pl2 = plan(p, 1.25)
@@ -181,11 +186,12 @@ class Qa20AudioThreadAllocTest {
 
     @Test fun hostCommandHandlingDoesNotAllocateOnTheAudioThread() {
         val failures = ArrayList<String>()
-        for (block in listOf(192, 256)) {
-            repeat(WARM_UPS) { hostRun(block, measureIt = false) }
-            val (total, worst) = hostRun(block, measureIt = true)
-            println("Q20A host (bank=${bank != null}, block $block): allocated $total B in renderBlock() ${if (worst.isEmpty()) "" else worst.toString()}")
-            if (total != 0L) failures += "block $block: $total B $worst"
+        for (withKit in listOf(false, true)) for (block in listOf(192, 256)) {
+            if (withKit && drumKit == null) { println("Q20A drum kit not found, sampled drum host run skipped"); continue }
+            repeat(WARM_UPS) { hostRun(block, measureIt = false, withKit = withKit) }
+            val (total, worst) = hostRun(block, measureIt = true, withKit = withKit)
+            println("Q20A host (bank=${bank != null}, drum kit=$withKit, block $block): allocated $total B in renderBlock() ${if (worst.isEmpty()) "" else worst.toString()}")
+            if (total != 0L) failures += "kit=$withKit block $block: $total B $worst"
         }
         assertTrue("allocation in RealtimeHost.renderBlock: $failures", failures.isEmpty())
     }

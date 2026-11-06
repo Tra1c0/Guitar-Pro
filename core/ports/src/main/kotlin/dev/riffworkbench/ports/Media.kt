@@ -120,6 +120,8 @@ data class AudioStats(
     val sampleRate: Int, val blockFrames: Int, val blocks: Long, val budgetMicros: Double,
     val renderMedianMicros: Double, val renderP99Micros: Double, val renderMaxMicros: Double, val overruns: Long,
     val underruns: Long, val outputLatencyMs: Double?, val noteOnLatencyMs: Double?, val voices: Int, val hasSamples: Boolean, val deviceName: String,
+    /** The sampled drum kit plays (false: synthetic kit, not loaded or missing). */
+    val hasDrumSamples: Boolean = false,
 )
 /** One second of a stress run. */
 data class StressSample(val second: Int, val stats: AudioStats?, val memoryMb: Double?, val thermal: String?, val cpuMhz: List<Int>)

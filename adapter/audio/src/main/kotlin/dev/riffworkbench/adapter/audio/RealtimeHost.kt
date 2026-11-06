@@ -42,6 +42,8 @@ data class HostStats(
     val sampleRate: Int, val blockFrames: Int, val blocks: Long, val budgetMicros: Double,
     val renderMedianMicros: Double, val renderP99Micros: Double, val renderMaxMicros: Double, val overruns: Long,
     val underruns: Long, val outputLatencyMs: Double?, val noteOnLatencyMs: Double?, val voices: Int, val hasSamples: Boolean, val deviceName: String,
+    /** The engine plays the sampled drum kit (QA cycle 24); false = synthetic kit (not loaded yet or missing). */
+    val hasDrumSamples: Boolean = false,
 )
 
 /**
@@ -57,6 +59,8 @@ class RealtimeHost(
     private val idleStopSeconds: Double = 20.0,
     /** Sample bank for the electric guitars; read when the engine is created (null = modelled strings only). */
     private val bankProvider: () -> SampleBank? = { null },
+    /** Sampled drum kit; read when the engine is created like the bank (null = synthetic kit only). */
+    private val drumKitProvider: () -> DrumKit? = { null },
 ) {
     // Render-time ring (ns per block) and counters for [stats]; written only by the audio thread.
     private val timingSize = 8192
@@ -75,6 +79,8 @@ class RealtimeHost(
     @Volatile private var engine: SynthEngine? = null
     /** Whether the newest engine built (or posted via [HostCommand.Engine]) has the sample bank. */
     @Volatile private var engineHasBank = false
+    /** Whether the newest engine built (or posted) has the drum kit. */
+    @Volatile private var engineHasKit = false
     private var buffer = FloatArray(0)
     // Published by the audio thread.
     private val ringSize = 1024
@@ -126,8 +132,11 @@ class RealtimeHost(
         sinkRef.getAndSet(s)?.close(); format = f
         val previous = engine
         val bank = bankProvider()
-        engine = if (previous != null && previous.sampleRate == f.sampleRate && previous.hasBank == (bank != null)) previous else SynthEngine(f.sampleRate, maxOf(1024, f.blockFrames), bank)
+        val kit = drumKitProvider()
+        engine = if (previous != null && previous.sampleRate == f.sampleRate && previous.hasBank == (bank != null) && previous.hasDrumKit == (kit != null)) previous
+            else SynthEngine(f.sampleRate, maxOf(1024, f.blockFrames), bank, kit)
         engineHasBank = bank != null
+        engineHasKit = kit != null
         buffer = FloatArray(f.blockFrames * 2)
         written = 0; blocks = 0; idleBlocks = 0
         synchronized(idleLock) {
@@ -187,9 +196,11 @@ class RealtimeHost(
         val f = format ?: return false
         if (!running || lastVoices > 0) return false
         val bank = bankProvider()
-        if (engineHasBank == (bank != null)) return false
+        val kit = drumKitProvider()
+        if (engineHasBank == (bank != null) && engineHasKit == (kit != null)) return false
         engineHasBank = bank != null
-        return post(HostCommand.Engine(SynthEngine(f.sampleRate, maxOf(1024, f.blockFrames), bank)))
+        engineHasKit = kit != null
+        return post(HostCommand.Engine(SynthEngine(f.sampleRate, maxOf(1024, f.blockFrames), bank, kit)))
     }
 
     /** One audio cycle. Public for deterministic tests that drive the host without a thread. */
@@ -267,7 +278,7 @@ class RealtimeHost(
         val presented = sink?.presentedFrame()
         return HostStats(f.sampleRate, f.blockFrames, count, f.blockFrames * 1e6 / f.sampleRate, pct(0.5), pct(0.99), if (n == 0) 0.0 else sorted[n - 1] / 1000.0,
             overruns, sink?.underruns() ?: 0, presented?.let { (written - it).coerceAtLeast(0) * 1000.0 / f.sampleRate }, noteOnNanos.takeIf { it >= 0 }?.let { it / 1e6 },
-            lastVoices, engine?.hasBank == true, f.deviceName)
+            lastVoices, engine?.hasBank == true, f.deviceName, engine?.hasDrumKit == true)
     }
 
     /** Playhead from the newest block that has already reached the speaker. */

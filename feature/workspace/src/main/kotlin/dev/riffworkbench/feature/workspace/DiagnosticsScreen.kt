@@ -43,6 +43,7 @@ import kotlinx.coroutines.launch
             else {
                 Line(tr("Gerät", "Device"), "${s.deviceName} · ${s.sampleRate} Hz · Block ${s.blockFrames}")
                 Line(tr("Gitarren-Samples", "Guitar samples"), if (s.hasSamples) tr("aktiv", "active") else tr("nicht geladen (modelliert)", "not loaded (modelled)"))
+                Line(tr("Schlagzeug-Samples", "Drum samples"), if (s.hasDrumSamples) tr("aktiv (ArtiFret Pearl Kit)", "active (ArtiFret Pearl Kit)") else tr("nicht geladen (synthetisch)", "not loaded (synthetic)"))
                 Line(tr("Renderzeit Median / P99 / Max", "Render median / P99 / max"), "%.0f / %.0f / %.0f µs".format(s.renderMedianMicros, s.renderP99Micros, s.renderMaxMicros))
                 Line(tr("Budget pro Block", "Budget per block"), "%.0f µs · Last %.0f %%".format(s.budgetMicros, 100 * s.renderMedianMicros / s.budgetMicros))
                 Line(tr("Überläufe / Underruns", "Overruns / underruns"), "${s.overruns} / ${s.underruns}")

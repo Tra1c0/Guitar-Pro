@@ -51,6 +51,17 @@ class Qa20Kit(private val prefix: String = "q20") {
         Beat(id(), f(k.toLong(), 8), WrittenDuration(8), notes)
     }
 
+    /**
+     * QA cycle 24: kick/hi-hat 8ths, then a 16th fill over all six GM toms (one tom and the snare as rimshots), a choked crash
+     * and a note outside the sampled kit (60, Hi Bongo: synthetic fallback), so the sampled kit's articulations and chokes run.
+     */
+    fun fillBar(): List<Beat> {
+        fun p(midi: Int, v: Int, t: PercussionTechnique) = Note(id(), Pitch(midi), velocity = v, articulations = listOf(Articulation.Percussion(t)))
+        val head = (0 until 4).map { k -> Beat(id(), f(k.toLong(), 8), WrittenDuration(8), listOfNotNull(d(42, 90), if (k % 2 == 0) d(36, 110) else null, if (k == 2) p(38, 115, PercussionTechnique.RIMSHOT) else null)) }
+        val fill = listOf(50, 48, 47, 45, 43, 41, 41, 36).mapIndexed { k, m -> Beat(id(), f(1, 2) + f(k.toLong(), 16), WrittenDuration(16), listOf(if (k == 3) p(m, 118, PercussionTechnique.RIMSHOT) else d(m, 118)) + (if (k == 7) listOf(p(57, 120, PercussionTechnique.CHOKE), d(60, 90)) else emptyList())) }
+        return head + fill
+    }
+
     /** Standard band: high-gain guitar, bass, drums, [bars] bars of 4/4 at [qpm]. */
     fun standardBand(bars: Int = 4, qpm: Double = 150.0, measures: List<Measure> = List(bars) { Measure(id()) }, tempo: List<TempoChange>? = null, clips: List<AudioClip> = emptyList()): Project {
         val riff = List(measures.size) { riffBar() }
@@ -100,7 +111,7 @@ class Qa20Kit(private val prefix: String = "q20") {
     fun everything(): Project {
         val m = List(3) { Measure(id()) }
         val drums = listOf(listOf(beat(f(0, 1), 8, d(36, 120), d(49, 116)), beat(f(1, 8), 8, d(42)), beat(f(1, 4), 8, d(38, 120)), beat(f(3, 8), 8, d(46)), beat(f(1, 2), 8, d(36), d(44)),
-            beat(f(5, 8), 8, d(42)), beat(f(3, 4), 8, d(38), d(51)), beat(f(7, 8), 8, d(53), d(55), d(52))), drumBar(), drumBar(false))
+            beat(f(5, 8), 8, d(42)), beat(f(3, 4), 8, d(38), d(51)), beat(f(7, 8), 8, d(53), d(55), d(52))), drumBar(), fillBar())
         val keys = InstrumentDefinition(InstrumentKind.PIANO, emptyList(), emptyList(), midiProgram = 4)
         return project(m, listOf(
             track("Gitarre", guitarDef, articulationBars(), m),
