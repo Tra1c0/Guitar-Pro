@@ -189,14 +189,20 @@ class WorkspaceViewModel(
         if (result is Outcome.Success) {
             previewSelected()
             mutableInput.value = input.value.copy(buffer = "")
-            if (settings.settings.value.autoAdvance && !input.value.chordMode) move(1)
+            // Only an entry that changed the score owns an undo step the new bar may join (an unchanged re-entry has none).
+            val changed = state.value.editor?.project?.revision != current.project.revision
+            if (settings.settings.value.autoAdvance && !input.value.chordMode) move(1, sameUndoStep = changed)
         }
     }
     /** Fret pad: one tap enters and commits the fret; the pad covers 0–24, so no two-digit preview is needed. */
     fun enterFret(fret: Int) { mutableInput.value = input.value.copy(buffer = fret.coerceIn(0, 48).toString()); commitInput() }
     private fun existingFret(e: EditorState): Int? = selectedBeat(e)?.notes?.firstOrNull { it.string == e.selection.string }?.fret
 
-    fun rest() { if (command(EditorCommand.PutRest(input.value.duration)) is Outcome.Success && settings.settings.value.autoAdvance && !input.value.chordMode) move(1) }
+    fun rest() {
+        val before = state.value.editor?.project?.revision
+        if (command(EditorCommand.PutRest(input.value.duration)) is Outcome.Success && settings.settings.value.autoAdvance && !input.value.chordMode)
+            move(1, sameUndoStep = state.value.editor?.project?.revision != before)
+    }
     fun setDuration(denominator: Int = input.value.duration.denominator, dots: Int = input.value.duration.dots) {
         val duration = WrittenDuration(denominator, dots, input.value.duration.tuplets)
         val current = state.value.editor ?: return
@@ -213,11 +219,19 @@ class WorkspaceViewModel(
         if (selectedBeat(current) != null) { if (command(EditorCommand.SetTuplet(ratio)) is Outcome.Failure) { mutableInput.value = before; relayout() }; return }
         relayout()
     }
+    /**
+     * P.M.: on a selected note it toggles that note's palm mute and the entry mode follows the note's new state; without a
+     * note it toggles the entry mode for the next notes. (QA 21: both were toggled independently, so with the mode on, a
+     * tap on an unmuted note muted it while the tile, lit by the mode, stayed lit: the tap looked like it did nothing.)
+     */
     fun togglePalmMute() {
-        mutableInput.value = input.value.copy(palmMute = !input.value.palmMute)
-        val current = state.value.editor ?: return
-        if (selectedNote(current) != null) command(EditorCommand.ApplyArticulation(Articulation.Mark(NoteMark.PALM_MUTE)))
+        val current = state.value.editor
+        if (current == null || selectedNote(current) == null) { mutableInput.value = input.value.copy(palmMute = !input.value.palmMute); return }
+        if (command(EditorCommand.ApplyArticulation(Articulation.Mark(NoteMark.PALM_MUTE))) is Outcome.Success)
+            mutableInput.value = input.value.copy(palmMute = state.value.editor?.let { selectedNote(it) }?.articulations?.contains(Articulation.Mark(NoteMark.PALM_MUTE)) == true)
     }
+    /** Whether the P.M. tile is lit: the selected note's palm mute, or on an empty beat the entry mode. */
+    fun palmMuteLit(e: EditorState): Boolean = selectedNote(e)?.let { Articulation.Mark(NoteMark.PALM_MUTE) in it.articulations } ?: input.value.palmMute
     fun toggleMark(kind: NoteMark) { command(EditorCommand.ApplyArticulation(Articulation.Mark(kind))) }
     fun articulation(a: Articulation) { if (command(EditorCommand.ApplyArticulation(a)) is Outcome.Success) previewSelected() }
     fun chordMode(enabled: Boolean) { mutableInput.value = input.value.copy(chordMode = enabled) }
@@ -247,7 +261,12 @@ class WorkspaceViewModel(
         return result
     }
 
-    fun move(direction: Int) {
+    /**
+     * Moves the cursor by one beat; past the last bar a bar is added. [sameUndoStep] (auto-advance after an entry): that bar
+     * joins the entry's undo step, so one Undo takes back what one tap did (QA 21: the first Undo after the last note of the
+     * last bar only removed the empty new bar).
+     */
+    fun move(direction: Int, sameUndoStep: Boolean = false) {
         val current = state.value.editor ?: return
         val p = current.project; val s = current.selection; val index = p.measures.indexOfFirst { it.id == s.measureId }
         val step = selectedBeat(current)?.takeIf { direction > 0 }?.duration?.length() ?: input.value.duration.length()
@@ -255,7 +274,7 @@ class WorkspaceViewModel(
         val length = p.measures[index].pickupLength ?: p.measures[index].signature.length()
         val next = when {
             offset >= length && index < p.measures.lastIndex -> s.copy(measureId = p.measures[index + 1].id, offset = Fraction.ZERO)
-            offset >= length -> { command(EditorCommand.AddMeasure(p.measures[index].signature)); state.value.editor?.project?.measures?.getOrNull(index + 1)?.let { s.copy(measureId = it.id, offset = Fraction.ZERO) } ?: s }
+            offset >= length -> { command(EditorCommand.AddMeasure(p.measures[index].signature), sameUndoStep); state.value.editor?.project?.measures?.getOrNull(index + 1)?.let { s.copy(measureId = it.id, offset = Fraction.ZERO) } ?: s }
             offset < Fraction.ZERO && index > 0 -> {
                 val previous = p.measures[index - 1]
                 s.copy(measureId = previous.id, offset = maxOf(Fraction.ZERO, (previous.pickupLength ?: previous.signature.length()) + input.value.duration.length() * Fraction(-1)))
@@ -264,6 +283,17 @@ class WorkspaceViewModel(
             else -> s.copy(offset = offset)
         }
         navigateTo(next)
+    }
+    /**
+     * Track chooser: switches the edited track, keeping bar, beat, voice and (clamped to the new track's strings) the
+     * string, also in range mode (QA 21: select() turned the switch into a range extension there, so the track did not
+     * change; and every switch reset the cursor to the lowest string).
+     */
+    fun selectTrack(trackId: EntityId) {
+        val e = state.value.editor ?: return
+        val track = e.project.tracks.firstOrNull { it.id == trackId } ?: return
+        val next = e.selection.copy(trackId = trackId, string = e.selection.string.coerceIn(0, maxOf(0, track.instrument.tuning.lastIndex)))
+        if (input.value.rangeMode) moveCursorTo(next) else select(next)
     }
     fun moveString(delta: Int) {
         val e = state.value.editor ?: return
@@ -320,11 +350,12 @@ class WorkspaceViewModel(
     }
 
     // ------------------------------------------------------------------ commands, history, clipboard
-    fun command(command: EditorCommand): Outcome<Unit> {
+    /** [sameUndoStep]: the change joins the previous undo step (EditorSession.dispatch). */
+    fun command(command: EditorCommand, sameUndoStep: Boolean = false): Outcome<Unit> {
         val active = session ?: return Outcome.Failure(FailureCode.VALIDATION, "Projekt noch nicht geladen")
         val before = active.state.value.project.revision
         val cursor = active.state.value.selection
-        val result = active.dispatch(command)
+        val result = active.dispatch(command, sameUndoStep)
         if (result is Outcome.Failure) showNotice(result.message)
         else if (active.state.value.project.revision != before) { if (command !is EditorCommand.Replace && command !is EditorCommand.MoveNote) lastCommand = command; enqueueSave() }
         noteCursorMove(cursor)

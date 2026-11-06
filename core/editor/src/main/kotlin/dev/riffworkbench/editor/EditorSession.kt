@@ -103,7 +103,12 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
         mutable.value = state.value.copy(selection = selection)
     }
 
-    fun dispatch(command: EditorCommand): Outcome<Unit> = try {
+    /**
+     * Applies [command] as one undo step. With [sameUndoStep] the change joins the previous step instead (the history keeps
+     * the state before that step; redo is cleared as usual): for follow-ups of one user action, e.g. the bar that
+     * auto-advance adds after the last note. Without a previous step it is a step of its own.
+     */
+    fun dispatch(command: EditorCommand, sameUndoStep: Boolean = false): Outcome<Unit> = try {
         val before = state.value
         var after = apply(before.project, before.selection, command)
         // Any edit that removes notes (delete, rest over a note, drum toggle) drops the links pointing at them, like Delete.
@@ -126,7 +131,7 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
             else {
                 // Computed before the history changes: a failure here must leave undo/redo untouched.
                 val selection = validSelection(after, before.selection, before.project)
-                undo.addLast(History(before.project, before.selection, before.diagnostics))
+                if (!sameUndoStep || undo.isEmpty()) undo.addLast(History(before.project, before.selection, before.diagnostics))
                 while (undo.size > historyLimit) undo.removeFirst()
                 redo.clear()
                 mutable.value = EditorState(after, selection, undo.isNotEmpty(), false, diagnostics)
