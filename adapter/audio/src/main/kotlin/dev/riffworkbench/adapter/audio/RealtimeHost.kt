@@ -90,6 +90,13 @@ class RealtimeHost(
     /** Seeks applied before each block: a snapshot of a block rendered before a posted Seek still shows the old position. */
     private val ringSeeks = LongArray(ringSize)
     private val ringFlags = IntArray(ringSize)
+    /**
+     * Zyklus 25 (Rhythmus tippen): the plan frame of each block's first sample counted through the count-in (position
+     * minus the count-in frames still to play, so the count-in's clicks lie before the start frame) and the rack's output
+     * latency (plan frame -> audible sample). Primitives only, written by the audio thread like the other rings.
+     */
+    private val ringVirtual = LongArray(ringSize)
+    private val ringLatency = IntArray(ringSize)
     @Volatile private var blocks = 0L
     @Volatile private var written = 0L
     @Volatile private var loops = 0L
@@ -243,6 +250,8 @@ class RealtimeHost(
         val flags = (if (e.playing) 1 else 0) or (if (e.countingIn) 2 else 0) or (if (e.ended) 4 else 0)
         val slot = (blocks % ringSize).toInt()
         ringSink[slot] = written; ringPlan[slot] = e.position; ringFlags[slot] = flags; ringPrograms[slot] = programs; ringSeeks[slot] = seeks
+        ringVirtual[slot] = if (e.countingIn) e.position - e.countInRemaining else e.position
+        ringLatency[slot] = e.currentRack()?.outputLatencyFrames ?: 0
         val t0 = System.nanoTime()
         e.render(buffer, frames)
         val dt = System.nanoTime() - t0
@@ -279,6 +288,32 @@ class RealtimeHost(
         return HostStats(f.sampleRate, f.blockFrames, count, f.blockFrames * 1e6 / f.sampleRate, pct(0.5), pct(0.99), if (n == 0) 0.0 else sorted[n - 1] / 1000.0,
             overruns, sink?.underruns() ?: 0, presented?.let { (written - it).coerceAtLeast(0) * 1000.0 / f.sampleRate }, noteOnNanos.takeIf { it >= 0 }?.let { it / 1e6 },
             lastVoices, engine?.hasBank == true, f.deviceName, engine?.hasDrumKit == true)
+    }
+
+    /**
+     * Zyklus 25 (Rhythmus tippen): the plan frame that was *audible* at [nanos] (a [System.nanoTime] instant in the past,
+     * e.g. a touch-down), or NaN when no output runs or the instant is older than the block ring (~4 s at 192 frames).
+     * Uses (frame, time) pairs, not the ~30 Hz poll: the sink's presented frame now (device timestamp, extrapolated to
+     * [nowNanos]) minus the elapsed time at the sample rate gives the sink frame leaving the speaker at [nanos]; the block
+     * that rendered it, minus the rack's output latency (cabinet compensation, QA cycles 20/21), gives its plan frame.
+     * During a count-in the result lies before the start frame (by the count-in still left). So a tap exactly on an
+     * audible click yields that click's plan frame. Control threads only; reads the rings like [snapshot], allocates nothing.
+     */
+    fun audiblePlanFrameAt(nanos: Long, nowNanos: Long = System.nanoTime()): Double {
+        val f = format ?: return Double.NaN
+        val count = blocks
+        if (count == 0L || !running) return Double.NaN
+        val presented = sink?.presentedFrameOrNegative()?.takeIf { it >= 0 } ?: (written - f.latencyFrames).coerceAtLeast(0)
+        val atTap = presented - (nowNanos - nanos).toDouble() * f.sampleRate / 1e9
+        var i = count - 1
+        val oldest = maxOf(0L, count - ringSize + 8)
+        // The block whose rendered frames, delayed by the rack latency, were leaving the speaker at the tap.
+        while (i > oldest && ringSink[(i % ringSize).toInt()] + ringLatency[(i % ringSize).toInt()] > atTap) i--
+        val slot = (i % ringSize).toInt()
+        val within = atTap - ringLatency[slot] - ringSink[slot]
+        if (within < 0 && i == oldest && oldest > 0) return Double.NaN
+        val advancing = ringFlags[slot] and 1 != 0
+        return ringVirtual[slot] + if (advancing) within else 0.0
     }
 
     /** Playhead from the newest block that has already reached the speaker. */

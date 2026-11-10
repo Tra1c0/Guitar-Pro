@@ -468,6 +468,9 @@ class EngineTransport(
         return withContext(Dispatchers.Default) { OfflineMixdown(compiler, bankProvider(), drumKitProvider()).render(project, options, sink, soloTrack, { !isActive }, progress, clips) }
     }
 
+    override fun audiblePlanFrameAt(nanos: Long): Double = host.audiblePlanFrameAt(nanos)
+    override fun installedPlan(): PlaybackPlan? = plan
+
     /** Live measurements of the running output (null before the device was opened). */
     fun stats() = host.stats()
 

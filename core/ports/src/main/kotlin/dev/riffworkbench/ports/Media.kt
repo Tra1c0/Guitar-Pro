@@ -51,6 +51,13 @@ interface Transport {
     suspend fun seek(position: PlaybackOccurrence): Outcome<Unit>
     suspend fun setLoop(range: LoopRange?): Outcome<Unit>
     suspend fun stop(): Outcome<Unit>
+    /**
+     * Zyklus 25 (Rhythmus tippen): plan frame of [installedPlan] that was audible at [nanos] (System.nanoTime base, an
+     * instant in the past such as a touch-down); before the start frame during a count-in; NaN when unknown (no output).
+     */
+    fun audiblePlanFrameAt(nanos: Long): Double = Double.NaN
+    /** The plan playback runs on (its frames are those of [audiblePlanFrameAt]); null before playback compiled one. */
+    fun installedPlan(): PlaybackPlan? = null
 }
 interface AudioEngine {
     suspend fun devices(): Outcome<List<AudioDevice>>

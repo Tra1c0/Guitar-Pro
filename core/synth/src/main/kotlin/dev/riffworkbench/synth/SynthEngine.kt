@@ -209,6 +209,8 @@ class SynthEngine(val sampleRate: Int, val maxBlock: Int = 1024, private val ban
     var position = 0L; private set
     var playing = false; private set
     var countingIn = false; private set
+    /** Count-in frames still to play (0 when none): the plan frame of the next sample is [position] minus this (Zyklus 25). */
+    val countInRemaining: Long get() = countInLeft
     var ended = false; private set
     var loopsCompleted = 0L; private set
     var voicesInUse = 0; private set
