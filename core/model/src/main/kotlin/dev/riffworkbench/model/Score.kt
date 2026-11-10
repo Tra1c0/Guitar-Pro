@@ -159,4 +159,9 @@ enum class LayoutMode { PAGE, CONTINUOUS, MULTITRACK }
 
 @Serializable data class AppSettings(val darkTheme: Boolean = true, val autoAdvance: Boolean = true, val strictRhythm: Boolean = false, val retuningPolicy: RetuningPolicy = RetuningPolicy.KEEP_SOUNDING_PITCH, val favoriteEffects: List<String> = listOf("palm_mute", "slide", "bend"), val shortcuts: Map<String, String> = emptyMap(),
     /** Pinch zoom in the score (QA 23): off by default, the score is drawn at a fixed readable scale; older files read as off. */
-    val pinchZoom: Boolean = false)
+    val pinchZoom: Boolean = false,
+    /**
+     * Tap latency (Zyklus 25, „Rhythmus tippen“ → Kalibrieren): how much later than the audible click the user's taps land,
+     * in ms (median of 8 calibration taps); subtracted from every tap. Default 0; older files read as 0.
+     */
+    val tapLatencyMs: Double = 0.0)

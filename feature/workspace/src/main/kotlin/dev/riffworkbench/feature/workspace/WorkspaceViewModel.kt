@@ -15,6 +15,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -62,6 +63,9 @@ class WorkspaceViewModel(
     private var navigatedSincePause = false
     /** Laufende Bereichsauswahl per langem Drücken (Bericht 1 §5). */
     private val rangeGesture = BarRangeGesture()
+    /** Zyklus 25 „Rhythmus tippen“ (see the section „rhythm tapping“). */
+    private val mutableRhythm = MutableStateFlow(RhythmTapState())
+    val rhythm: StateFlow<RhythmTapState> = mutableRhythm.asStateFlow()
 
     init {
         viewModelScope.launch { for (project in saves) persist(project) }
@@ -212,12 +216,15 @@ class WorkspaceViewModel(
         val instrument = track.instrument
         val marks = buildSet { if (input.value.palmMute) add(NoteMark.PALM_MUTE); if (dead) add(NoteMark.DEAD) }
         val fret = input.value.buffer.toIntOrNull() ?: existingFret(current) ?: 0
+        // A tapped placeholder (Zyklus 25, „Raster“): the fret keeps the placeholder's duration (PutNote keeps an existing beat's).
+        val slot = rhythmSlotIndex(current)
         val result = command(EditorCommand.PutNote(fret = fret, midiNote = if (instrument.tuning.isEmpty()) input.value.buffer.toIntOrNull() ?: 60 else null, duration = input.value.duration, marks = marks))
         if (result is Outcome.Success) {
             previewSelected()
             mutableInput.value = input.value.copy(buffer = "")
             // Only an entry that changed the score owns an undo step the new bar may join (an unchanged re-entry has none).
             val changed = state.value.editor?.project?.revision != current.project.revision
+            if (slot >= 0 && !input.value.chordMode) { fillRhythmSlot(slot, current.selection, changed, settings.settings.value.autoAdvance); return }
             if (settings.settings.value.autoAdvance && !input.value.chordMode) move(1, sameUndoStep = changed)
         }
     }
@@ -486,6 +493,7 @@ class WorkspaceViewModel(
 
     // ------------------------------------------------------------------ practice and transport
     fun togglePlay() { viewModelScope.launch {
+        if (rhythmBusy) return@launch
         val status = transport.state.value.status
         resumeFollow()
         if (status == TransportStatus.PLAYING) { navigatedSincePause = false; transport.pause(); return@launch }
@@ -711,12 +719,262 @@ class WorkspaceViewModel(
     suspend fun waveform(asset: AssetHash): WaveformLevel? = (services.waveforms?.peaks(asset, 480) as? Outcome.Success)?.value
     fun removeClip(id: EntityId) { command(EditorCommand.RemoveAudioClip(id)) }
 
+    // ------------------------------------------------------------------ rhythm tapping (Zyklus 25)
+    /**
+     * „Rhythmus tippen“: count-in (1 bar), then the metronome (optionally the other tracks, the target track silent) plays
+     * the target bars while the user taps; each touch-down/-up is mapped at once to the audible plan frame
+     * ([Transport.audiblePlanFrameAt], minus the calibrated [AppSettings.tapLatencyMs]). After the last target bar the
+     * recording stops by itself and the quantised preview shows; the grid can change without tapping again. „Übernehmen“
+     * writes one undo step ([EditorCommand.ApplyRhythm]), asking first when it overwrites notes; „Verwerfen“ changes nothing.
+     */
+    private val strokes = ArrayList<TapStroke>()
+    private val calibrationStrokes = ArrayList<TapStroke>()
+    private var rhythmSpans: List<RouteSpan> = emptyList()
+    private var rhythmRate = 48_000
+    private var rhythmJob: Job? = null
+    private var calibrationClicks: List<Long> = emptyList()
+    /** Track, voice and string of the recording (the cursor when it started). */
+    private var rhythmOrigin: Selection? = null
+    /** Placeholders of the last „Raster“ apply: a fret entered on one jumps to the next (auto-advance between tapped attacks). */
+    private var rhythmSlots: List<RhythmSlot> = emptyList()
+    private var rhythmSlotVoice: Pair<EntityId, Int>? = null
+    private val rhythmBusy: Boolean get() = rhythm.value.phase == RhythmTapPhase.COUNT_IN || rhythm.value.phase == RhythmTapPhase.RECORDING || rhythm.value.phase == RhythmTapPhase.CALIBRATING
+
+    fun openRhythmTap() {
+        val e = state.value.editor ?: return
+        if (rhythmBusy) return
+        val track = e.project.tracks.firstOrNull { it.id == e.selection.trackId } ?: return
+        val fretted = track.instrument.tuning.isNotEmpty()
+        val drums = track.instrument.kind == InstrumentKind.PERCUSSION
+        if (!fretted && !drums) { showNotice("Rhythmus tippen gibt es für Gitarre, Bass und Schlagzeug"); return }
+        val previous = rhythm.value
+        mutableRhythm.value = RhythmTapState(RhythmTapPhase.SETUP, useRange = previous.useRange, barCount = previous.barCount, grid = previous.grid, accompaniment = previous.accompaniment,
+            fretted = fretted, drums = drums, string = 0, drumNote = if (drums) previous.drumNote else 38, latencyMs = settings.settings.value.tapLatencyMs)
+        refreshRhythmTarget()
+    }
+    fun closeRhythmTap() { if (rhythmBusy) cancelRhythmTap(); mutableRhythm.value = rhythm.value.copy(phase = RhythmTapPhase.IDLE, result = null, confirm = null) }
+    fun setRhythmBarCount(count: Int) { mutableRhythm.value = rhythm.value.copy(barCount = count.coerceIn(1, 8)); refreshRhythmTarget() }
+    fun setRhythmUseRange(use: Boolean) { mutableRhythm.value = rhythm.value.copy(useRange = use); refreshRhythmTarget() }
+    fun setRhythmAccompaniment(on: Boolean) { mutableRhythm.value = rhythm.value.copy(accompaniment = on) }
+    fun setRhythmString(string: Int) { mutableRhythm.value = rhythm.value.copy(string = string) }
+    fun setRhythmDrumNote(midi: Int) { mutableRhythm.value = rhythm.value.copy(drumNote = midi.coerceIn(0, 127)) }
+    /** Grid change; in the preview the same taps are quantised again (no new recording). */
+    fun setRhythmGrid(grid: RhythmGrid) {
+        mutableRhythm.value = rhythm.value.copy(grid = grid)
+        if (rhythm.value.phase == RhythmTapPhase.PREVIEW) quantizeRhythm()
+    }
+
+    private fun rhythmTarget(e: EditorState, r: RhythmTapState): List<EntityId> {
+        val p = e.project
+        if (r.useRange && e.selection.rangeEnd != null) return e.selection.measureRange(p)
+        val i = p.measures.indexOfFirst { it.id == e.selection.measureId }
+        if (i < 0) return emptyList()
+        return p.measures.subList(i, minOf(p.measures.size, i + r.barCount)).map { it.id }
+    }
+    private fun refreshRhythmTarget() {
+        val e = state.value.editor ?: return
+        val bars = rhythmTarget(e, rhythm.value)
+        val first = e.project.measures.indexOfFirst { it.id == bars.firstOrNull() } + 1
+        val label = when { bars.isEmpty() -> ""; bars.size == 1 -> "Takt $first"; else -> "Takte $first–${first + bars.size - 1}" } +
+            if (!(rhythm.value.useRange && e.selection.rangeEnd != null) && bars.size < rhythm.value.barCount) " (nur ${bars.size} vorhanden)" else ""
+        mutableRhythm.value = rhythm.value.copy(bars = bars, label = label)
+    }
+
+    /** Start → count-in → recording. Stops by itself after the last target bar ([finishRhythmTap]). */
+    fun startRhythmTap() { viewModelScope.launch {
+        if (rhythmBusy) return@launch
+        val e = session?.state?.value ?: return@launch
+        refreshRhythmTarget()
+        val r = rhythm.value
+        val bars = r.bars
+        if (bars.isEmpty()) return@launch
+        val track = e.project.tracks.firstOrNull { it.id == e.selection.trackId } ?: return@launch
+        rhythmOrigin = e.selection.copy(rangeEnd = null)
+        val playback = e.project.copy(tracks = e.project.tracks.map { t -> t.copy(mix = t.mix.copy(solo = false, mute = if (r.accompaniment) t.id == track.id || t.mix.mute else true)) })
+        val route = routeIndexFor(playback, bars.first()) ?: run { showNotice("Wiedergaberoute ungültig"); return@launch }
+        strokes.clear()
+        mutableRhythm.value = r.copy(phase = RhythmTapPhase.COUNT_IN, taps = 0, result = null, confirm = null, latencyMs = settings.settings.value.tapLatencyMs)
+        val spans = beginTapPlayback(playback, PlaybackOccurrence(ScorePosition(bars.first()), 1, route), bars.size) ?: return@launch
+        if (spans.map { it.measureId } != bars) {
+            abortRhythm("Der Bereich wird wegen Wiederholungen oder Sprüngen nicht am Stück gespielt – kürzeren Bereich wählen"); return@launch
+        }
+        rhythmSpans = spans
+        watchTapPlayback(spans.first().startFrame, spans.last().endFrame, spans.last().endFrame >= (transport.installedPlan()?.totalFrames ?: Long.MAX_VALUE)) { finishRhythmTap() }
+    } }
+
+    /** Prepares, seeks and plays [playback] with metronome and a one-bar count-in; returns [count] spans from the start. */
+    private suspend fun beginTapPlayback(playback: Project, start: PlaybackOccurrence, count: Int): List<RouteSpan>? {
+        transport.stop()
+        val prepared = transport.prepare(playback, PracticeSettings(speed = practice.value.speed, countInBars = 1, metronome = true))
+        if (prepared is Outcome.Failure) { abortRhythm(prepared.message); return null }
+        transport.seek(start)
+        val played = transport.play()
+        if (played is Outcome.Failure) { abortRhythm(played.message); return null }
+        val plan = transport.installedPlan() ?: run { abortRhythm("Wiedergabe nicht verfügbar"); return null }
+        rhythmRate = plan.sampleRate
+        return plan.spans.drop(start.routeIndex).take(count)
+    }
+
+    /**
+     * Follows the transport: count-in → recording; ends at [end] (or when the transport stops at the end of the piece,
+     * [endsPiece]) with [onEnd]; a pause, failure or stop before the end (audio focus, headphones) aborts without writing.
+     */
+    private fun watchTapPlayback(start: Long, end: Long, endsPiece: Boolean, onEnd: suspend () -> Unit) {
+        rhythmJob?.cancel()
+        rhythmJob = viewModelScope.launch {
+            var interrupted = false
+            transport.state.first { s ->
+                if (!rhythmBusy) return@first true
+                val frame = s.sample?.frame
+                if (rhythm.value.phase == RhythmTapPhase.COUNT_IN && s.status == TransportStatus.PLAYING && !s.countingIn && frame != null && frame > start)
+                    mutableRhythm.value = rhythm.value.copy(phase = RhythmTapPhase.RECORDING)
+                when {
+                    s.status == TransportStatus.PLAYING && frame != null && frame >= end -> true
+                    s.status == TransportStatus.STOPPED && endsPiece && frame != null && frame >= start -> true
+                    s.status != TransportStatus.PLAYING && s.status != TransportStatus.PREPARING -> { interrupted = true; true }
+                    else -> false
+                }
+            }
+            if (!rhythmBusy) return@launch
+            if (interrupted) abortRhythm("Aufnahme unterbrochen") else onEnd()
+        }
+    }
+
+    private suspend fun stopTapPlayback() {
+        transport.stop()
+        session?.state?.value?.project?.let { transport.prepare(it, practice.value) }
+    }
+    private fun abortRhythm(message: String?) {
+        mutableRhythm.value = rhythm.value.copy(phase = RhythmTapPhase.SETUP)
+        rhythmJob?.cancel(); rhythmJob = null
+        viewModelScope.launch { stopTapPlayback() }
+        if (message != null) showNotice(message)
+    }
+    /** Cancel while counting in, recording or calibrating: nothing is written. */
+    fun cancelRhythmTap() { if (rhythmBusy) abortRhythm(null) }
+
+    private suspend fun finishRhythmTap() {
+        if (rhythm.value.phase != RhythmTapPhase.RECORDING && rhythm.value.phase != RhythmTapPhase.COUNT_IN) return
+        mutableRhythm.value = rhythm.value.copy(phase = RhythmTapPhase.PREVIEW)
+        stopTapPlayback()
+        quantizeRhythm()
+    }
+    private fun quantizeRhythm() {
+        val e = session?.state?.value ?: return
+        val origin = rhythmOrigin ?: return
+        val r = rhythm.value
+        val compound = { b: Int -> e.project.measures.firstOrNull { it.id == rhythmSpans.getOrNull(b)?.measureId }?.signature?.let { s -> s.denominator >= 8 && s.numerator % 3 == 0 && s.numerator > 3 } == true }
+        val result = try { RhythmQuantizer.quantize(strokes.toList(), rhythmSpans, rhythmRate, r.grid, compound) } catch (x: IllegalArgumentException) { showNotice(x.message); return }
+        mutableRhythm.value = r.copy(result = result, overwrites = rhythmOverwrites(e.project, origin.trackId, origin.voice, rhythmSpans.map { it.measureId }))
+    }
+
+    /** Touch-down on the tap surface; [nanos] = event time (System.nanoTime base). Haptics are the UI's. */
+    fun rhythmTapDown(nanos: Long) {
+        val phase = rhythm.value.phase
+        if (phase != RhythmTapPhase.COUNT_IN && phase != RhythmTapPhase.RECORDING && phase != RhythmTapPhase.CALIBRATING) return
+        val raw = transport.audiblePlanFrameAt(nanos)
+        if (raw.isNaN()) return
+        if (phase == RhythmTapPhase.CALIBRATING) { calibrationStrokes += TapStroke(raw); mutableRhythm.value = rhythm.value.copy(taps = calibrationStrokes.size); return }
+        strokes += TapStroke(raw - settings.settings.value.tapLatencyMs * rhythmRate / 1000.0)
+        mutableRhythm.value = rhythm.value.copy(taps = strokes.size)
+    }
+    /** Touch-up: the held time of the last stroke (calibration ignores it). */
+    fun rhythmTapUp(nanos: Long) {
+        val phase = rhythm.value.phase
+        if (phase != RhythmTapPhase.COUNT_IN && phase != RhythmTapPhase.RECORDING) return
+        val i = strokes.indexOfLast { it.upFrame.isNaN() }
+        if (i < 0) return
+        val raw = transport.audiblePlanFrameAt(nanos)
+        if (raw.isNaN()) return
+        strokes[i] = strokes[i].copy(upFrame = raw - settings.settings.value.tapLatencyMs * rhythmRate / 1000.0)
+    }
+
+    /** „Übernehmen“: one undo step; with notes in the target voice the first call only asks ([RhythmTapState.confirm]). */
+    fun applyRhythm(mode: RhythmMode, confirmed: Boolean = false) {
+        val r = rhythm.value
+        val result = r.result ?: return
+        val origin = rhythmOrigin ?: return
+        if (r.phase != RhythmTapPhase.PREVIEW) return
+        if (!confirmed && r.overwrites > 0) { mutableRhythm.value = r.copy(confirm = mode); return }
+        val outcome = command(EditorCommand.ApplyRhythm(origin.trackId, origin.voice, result.bars, mode, r.string, r.drumNote))
+        if (outcome is Outcome.Failure) { mutableRhythm.value = r.copy(confirm = null); return }
+        val slots = result.slots()
+        if (mode == RhythmMode.GRID && slots.isNotEmpty()) {
+            rhythmSlots = slots; rhythmSlotVoice = origin.trackId to origin.voice
+            moveCursorTo(origin.copy(measureId = slots.first().measureId, offset = slots.first().offset, string = if (r.fretted) r.string else origin.string))
+        } else moveCursorTo(origin.copy(measureId = result.bars.first().measureId, offset = Fraction.ZERO))
+        mutableRhythm.value = r.copy(phase = RhythmTapPhase.IDLE, result = null, confirm = null)
+        showNotice(if (mode == RhythmMode.GRID) "Rhythmus übernommen: ${result.onsets} Anschläge – Bünde eingeben, der Cursor springt zum nächsten Anschlag"
+            else "Rhythmus übernommen: ${result.onsets} Anschläge")
+    }
+    fun cancelRhythmConfirm() { mutableRhythm.value = rhythm.value.copy(confirm = null) }
+    /** „Verwerfen“: closes the preview; the score is unchanged. */
+    fun discardRhythm() { mutableRhythm.value = rhythm.value.copy(phase = RhythmTapPhase.IDLE, result = null, confirm = null) }
+    /** „Nochmal“: a new recording with the same settings. */
+    fun retryRhythm() { mutableRhythm.value = rhythm.value.copy(phase = RhythmTapPhase.SETUP, result = null, confirm = null); startRhythmTap() }
+
+    private fun rhythmSlotIndex(e: EditorState): Int {
+        val (track, voice) = rhythmSlotVoice ?: return -1
+        if (rhythmSlots.isEmpty() || e.selection.trackId != track || e.selection.voice != voice || e.selection.rangeEnd != null) return -1
+        val beat = selectedBeat(e) ?: return -1
+        if (beat.notes.isNotEmpty()) return -1
+        return rhythmSlots.indexOfFirst { it.measureId == e.selection.measureId && it.offset == e.selection.offset }
+    }
+    /**
+     * After a fret on placeholder [index]: the held note continues into its continuation placeholders (tied, same undo step),
+     * then (with auto-advance) the cursor jumps to the next tapped attack that is still empty — rests between attacks are skipped.
+     */
+    private fun fillRhythmSlot(index: Int, at: Selection, changed: Boolean, advance: Boolean) {
+        val active = session ?: return
+        for ((m, o) in rhythmSlots[index].continuations) {
+            val beat = voiceBeats(active.state.value.project, at.trackId, m, at.voice).firstOrNull { it.offset == o }
+            if (beat == null || beat.notes.isNotEmpty()) break
+            try { active.select(at.copy(measureId = m, offset = o, rangeEnd = null)) } catch (x: IllegalArgumentException) { break }
+            if (command(EditorCommand.ToggleTie, sameUndoStep = changed) is Outcome.Failure) break
+        }
+        if (!advance) { moveCursorTo(at); return }
+        val p = active.state.value.project
+        val next = (index + 1 until rhythmSlots.size).firstOrNull { i -> rhythmSlots[i].let { sl -> voiceBeats(p, at.trackId, sl.measureId, at.voice).firstOrNull { it.offset == sl.offset }?.notes?.isEmpty() == true } }
+        if (next == null) { rhythmSlots = emptyList(); rhythmSlotVoice = null; moveCursorTo(at); showNotice("Alle getippten Anschläge belegt"); return }
+        navigateTo(at.copy(measureId = rhythmSlots[next].measureId, offset = rhythmSlots[next].offset, rangeEnd = null))
+    }
+
+    /** „Kalibrieren“: 8 clicks at 100 BPM after a one-bar count-in; the user taps along, the median offset is stored. */
+    fun startTapCalibration() { viewModelScope.launch {
+        if (rhythmBusy) return@launch
+        val e = session?.state?.value ?: return@launch
+        val p = e.project
+        val measures = List(2) { Measure(EntityId("tap-cal-m$it")) }
+        val cal = p.copy(measures = measures, sections = emptyList(), text = emptyList(), audio = AudioArrangement(),
+            tempo = listOf(TempoChange(ScorePosition(measures.first().id), 100.0)),
+            tracks = p.tracks.mapIndexed { ti, t -> t.copy(mix = t.mix.copy(mute = true, solo = false), staves = t.staves.take(1).map { st ->
+                st.copy(bars = measures.mapIndexed { mi, m -> Bar(EntityId("tap-cal-b$ti-$mi"), m.id, List(4) { v -> Voice(EntityId("tap-cal-v$ti-$mi-$v"), v) }) }) }) })
+        calibrationStrokes.clear()
+        mutableRhythm.value = rhythm.value.copy(phase = RhythmTapPhase.CALIBRATING, taps = 0)
+        val spans = beginTapPlayback(cal, PlaybackOccurrence(ScorePosition(measures.first().id), 1, 0), 2) ?: return@launch
+        calibrationClicks = transport.installedPlan()?.clicks?.map { it.frame }.orEmpty()
+        watchTapPlayback(spans.first().startFrame, spans.last().endFrame, endsPiece = true) { finishCalibration() }
+    } }
+    private suspend fun finishCalibration() {
+        if (rhythm.value.phase != RhythmTapPhase.CALIBRATING) return
+        mutableRhythm.value = rhythm.value.copy(phase = RhythmTapPhase.SETUP)
+        stopTapPlayback()
+        val offset = TapCalibration.offsetMillis(TapCalibration.deltasMillis(calibrationStrokes.map { it.downFrame }, calibrationClicks, rhythmRate))
+        if (offset == null) { showNotice("Kalibrierung unsicher – bitte zu jedem Klick tippen und wiederholen"); return }
+        settings.update(settings.settings.value.copy(tapLatencyMs = offset))
+        mutableRhythm.value = rhythm.value.copy(latencyMs = offset)
+        showNotice("Tipp-Latenz gespeichert: ${kotlin.math.round(offset).toInt()} ms")
+    }
+    /** Back to 0 ms. */
+    fun resetTapCalibration() { viewModelScope.launch { settings.update(settings.settings.value.copy(tapLatencyMs = 0.0)); mutableRhythm.value = rhythm.value.copy(latencyMs = 0.0) } }
+
     // ------------------------------------------------------------------ internals
     private fun publish() {
         mutable.value = mutable.value.copy(editor = session?.state?.value)
         relayout()
         val project = session?.state?.value?.project ?: return
-        if (transport.state.value.status == TransportStatus.PLAYING || transport.state.value.status == TransportStatus.PAUSED) viewModelScope.launch { transport.prepare(project, practice.value) }
+        // While a rhythm is tapped the transport plays the tapping copy (target track silent): keep it.
+        if (!rhythmBusy && (transport.state.value.status == TransportStatus.PLAYING || transport.state.value.status == TransportStatus.PAUSED)) viewModelScope.launch { transport.prepare(project, practice.value) }
     }
     private fun enqueueSave() { mutable.value = mutable.value.copy(saveStatus = SaveStatus.SAVING); session?.state?.value?.project?.let { saves.trySend(it) } }
     private suspend fun persist(project: Project): Outcome<Unit> = saveMutex.withLock {

@@ -85,3 +85,32 @@ enum class ExportTarget(val id: String, val labelDe: String, val labelEn: String
     WAV("wav", "WAV-Mix (48 kHz, 24 Bit)", "WAV mix (48 kHz, 24-bit)", "wav", streamed = true),
     STEMS("stems", "Stems + MIDI für die DAW (.zip)", "Stems + MIDI for the DAW (.zip)", "zip", streamed = true),
 }
+
+/** Zyklus 25 „Rhythmus tippen“: where the flow is. COUNT_IN/RECORDING/CALIBRATING run the transport. */
+enum class RhythmTapPhase { IDLE, SETUP, COUNT_IN, RECORDING, PREVIEW, CALIBRATING }
+
+data class RhythmTapState(
+    val phase: RhythmTapPhase = RhythmTapPhase.IDLE,
+    /** Target: the visible bar range (Zyklus-23 rules) when there is one and [useRange], else [barCount] bars from the cursor bar. */
+    val useRange: Boolean = true,
+    val barCount: Int = 2,
+    /** Target bars (measure ids, consecutive) and a label such as „Takte 2–3“. */
+    val bars: List<dev.riffworkbench.model.EntityId> = emptyList(),
+    val label: String = "",
+    val grid: dev.riffworkbench.editor.RhythmGrid = dev.riffworkbench.editor.RhythmGrid.SIXTEENTH,
+    /** Other tracks play along (the target track stays silent); off: metronome only. */
+    val accompaniment: Boolean = false,
+    /** Fretted track: string for „Leersaite“ (0 = lowest); drum track: kit piece. */
+    val fretted: Boolean = true,
+    val drums: Boolean = false,
+    val string: Int = 0,
+    val drumNote: Int = 38,
+    val taps: Int = 0,
+    val result: dev.riffworkbench.editor.RhythmResult? = null,
+    /** Notes the apply would overwrite in the target voice; > 0 asks first. */
+    val overwrites: Int = 0,
+    /** Apply waiting for the overwrite confirmation. */
+    val confirm: dev.riffworkbench.editor.RhythmMode? = null,
+    /** Calibrated tap latency in ms (AppSettings.tapLatencyMs). */
+    val latencyMs: Double = 0.0,
+)
