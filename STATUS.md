@@ -4,7 +4,7 @@ Fortsetzung nach Pausen: dieses Dokument + `docs/QA_JOURNAL.md` lesen, dann beim
 Branch: `ccr-0b650dff-jnhups-qa`, per Fast-Forward gespiegelt nach `ccr-0b650dff-jnhups`. Android-Builds/Tests nur auf GitHub Actions; lokal JVM-Harness für die portablen Module.
 
 ## Stand
-- Letzter grüner CI-Lauf: b25c72a (Lauf 42290587608, Build + `check` + Lint + Robolectric, APK-Artefakt `riffworkbench-debug-apk`). Vorher grün: e2c2cb4, 8e5ab38, babba9a, eb82763, 2acce85, 1eec164, d9c3c09, 7ed6d80, 2b8a1d7, 64b495b.
+- Letzter grüner CI-Lauf: d8c56e0 (Lauf 42817667464, Build + `check` + Lint + Robolectric, APK-Artefakt `riffworkbench-debug-apk`). Vorher grün: e2c2cb4, 8e5ab38, babba9a, eb82763, 2acce85, 1eec164, d9c3c09, 7ed6d80, 2b8a1d7, 64b495b.
 - Lokale JVM-Suite (portable Module): 620/620 grün auf 9579316 (+ ViewModel-Shim 59/59).
 - Zyklus 18 abgeschlossen (siehe QA_JOURNAL): Sample-Bank v2 (Feinstimmung/Pegel), Gain-Staging, Transport-Startfixes, Seek-Poller-Race, Startmarke/Zum-Anfang, ViewportScroll, Taktangabe-Sheet (Long-Press), Standard 1×4/4 + E-Standard, Umstimmen mit Konfliktplan.
 - Zyklus 19 gemergt (64b495b, JVM 549/549, CI grün): Long-Press-Bereichsauswahl mit Haptik, Drum-Pegel/erster Hit/Raster, Gitarren-Artikulationen (Natural/Pinch Harmonics, Palm-Mute-Klangfarbe), Live = Offline bitidentisch, zwei Start-Races im Transport (PLAYING→PAUSED-Flackern, Ansicht sprang).
@@ -40,6 +40,8 @@ Branch: `ccr-0b650dff-jnhups-qa`, per Fast-Forward gespiegelt nach `ccr-0b650dff
 - [ ] Dauerzeile auf 320-dp-Geräten effektiv 37,75 dp (außerhalb der Prüfmatrix); Bei Schrift 2,0 verkleinert die Hinweiszeile den Editor stark
 - [ ] Langer Hall endet im Export hart nach 2 s Ausklang (≈ −82 dBFS)
 - [x] Übersteuerte Exporte melden sich jetzt (Qa22ExportClipNoticeTest): die Exportmeldung nennt jede übersteuerte Datei mit Sample-Zahl. Stems sind unabhängig vom Master-Fader (Qa22TransitionPinchLoudnessTest.stemsDoNotDependOnTheMasterFader, rot davor: Clean-Stem bei Master 1,0 +3,1 dBFS, 72 geclippt); kein Fader-Paar kann einen Stem mehr übersteuern
+
+## Zyklus 25 (gemergt, CI grün d8c56e0): „Rhythmus tippen“ (Werkzeuge → Rhythmus): Vorzähler + Metronom, Tippfläche mit Down/Up, Haltedauer = Notenwert, kurzer Tipp = Anschlag + Pausen, Raster 1/8–1/32/Auto (Triolen), Übernahme als Raster-Platzhalter oder Leersaite (ein Undo), Latenz-Kalibrierung (AppSettings.tapLatencyMs), Zeitabbildung Tipp → hörbarer Planframe. Notenwert ändern verschiebt keine Folgenoten mehr (kürzer → Pause, länger frisst Pausen, sonst Ablehnung). Gerätegefühl/Timing ungeprüft.
 
 ## Zyklus 24 (gemergt, CI grün b25c72a): App heißt ArtiFret (sichtbare Namen; Pakete/App-ID/.riffproj unverändert), neues adaptives Icon, gesampeltes Schlagzeug „ArtiFret Pearl Kit“ aus AVL Black Pearl 4 (CC BY-SA 3.0 mit AVL-Ausnahme; README in Assets und unter Einstellungen → Lizenzen & Herkunft; docs/DEPENDENCIES.md), synthetisches Kit als Fallback. Hörurteil offen: transponierte Toms, China = Crash 3, Kit-Balance.
 
