@@ -217,7 +217,7 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
         is EditorCommand.MoveToString -> NoteEdits.moveToString(p, s, c.string)
         is EditorCommand.MoveNote -> moveNote(p, s, c)
         is EditorCommand.Transpose -> NoteEdits.transpose(p, s, c.semitones, c.scope)
-        is EditorCommand.SetTuplet -> NoteEdits.setDurationRipple(p, s) { it.copy(tuplets = listOfNotNull(c.ratio)) }
+        is EditorCommand.SetTuplet -> NoteEdits.setDurationInPlace(p, s, ids) { it.copy(tuplets = listOfNotNull(c.ratio)) }
         is EditorCommand.SetFermata -> {
             c.fermata?.let { require(it.multiplier.isFinite() && it.multiplier in 0.1..8.0) { "Fermatendauer ungültig" } }
             NoteEdits.updateSelectedBeat(p, s) { it.copy(fermata = c.fermata) }
@@ -257,7 +257,7 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
             requireFiniteEffects(c.mix.effects)
             p.copy(mix = p.mix.copy(master = c.mix))
         }
-        is EditorCommand.SetDuration -> NoteEdits.setDurationRipple(p, s) { c.duration }
+        is EditorCommand.SetDuration -> NoteEdits.setDurationInPlace(p, s, ids) { c.duration }
         is EditorCommand.AddAudioClip -> {
             require(c.clip.asset == c.asset.hash) { "Clip und Asset passen nicht zusammen" }
             require(p.audio.clips.size < 16) { "Höchstens 16 Audioclips" }

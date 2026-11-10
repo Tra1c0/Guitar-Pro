@@ -44,6 +44,36 @@ object Durations {
         return null
     }
 
+    private val greedyValues: List<WrittenDuration> = denominators.flatMap { d -> (0..2).map { WrittenDuration(d, it) } }.sortedByDescending { it.length() }
+    private fun dyadic(f: Fraction) = f.denominator > 0 && f.denominator and (f.denominator - 1) == 0L && f.denominator <= 256
+
+    /**
+     * [length] as a sequence of writable values, longest first (Zyklus 25: rests behind a shortened beat, tapped rhythms):
+     * plain values (dots up to 2) when the length is dyadic, else in the first tuplet family of [tuplets] (then 3:2) whose
+     * written length is dyadic; null when neither works. A single exact value ([exact]) is preferred.
+     */
+    fun decompose(length: Fraction, tuplets: List<TupletRatio> = emptyList()): List<WrittenDuration>? {
+        if (length <= Fraction.ZERO) return emptyList()
+        exact(length, tuplets.take(1))?.let { return listOf(it) }
+        fun greedy(rest0: Fraction, t: List<TupletRatio>): List<WrittenDuration>? {
+            var rest = rest0
+            val out = ArrayList<WrittenDuration>()
+            while (rest > Fraction.ZERO) {
+                val v = greedyValues.firstOrNull { it.length() <= rest } ?: return null
+                out += if (t.isEmpty()) v else v.copy(tuplets = t)
+                rest += v.length() * Fraction.of(-1)
+                if (out.size > 64) return null
+            }
+            return out
+        }
+        if (dyadic(length)) return greedy(length, emptyList())
+        for (t in (tuplets + TupletRatio(3, 2)).distinct()) {
+            val written = length * Fraction.of(t.actual.toLong(), t.normal.toLong())
+            if (dyadic(written)) return greedy(written, listOf(t))
+        }
+        return null
+    }
+
     /**
      * [wanted] if it fits into [room]; otherwise the longest duration of the same tuplet family (then plain) that does, so an
      * entry fills a gap instead of overlapping the next beat; null when nothing fits.

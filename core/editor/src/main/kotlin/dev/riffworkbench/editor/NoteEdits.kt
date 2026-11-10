@@ -157,13 +157,50 @@ internal object NoteEdits {
         return b.copy(notes = notes)
     }
 
-    /** Changes the selected beat's duration and shifts later beats of the voice (GP-style ripple inside the bar). */
-    fun setDurationRipple(p: Project, s: Selection, transform: (WrittenDuration) -> WrittenDuration): Project {
+    /**
+     * Changes the selected beat's duration in place (Zyklus 25, Nutzerentscheidung „Notenwert ändern ohne Verschieben“):
+     * every later onset of the voice keeps its position. Shorter: the freed time becomes rest(s) right behind the beat
+     * (split into writable values). Longer: only into rests (or empty room) behind the beat, which are consumed or
+     * shortened; a note in the way rejects the change („Kein Platz: nächste Note bei …“) and nothing changes. Replaces
+     * the former ripple, which shifted all later beats of the bar.
+     */
+    fun setDurationInPlace(p: Project, s: Selection, ids: IdSource, transform: (WrittenDuration) -> WrittenDuration): Project {
         val beat = selectedBeat(p, s) ?: return p
         val next = transform(beat.duration)
         if (next == beat.duration) return p
-        val delta = next.length() + beat.duration.length() * Fraction.of(-1)
-        return mapVoice(p, s) { v, _, m -> rippled(v.copy(beats = v.beats.map { if (it.offset == beat.offset) it.copy(duration = next) else it }), beat.offset, delta, m) }
+        return mapVoice(p, s) { v, _, m -> v.copy(beats = resizedInPlace(v.beats, beat, next, m, ids)) }
+    }
+
+    /** [beats] with [beat] set to [next]; see [setDurationInPlace]. */
+    fun resizedInPlace(beats: List<Beat>, beat: Beat, next: WrittenDuration, m: Measure, ids: IdSource): List<Beat> {
+        val oldEnd = beat.offset + beat.duration.length()
+        val newEnd = beat.offset + next.length()
+        val tuplets = (next.tuplets + beat.duration.tuplets).distinct()
+        val others = beats.filter { it.id != beat.id }
+        fun rests(from: Fraction, to: Fraction): List<Beat> {
+            if (to <= from) return emptyList()
+            val parts = Durations.decompose(to + from * Fraction.of(-1), tuplets) ?: throw IllegalArgumentException("Die frei werdende Dauer lässt sich nicht als Pause schreiben")
+            var at = from
+            return parts.map { d -> Beat(ids.next(), at, d, explicitRest = true).also { at += d.length() } }
+        }
+        val out = if (newEnd < oldEnd) others + beat.copy(duration = next) + rests(newEnd, oldEnd)
+        else {
+            require(newEnd <= capacity(m)) { "Kein Platz: der Notenwert reicht über das Taktende" }
+            val inWay = others.filter { it.offset >= oldEnd && it.offset < newEnd }
+            inWay.firstOrNull { it.notes.isNotEmpty() }?.let { throw IllegalArgumentException("Kein Platz: nächste Note bei Zählzeit ${beatLabel(it.offset, m)}") }
+            val tail = inWay.maxByOrNull { it.offset }?.let { r -> rests(newEnd, r.offset + r.duration.length()) }.orEmpty()
+            others.filterNot { it in inWay } + beat.copy(duration = next) + tail
+        }
+        return out.sortedBy { it.offset }
+    }
+
+    /** 1-based count of [offset] in the bar's beats (signature denominator): 1/2 in 4/4 is „3“, 3/8 in 4/4 is „2,5“. */
+    fun beatLabel(offset: Fraction, m: Measure): String {
+        val beats = offset * Fraction.of(m.signature.denominator.toLong())
+        if (beats.denominator == 1L) return "${beats.numerator + 1}"
+        val hundredths = kotlin.math.round((beats.toDouble() + 1) * 100).toLong()
+        val frac = (hundredths % 100).toString().padStart(2, '0').trimEnd('0')
+        return "${hundredths / 100}" + if (frac.isEmpty()) "" else ",$frac"
     }
 
     private fun rippled(v: Voice, after: Fraction, delta: Fraction, m: Measure): Voice {

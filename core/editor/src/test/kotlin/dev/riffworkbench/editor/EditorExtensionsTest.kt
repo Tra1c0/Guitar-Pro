@@ -39,16 +39,28 @@ class EditorExtensionsTest {
         assertTrue(e.voice(measure = 0).beats.single().notes.single().links.isEmpty())
     }
 
-    @Test fun durationChangesRippleInsideTheBarAndRefuseOverflow() {
+    /**
+     * Zyklus 25 (Nutzerentscheidung „Notenwert ändern ohne Verschieben“): this test fixed the former ripple (1/16 → 1/8
+     * moved the later beats to 1/8 and 3/16). Now later onsets keep their place: lengthening into a note is refused without
+     * change, lengthening into a rest consumes it, shortening (triplet) leaves a rest behind; overflow is still refused.
+     */
+    @Test fun durationChangesKeepLaterOnsetsAndRefuseOverflow() {
         val e = session()
         listOf(0L, 1L, 2L).forEach { e.at(f(it, 16)); e.ok(EditorCommand.PutNote(fret = it.toInt())) }
+        e.at(Fraction.ZERO)
+        val before = e.state.value.project
+        val blocked = e.dispatch(EditorCommand.SetDuration(WrittenDuration(8)))
+        assertTrue(blocked is Outcome.Failure && (blocked as Outcome.Failure).message.startsWith("Kein Platz: nächste Note bei Zählzeit"))
+        assertEquals(before, e.state.value.project)
+        e.at(f(1, 16)); e.ok(EditorCommand.PutRest(WrittenDuration(16)))
         e.at(Fraction.ZERO); e.ok(EditorCommand.SetDuration(WrittenDuration(8)))
-        assertEquals(listOf(f(0, 1), f(1, 8), f(3, 16)), e.voice().beats.map { it.offset })
+        assertEquals(listOf(f(0, 1), f(1, 8)), e.voice().beats.map { it.offset })
         e.ok(EditorCommand.SetTuplet(TupletRatio(3, 2)))
         assertEquals(f(1, 12), e.voice().beats[0].duration.length())
-        e.ok(EditorCommand.DeleteBeat)
-        assertEquals(listOf(f(0, 1), f(1, 16)), e.voice().beats.map { it.offset })
-        e.at(Fraction.ZERO); e.ok(EditorCommand.SetDuration(WrittenDuration(2)))
+        assertEquals(listOf(f(0, 1), f(1, 12), f(1, 8)), e.voice().beats.map { it.offset })
+        assertTrue(e.voice().beats[1].explicitRest && e.voice().beats[1].duration.length() == f(1, 24))
+        valid(e.state.value.project)
+        e.at(f(1, 8)); e.ok(EditorCommand.SetDuration(WrittenDuration(2)))
         assertTrue(e.dispatch(EditorCommand.SetDuration(WrittenDuration(1))) is Outcome.Failure)
     }
 
