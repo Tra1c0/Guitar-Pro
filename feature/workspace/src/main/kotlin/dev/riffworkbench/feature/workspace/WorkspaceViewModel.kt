@@ -790,7 +790,10 @@ class WorkspaceViewModel(
         if (bars.isEmpty()) return@launch
         val track = e.project.tracks.firstOrNull { it.id == e.selection.trackId } ?: return@launch
         rhythmOrigin = e.selection.copy(rangeEnd = null)
-        val playback = e.project.copy(tracks = e.project.tracks.map { t -> t.copy(mix = t.mix.copy(solo = false, mute = if (r.accompaniment) t.id == track.id || t.mix.mute else true)) })
+        // Own (negative) revision: the transport skips a prepare with the same id, revision and settings, so a tapping copy
+        // with the score's revision could survive the restore when the practice settings equal the tapping ones (muted tracks).
+        val playback = e.project.copy(revision = -1 - e.project.revision,
+            tracks = e.project.tracks.map { t -> t.copy(mix = t.mix.copy(solo = false, mute = if (r.accompaniment) t.id == track.id || t.mix.mute else true)) })
         val route = routeIndexFor(playback, bars.first()) ?: run { showNotice("Wiedergaberoute ungültig"); return@launch }
         strokes.clear()
         mutableRhythm.value = r.copy(phase = RhythmTapPhase.COUNT_IN, taps = 0, result = null, confirm = null, latencyMs = settings.settings.value.tapLatencyMs)
@@ -945,7 +948,7 @@ class WorkspaceViewModel(
         val e = session?.state?.value ?: return@launch
         val p = e.project
         val measures = List(2) { Measure(EntityId("tap-cal-m$it")) }
-        val cal = p.copy(measures = measures, sections = emptyList(), text = emptyList(), audio = AudioArrangement(),
+        val cal = p.copy(revision = Long.MIN_VALUE + p.revision, measures = measures, sections = emptyList(), text = emptyList(), audio = AudioArrangement(),
             tempo = listOf(TempoChange(ScorePosition(measures.first().id), 100.0)),
             tracks = p.tracks.mapIndexed { ti, t -> t.copy(mix = t.mix.copy(mute = true, solo = false), staves = t.staves.take(1).map { st ->
                 st.copy(bars = measures.mapIndexed { mi, m -> Bar(EntityId("tap-cal-b$ti-$mi"), m.id, List(4) { v -> Voice(EntityId("tap-cal-v$ti-$mi-$v"), v) }) }) }) })

@@ -117,6 +117,8 @@ class Qa25RhythmTapViewModelTest {
         // Played: a copy with every track silent (no accompaniment), metronome and one bar count-in; restored afterwards.
         val tapping = x.t.prepared.first { p -> p.tracks.all { it.mix.mute } }
         assertEquals(before.tracks.map { it.id }, tapping.tracks.map { it.id })
+        // Own revision: EngineTransport skips a prepare with equal id/revision/settings, the restore must not be skipped.
+        assertNotEquals(before.revision, tapping.revision)
         assertEquals(TransportStatus.STOPPED, x.t.state.value.status)
         assertEquals(editor(x).project, x.t.prepared.last())
         val r = x.vm.rhythm.value
