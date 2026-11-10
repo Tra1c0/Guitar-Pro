@@ -74,9 +74,11 @@ import dev.riffworkbench.ui.score.pitchName
         }
     }
     if (moreTools) ModalBottomSheet(onDismissRequest = { moreTools = false }, containerColor = MaterialTheme.colorScheme.surface) {
-        Box(Modifier.fillMaxWidth()) { MoreTools(vm, state, input); SheetNoticeOverlay(vm) }
+        Box(Modifier.fillMaxWidth()) { MoreTools(vm, state, input, onRhythmTap = { moreTools = false; vm.openRhythmTap() }); SheetNoticeOverlay(vm) }
     }
     signatureEditor?.let { id -> SignatureSheet(vm, EntityId(id), onDismiss = { signatureEditor = null }) }
+    // Zyklus 25: „Rhythmus tippen“ (opened from the tools sheet) as a full-screen dialog over the editor.
+    RhythmTapDialog(vm, state)
 }
 
 /**
@@ -388,7 +390,7 @@ private val HeaderTouchTarget = 40.dp
 }
 
 /** Everything that is not needed for every note: further techniques, rhythm extras and bar tools. */
-@Composable private fun MoreTools(vm: WorkspaceViewModel, state: EditorState, input: NoteInput) {
+@Composable private fun MoreTools(vm: WorkspaceViewModel, state: EditorState, input: NoteInput, onRhythmTap: () -> Unit) {
     val practice by vm.practice.collectAsStateWithLifecycle()
     val note = vm.selectedNote(state)
     fun has(kind: NoteMark) = note?.articulations?.contains(Articulation.Mark(kind)) == true
@@ -431,6 +433,8 @@ private val HeaderTouchTarget = 40.dp
             Triple("1/64", input.duration.denominator == 64) { vm.setDuration(denominator = 64) },
             Triple(tr("Doppelpunkt", "Double dot"), input.duration.dots == 2) { vm.setDuration(dots = if (input.duration.dots == 2) 0 else 2) },
             Triple(tr("Beat löschen", "Delete beat"), false) { vm.command(EditorCommand.DeleteBeat); Unit },
+            // Zyklus 25: tap a rhythm to the metronome (grid placeholders or open strings).
+            Triple(tr("Rhythmus tippen", "Tap rhythm"), false, onRhythmTap),
         ))
         section(tr("Takte", "Bars"))
         grid(listOf(
