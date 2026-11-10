@@ -95,6 +95,12 @@ sealed interface EditorCommand {
     data class AddAudioClip(val clip: AudioClip, val asset: AssetDescriptor) : EditorCommand
     data class UpdateAudioClip(val clip: AudioClip) : EditorCommand
     data class RemoveAudioClip(val id: EntityId) : EditorCommand
+    /**
+     * Zyklus 25 „Rhythmus tippen“: replaces the whole content of [voice] of [trackId] in the bars of [bars] (consecutive,
+     * each filled exactly) by the tapped rhythm, as one undo step. GRID: rest placeholders with the tapped durations;
+     * OPEN_STRING: fret 0 on [string] (held notes tied over barlines and value splits), drum tracks [drumNote] per attack.
+     */
+    data class ApplyRhythm(val trackId: EntityId, val voice: Int, val bars: List<RhythmBar>, val mode: RhythmMode, val string: Int = 0, val drumNote: Int = 38) : EditorCommand
 }
 
 /** Single-owner dispatcher: call selection + commands on the same UI dispatcher. No adapter mutates this state. */
@@ -276,6 +282,7 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
             p.copy(audio = p.audio.copy(clips = clips, assets = p.audio.assets.filter { a -> clips.any { it.asset == a.hash } }))
         }
         is EditorCommand.ToggleDrum -> drumToggle(p, s, c)
+        is EditorCommand.ApplyRhythm -> RhythmEdits.apply(p, c, ids)
         else -> updateBeat(p, s, createIfMissing = c != EditorCommand.Delete) { beat, track, existed ->
             when (c) {
                 is EditorCommand.PutNote -> {
