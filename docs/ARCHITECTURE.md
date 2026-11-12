@@ -11,6 +11,7 @@ Diese Entscheidungen wurden bei der Fertigstellung bewusst getroffen. Jede ist �
 5. **Eigene Formatimplementierungen.** GP3/4/5, GPX, GP7/8 (GPIF), MIDI, MusicXML und ASCII-TAB werden selbst gelesen bzw. geschrieben, mit Inhaltserkennung, strikten Parsern, Ressourcenlimits und Verlustberichten. Originalbytes bleiben als Asset erhalten.
 6. **Natives Schema bleibt Version 1.** Alle neuen Fähigkeiten nutzen bereits vorhandene typisierte Modellfelder. Neu sind nur Laufzeitklassen (Wiedergabeplan, Anzeigeliste), die nie gespeichert werden.
 7. **Referenz-Audio über die Gerätedecoder.** MediaCodec deckt MP3, AAC/M4A, Ogg und FLAC ab, ohne Codecs mitzuliefern; WAV wird in Kotlin decodiert. Bis Time-Stretch existiert, ist Referenz-Audio nur bei 100 % Tempo hörbar statt falsch synchron.
+8. **Updates aus GitHub Releases (Zyklus 27).** Signierte Debug-APK aus der CI, Prüfung und Download durch die App selbst; einzige Netzwerkverbindung, abschaltbar. Siehe [Updates](#updates-zyklus-27).
 
 ## Module
 
@@ -80,6 +81,17 @@ Die Erkennung prüft Inhalte (ZIP-Einträge, Binärköpfe, XML-Wurzel), nicht di
 ## Referenz-Audio
 
 Import: Dateiauswahl → `AudioDecoder.probe` (WAV in Kotlin, sonst MediaCodec) → AssetStore (SHA-256) → `AudioClip` im Projekt. Wiedergabe: `EngineTransport` lädt Clips über `DecodingClipLoader` (Asset → Decoder → `PcmBuilder`, der während des Decodierens auf die Geräterate resampelt; höchstens 10 Minuten) und übergibt ein `ClipSet`. Clips liegen in Planframes, deshalb bleiben sie bei Loop, Seek und Count-in sample-genau zur Partitur. Ein gemeinsames Solo gilt für Spuren und Clips.
+
+## Updates (Zyklus 27)
+
+Einzige Netzwerkverbindung der App, abschaltbar. Entscheidung: Die Debug-APK (die vom Nutzer getestete Variante; der minifizierte Release-Build ist nie auf einem Gerät geprüft) wird in der CI mit einem festen Schlüssel aus GitHub Secrets signiert und als GitHub Release veröffentlicht; die App holt Updates selbst, Android verlangt bei jeder Installation die Bestätigung des Nutzers.
+
+- **Version:** CI setzt `RW_VERSION_CODE` = Laufnummer + 1000 und `RW_VERSION_NAME` = „0.<Laufnummer>“ (`tools/ci_update_signing.sh`), lokal versionCode 1 / „0.1.0-dev“. `BuildConfig.VERSION_CODE/VERSION_NAME` nennen dem Updater die installierte Version. Signatur `signingConfigs.updates` (PKCS12) nur, wenn `RW_KEYSTORE_FILE`, `RW_KEYSTORE_PASSWORD`, `RW_KEY_ALIAS`, `RW_KEY_PASSWORD` gesetzt sind; sonst bleibt der Build unverändert.
+- **Kanal:** Job `release` (nur Push auf `ccr-0b650dff-jnhups-qa`, nach grünem `verify`, nur mit Keystore-Secret) → Release `v<versionCode>`, Asset `ArtiFret-<versionName>.apk`, Text = Kurzlog seit dem letzten `v*`-Tag, „latest“ nur wenn neuer als das bisherige (`tools/ci_publish_release.sh`), nie Prerelease.
+- **Prüfen:** `UpdateChecker` (core:ports) → `GitHubUpdateChecker` (platform:android): `GET api.github.com/repos/Tra1c0/Guitar-Pro/releases/latest`, anonym, User-Agent „ArtiFret-Updater“, 10 s Timeout, Antwort ≤ 1 MB; `Updates.parseLatestRelease` (portabel, kotlinx-serialization) verlangt Tag `v<code>` > installiert, kein Draft/Prerelease, ein `.apk`-Asset unter `https://github.com/Tra1c0/Guitar-Pro/releases/download/`, 0 < Größe ≤ 300 MB, optional SHA-256 aus dem Asset-`digest`.
+- **Ablauf:** `UpdateCoordinator` (core:ports, eine Instanz im AppContainer): Startprüfung nach dem Laden der Einstellungen nur bei `AppSettings.updateChecks` und höchstens alle 6 h (`lastUpdateCheckEpochMs` wird vor der Anfrage geschrieben); still bei offline/aktuell/Fehler, sonst Overlay „Update <version> verfügbar“ mit „Installieren“ (öffnet Einstellungen → Updates). „Jetzt prüfen“ meldet jedes Ergebnis. Nie zwei Prüfungen/Installationen gleichzeitig.
+- **Installieren:** `UpdateInstaller` → `AndroidUpdateInstaller`: Download nach `cache/updates` mit Fortschritt, Größe und (falls vorhanden) SHA-256 gegen die Release-Daten, Paketname und versionCode der APK gegen die Ankündigung; ohne „Unbekannte Apps installieren“ öffnet sich die Systemseite (`ACTION_MANAGE_UNKNOWN_APP_SOURCES`), danach erneut „Installieren“ (der Download wird wiederverwendet). Übergabe per PackageInstaller-Session (Status → `UpdateInstallReceiver`, startet die Systembestätigung, Fehler als Toast), Rückfall FileProvider (`${applicationId}.updates`, nur `cache/updates`) + `ACTION_VIEW`. Die Signaturgleichheit prüft Android selbst.
+- **Tests ohne Netz:** Robolectric-Läufe der echten App erhalten `OfflineUpdateChecker` und keine Startprüfung (`Build.FINGERPRINT == "robolectric"`).
 
 ## Zustandsfluss
 

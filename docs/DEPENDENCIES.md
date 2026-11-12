@@ -24,6 +24,17 @@ Die Fertigstellung hat **keine neue Bibliotheks-Abhängigkeit** hinzugefügt. Sy
 
 Maven-Publikation wurde gegen Google Maven/Maven Central geprüft. Ein gemeinsamer Build ist die maßgebliche Prüfung, nicht die bloße Existenz der POMs. Das konkrete Dependency-Inventar ist mit `./gradlew :app:dependencies --configuration debugRuntimeClasspath` reproduzierbar. Die vollständige Apache-2.0-Lizenz liegt unter third_party und als App-Asset vor.
 
+## Netzwerk und Updates (Zyklus 27)
+
+Keine neue Bibliothek: Die Update-Prüfung nutzt `HttpURLConnection` und `PackageInstaller` des Betriebssystems, `kotlinx-serialization-json` (oben, jetzt auch in `core:ports` zum Lesen der Release-Antwort) und `androidx.core` (`FileProvider`, `PackageInfoCompat`). Neue Berechtigungen: `INTERNET` (nur für die Update-Prüfung) und `REQUEST_INSTALL_PACKAGES` (Übergabe an den Systeminstaller, Android fragt jedes Mal).
+
+| Gegenstelle | Wann | Was wird gesendet |
+|---|---|---|
+| `https://api.github.com/repos/Tra1c0/Guitar-Pro/releases/latest` | beim App-Start höchstens alle 6 h, wenn *Einstellungen → Updates → Automatisch nach Updates suchen* an ist (Standard), und bei „Jetzt prüfen“ | anonyme GET-Anfrage, User-Agent `ArtiFret-Updater`; kein Token, keine Cookies, keine Geräte-, Projekt- oder Nutzerdaten. GitHub sieht IP-Adresse und Zeitpunkt wie bei jedem Seitenaufruf. |
+| `https://github.com/Tra1c0/Guitar-Pro/releases/download/…` (Weiterleitung auf GitHubs Speicher) | nur nach Tippen auf „Installieren“ | anonymer Download der APK, sonst nichts. |
+
+Ist der Schalter aus, fragt die App nur noch nach ausdrücklichem „Jetzt prüfen“; alle übrigen Funktionen arbeiten ohne Netz. Die Signaturschlüssel liegen ausschließlich als GitHub-Actions-Secrets vor, nie im Repository oder in der APK.
+
 ## Mitgelieferte Schriften
 
 | Schrift | Quelle | Lizenz / Verwendung |

@@ -296,3 +296,12 @@ Aktuelle native Speicherung garantiert atomare Sichtbarkeit eines vollständig g
 - Ein-/Ausgabe: Tastatur (Ziffern, Enter, Pfeile, Bild auf/ab, Leertaste, P/X/G/H/I/T/L/S/B/V/N/D, Strg+Z/Y/S/C/V/D, Strg+↑/↓, F4) und Touch nutzen dieselben Befehle. Eigene Tastenbelegung und Befehlspalette folgen.
 - Ausführung und Fehler: 48-dp-Aktionen, beschriftete Controls, Pfeil-/Saitenalternativen zum Antippen der Partitur; Querformat und Tablet mit seitlichem Eingabefeld und NavigationRail.
 - Abnahme: Tastatur und Screenreader auf dem Gerät, 60 fps und <50 ms p95 Touch→Paint sind ungemessen.
+
+## C-UPDATE
+
+**App-Updates aus GitHub Releases · Implementiert (Zyklus 27); Gerätetest offen**
+
+- Grenze: `UpdateChecker` → `GitHubUpdateChecker`, `UpdateInstaller` → `AndroidUpdateInstaller` (platform:android), Ablauf `UpdateCoordinator`, Regeln `Updates` (core:ports); Einstellung `AppSettings.updateChecks`, Drossel `AppSettings.lastUpdateCheckEpochMs`.
+- Ein-/Ausgabe: `check()` → `Success(UpdateInfo)` (versionCode, versionName, apkUrl, notes, sizeBytes, optional sha256) nur für einen neueren, installierbaren Build; `Success(null)` = nichts Neueres (auch: keine Releases, Draft/Prerelease, fremdes Tag-Schema, kein plausibles APK-Asset); `Failure(IO/UNAVAILABLE/CORRUPT/RESOURCE_LIMIT)` = offline, Anfragelimit, unlesbare oder zu große Antwort. `install()` → `CONFIRMATION_REQUESTED` (Systemdialog) oder `PERMISSION_NEEDED` (Systemseite „Unbekannte Apps installieren“ geöffnet) oder `Failure(CORRUPT/IO/PERMISSION)`.
+- Ausführung und Fehler: Netzwerk ausschließlich zu api.github.com und den Release-Downloads dieses Repositorys (github.com → GitHub-Speicher), anonym, ohne Nutzerdaten, 10 s Timeouts. Startprüfung höchstens alle 6 h und still; manuelle Prüfung meldet jedes Ergebnis. Download nur über HTTPS, verworfen bei Größe/SHA-256/Paketname/versionCode-Abweichung. Android bestätigt jede Installation; Signaturwechsel (alte Debug-APK) scheitern mit einem Hinweis auf die einmalige Neuinstallation.
+- Abnahme: JVM `Qa27UpdatesTest` (Tag-Parsing, Versionsvergleich, Fixture-Antwort, Plausibilität, 6-h-Drossel, Ablauf mit Fakes), `Qa27SettingsUpdateChecksTest` (alte Einstellungsdateien), Robolectric `Qa27UpdateSettingsUiTest` (Einstellungszeile). Kein Test greift aufs Netz. Gerät offen: echte Prüfung gegen GitHub, Download, Berechtigungsseite, Systembestätigung, Update über die vorherige Version.

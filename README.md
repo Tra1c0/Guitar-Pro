@@ -1,6 +1,6 @@
 # ArtiFret
 
-Android-first Offline-Editor für TAB und Partitur mit eigenem Notensatz, eigener Klangerzeugung und Guitar-Pro-Austausch. Die App läuft komplett offline; es werden keine fremden Tabs, RSE-Inhalte oder Impulsantworten mitgeliefert; einzige mitgelieferte Klangbank sind die CC0-lizenzierten DI-Gitarrensamples Karoryfer Emilyguitar (siehe [DEPENDENCIES](docs/DEPENDENCIES.md)). Grundlage ist das [Briefing](docs/BRIEFING.md); welche Merkmale in welcher Tiefe fertig sind, steht in der [Paritätsmatrix](docs/PARITY.md).
+Android-first Offline-Editor für TAB und Partitur mit eigenem Notensatz, eigener Klangerzeugung und Guitar-Pro-Austausch. Die App läuft offline; einzige Netzwerkverbindung ist die optionale Update-Prüfung bei GitHub (abschaltbar, siehe [Updates](#updates)); es werden keine fremden Tabs, RSE-Inhalte oder Impulsantworten mitgeliefert; einzige mitgelieferte Klangbank sind die CC0-lizenzierten DI-Gitarrensamples Karoryfer Emilyguitar (siehe [DEPENDENCIES](docs/DEPENDENCIES.md)). Grundlage ist das [Briefing](docs/BRIEFING.md); welche Merkmale in welcher Tiefe fertig sind, steht in der [Paritätsmatrix](docs/PARITY.md).
 
 ## Was die App kann
 
@@ -63,7 +63,15 @@ Jede offene Fähigkeit meldet in der App einen erklärten Status mit Vertrags-ID
 
 ## Installieren
 
-Die CI baut bei jedem Push eine Debug-APK (Artefakt `riffworkbench-debug-apk` im jeweiligen Lauf unter *Actions*). Eine vorher installierte Debug-APK (früher „RiffWorkbench“) mit anderer Signatur muss zuerst deinstalliert werden; Projekte vorher als `.riffproj` exportieren und danach wieder öffnen. Release-Signatur und Veröffentlichung sind nicht eingerichtet.
+Die CI baut bei jedem Push eine Debug-APK (Artefakt `riffworkbench-debug-apk` im jeweiligen Lauf unter *Actions*). Jeder grüne Push auf `ccr-0b650dff-jnhups-qa` wird zusätzlich ein GitHub Release (*Releases*, Datei `ArtiFret-0.<Lauf>.apk`), sobald der Signaturschlüssel als Secret hinterlegt ist; diese APK ist mit einem festen Schlüssel signiert und lässt sich danach direkt aus der App aktualisieren (siehe [Updates](#updates)).
+
+## Updates
+
+**Einrichtung (einmalig, Repository-Besitzer):** unter *Settings → Secrets and variables → Actions* vier Secrets anlegen: `ANDROID_KEYSTORE_BASE64` (PKCS12-Keystore, base64-kodiert), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`artifret`) und `ANDROID_KEY_PASSWORD`. Den Keystore sicher aufbewahren: Ohne denselben Schlüssel kann keine spätere Version über die installierte installiert werden. Fehlt das Secret, baut die CI wie bisher (Standard-Debug-Schlüssel) und veröffentlicht kein Release.
+
+**Einmalige Umstellung auf dem Handy:** Die bisher installierte APK ist mit einem wechselnden Debug-Schlüssel signiert. Einmal: alle Projekte als `.riffproj` exportieren, ArtiFret deinstallieren, die neueste `ArtiFret-….apk` aus *Releases* installieren, Projekte wieder öffnen. Danach kommen Updates aus der App.
+
+**Danach:** Beim Start fragt ArtiFret höchstens alle 6 Stunden bei GitHub nach einer neueren Version und meldet „Update … verfügbar“ mit „Installieren“; ohne Netz oder bei aktueller Version erscheint nichts. *Einstellungen → Updates* zeigt die installierte Version, schaltet die automatische Prüfung ab und hat „Jetzt prüfen“. Beim ersten Installieren fragt Android, ob ArtiFret Apps installieren darf („Unbekannte Apps installieren“); danach bestätigt man jede Installation im Systemdialog. Gesendet wird nur eine anonyme Anfrage an `api.github.com` (bzw. der APK-Download), keine Projekt- oder Nutzerdaten; Einzelheiten in [DEPENDENCIES](docs/DEPENDENCIES.md#netzwerk-und-updates-zyklus-27).
 
 ## Bauen und prüfen
 
