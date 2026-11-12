@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Only for the tuner; requested at runtime when the tuner is opened. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Zyklus 27: the only network use is the optional update check/download from GitHub (switchable in the settings). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Zyklus 27: hand a downloaded update to the system installer; Android asks the user every time. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <application android:name=".RiffApplication" android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules" android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher"

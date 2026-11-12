@@ -16,6 +16,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.riffworkbench.model.*
 import dev.riffworkbench.ports.SettingsRepository
+import dev.riffworkbench.ports.UpdateCoordinator
 import dev.riffworkbench.ui.components.*
 import dev.riffworkbench.ui.components.R
 import kotlinx.coroutines.Dispatchers
@@ -26,7 +27,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-class SettingsViewModel(private val repository: SettingsRepository) : ViewModel() {
+/** [updates]: Zyklus 27, the app's update flow (Einstellungen → „Updates“); null hides the section. */
+class SettingsViewModel(private val repository: SettingsRepository, val updates: UpdateCoordinator? = null) : ViewModel() {
     val settings = repository.settings
     private val mutableError = MutableStateFlow<String?>(null)
     val error = mutableError.asStateFlow()
@@ -53,6 +55,11 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
         // Zyklus 26: tap latency per output device (own page: device, value, calibrate, list).
         OutlinedButton(onClick = onLatency, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("settings-latency")) {
             Text(if (english()) "Latency (output device) ›" else "Latenz (Ausgabegerät) ›")
+        }
+        // Zyklus 27: update check (switch, „Jetzt prüfen“, installed version, „Installieren“).
+        vm.updates?.let { updates ->
+            HorizontalDivider()
+            UpdateSection(settings.updateChecks, { value -> vm.update { it.copy(updateChecks = value) } }, updates)
         }
         HorizontalDivider()
         Text(stringResource(R.string.shortcuts), style = MaterialTheme.typography.titleMedium)

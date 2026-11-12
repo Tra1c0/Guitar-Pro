@@ -99,7 +99,9 @@ object AppRoutes {
         }
         else if (uri != null) notice = "Export nach Prozessneustart bitte erneut starten."
     }
-    LaunchedEffect(container) { when (val result = container.settings.load()) { is Outcome.Failure -> notice = result.message; is Outcome.Success -> Unit } }
+    // Zyklus 27: after the settings are read, the automatic update check (only when switched on and due: at most every 6 h).
+    LaunchedEffect(container) { when (val result = container.settings.load()) { is Outcome.Failure -> notice = result.message; is Outcome.Success -> container.updates.checkOnStart() } }
+    val update by container.updates.state.collectAsStateWithLifecycle()
     // The app-level notice (export result, unreadable settings) lies over the screen above the navigation bar and closes
     // itself (QA 23); before, it was a row above the NavHost that pushed every screen down until "×" was tapped.
     RiffTheme(settings.darkTheme) { Surface(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize()) {
@@ -139,7 +141,7 @@ object AppRoutes {
                     onLatencySettings = { if (nav.currentBackStackEntry == entry) nav.navigate(AppRoutes.SETTINGS_LATENCY) })
             }
             composable(AppRoutes.SETTINGS) { entry ->
-                val vm: SettingsViewModel = viewModel(factory = factory { SettingsViewModel(container.settings) })
+                val vm: SettingsViewModel = viewModel(factory = factory { SettingsViewModel(container.settings, container.updates) })
                 // A second tap during the exit transition must not pop the screen below (library or project without leave()).
                 SettingsScreen(vm, onBack = { if (nav.currentBackStackEntry == entry) nav.popBackStack() },
                     onLatency = { if (nav.currentBackStackEntry == entry) nav.navigate(AppRoutes.SETTINGS_LATENCY) })
@@ -152,6 +154,20 @@ object AppRoutes {
         notice?.let { message ->
             TransientNotice(message, NoticeTiming.millis(message), { if (notice == message) notice = null },
                 Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.navigationBars).padding(start = 12.dp, end = 12.dp, bottom = 88.dp))
+        }
+        // Zyklus 27: the start check found a newer build. „Installieren“ starts the download and opens Settings → Updates
+        // (progress, permission hint); otherwise the notice closes itself and the update stays offered in the settings.
+        if (notice == null) update.announcement?.let { found ->
+            val en = english()
+            val text = if (en) "Update ${found.versionName} available" else "Update ${found.versionName} verfügbar"
+            TransientNotice(text, 10_000L, { container.updates.dismissAnnouncement() },
+                Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.navigationBars).padding(start = 12.dp, end = 12.dp, bottom = 88.dp)) {
+                TextButton(onClick = {
+                    container.updates.dismissAnnouncement()
+                    container.updates.install()
+                    if (nav.currentDestination?.route != AppRoutes.SETTINGS) nav.navigate(AppRoutes.SETTINGS)
+                }) { Text(if (en) "Install" else "Installieren") }
+            }
         }
     } } }
 }

@@ -26,6 +26,11 @@ import dev.riffworkbench.platform.Documents
 import dev.riffworkbench.platform.MediaCodecAudioDecoder
 import dev.riffworkbench.platform.PlaybackGuard
 import dev.riffworkbench.platform.audioThreadStarter
+import dev.riffworkbench.platform.AndroidUpdateInstaller
+import dev.riffworkbench.platform.GitHubUpdateChecker
+import dev.riffworkbench.platform.OfflineUpdateChecker
+import dev.riffworkbench.ports.UpdateCoordinator
+import android.os.Build
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
@@ -86,6 +91,16 @@ class AppContainer(application: Application) {
     val workspaceServices = WorkspaceServices(preview = transport, renderer = transport, formats = formats, tuner = tuner, assets = assets, audioDecoder = audioDecoder,
         waveforms = StreamingWaveforms(assets, audioDecoder), audioLab = audioLab, audioRoutes = audioRoutes, routeNotices = routeNotices)
     private val guard = PlaybackGuard(application) { scope.launch { transport.pause() } }
+    /** Zyklus 27: downloads a release APK into cache/updates and hands it to the system installer. */
+    private val updateInstaller = AndroidUpdateInstaller(application)
+    /**
+     * Zyklus 27: the only network use of the app — GitHub's latest release of this app, automatically at most every 6 h
+     * (switchable) or on „Jetzt prüfen“. Robolectric runs of the real app must not reach the network: offline checker and
+     * no start check there.
+     */
+    private val robolectric = Build.FINGERPRINT == "robolectric"
+    val updates = UpdateCoordinator(settings, if (robolectric) OfflineUpdateChecker() else GitHubUpdateChecker(BuildConfig.VERSION_CODE),
+        updateInstaller, BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME, scope, automatic = !robolectric) { System.currentTimeMillis() }
 
     init {
         scope.launch(Dispatchers.IO) {
@@ -94,6 +109,7 @@ class AppContainer(application: Application) {
         scope.launch(Dispatchers.IO) {
             drumKit = runCatching { application.assets.open("banks/artifret-pearl-kit.rwdk").buffered(1 shl 16).use { input -> DrumKit.read { b, o, l -> input.read(b, o, l) } } }.getOrNull()
         }
+        scope.launch(Dispatchers.IO) { runCatching { updateInstaller.discardUpTo(BuildConfig.VERSION_CODE) } }
         scope.launch {
             transport.state.collect { s -> if (s.status == TransportStatus.PLAYING) guard.acquire() else guard.release() }
         }

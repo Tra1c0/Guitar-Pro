@@ -1,1 +1,13 @@
-<manifest />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Zyklus 27: status of the update's PackageInstaller session (explicit, not exported). -->
+        <receiver android:name="dev.riffworkbench.platform.UpdateInstallReceiver" android:exported="false" />
+        <!-- Zyklus 27: fallback install path (ACTION_VIEW) for the downloaded update; only cache/updates is shared. -->
+        <provider android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.updates"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/update_file_paths" />
+        </provider>
+    </application>
+</manifest>

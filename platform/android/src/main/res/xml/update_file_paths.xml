@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Zyklus 27: only the update download folder in the app cache is shared (read-only, with the system installer). -->
+<paths>
+    <cache-path name="updates" path="updates/" />
+</paths>
