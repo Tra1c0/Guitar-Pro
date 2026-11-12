@@ -43,6 +43,8 @@ class MainActivity : ComponentActivity() {
 object AppRoutes {
     const val LIBRARY = "library"
     const val SETTINGS = "settings"
+    /** Zyklus 26: Einstellungen → Latenz (also the target of the notice „<Gerät>: Latenz nicht kalibriert“ → „Kalibrieren“). */
+    const val SETTINGS_LATENCY = "settings/latency"
     const val PROJECT = "project/{projectId}"
     fun project(id: EntityId) = "project/${id.value}"
 }
@@ -133,12 +135,18 @@ object AppRoutes {
                     pdf = { if (pendingPdf == null) { pendingPdf = vm; pdfLauncher.launch(vm.suggestedName(ExportTarget.PDF)) } },
                     importAudio = { audioLauncher.launch(arrayOf("audio/*", "application/ogg")) },
                 ) }
-                WorkspaceScreen(vm, onBack = leave, onExport = actions.bytes, onSettings = { nav.navigate(AppRoutes.SETTINGS) }, exportActions = actions)
+                WorkspaceScreen(vm, onBack = leave, onExport = actions.bytes, onSettings = { nav.navigate(AppRoutes.SETTINGS) }, exportActions = actions,
+                    onLatencySettings = { if (nav.currentBackStackEntry == entry) nav.navigate(AppRoutes.SETTINGS_LATENCY) })
             }
             composable(AppRoutes.SETTINGS) { entry ->
                 val vm: SettingsViewModel = viewModel(factory = factory { SettingsViewModel(container.settings) })
                 // A second tap during the exit transition must not pop the screen below (library or project without leave()).
-                SettingsScreen(vm, onBack = { if (nav.currentBackStackEntry == entry) nav.popBackStack() })
+                SettingsScreen(vm, onBack = { if (nav.currentBackStackEntry == entry) nav.popBackStack() },
+                    onLatency = { if (nav.currentBackStackEntry == entry) nav.navigate(AppRoutes.SETTINGS_LATENCY) })
+            }
+            composable(AppRoutes.SETTINGS_LATENCY) { entry ->
+                val vm: LatencySettingsViewModel = viewModel(factory = factory { LatencySettingsViewModel(container.settings, container.audioRoutes, container.transport) })
+                LatencySettingsScreen(vm, onBack = { if (nav.currentBackStackEntry == entry) nav.popBackStack() })
             }
         }
         notice?.let { message ->

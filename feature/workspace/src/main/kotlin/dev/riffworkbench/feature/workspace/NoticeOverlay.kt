@@ -10,6 +10,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -28,13 +29,16 @@ internal val LocalNoticeSheets = staticCompositionLocalOf<MutableIntState?> { nu
  * (QA 23). It lies over the content — nothing moves when it appears or goes — and closes itself after [NoticeTiming]. A
  * failed save keeps it with "Erneut versuchen" and a close button. `WorkspaceState.notice` stays the only source.
  */
-@Composable internal fun BoxScope.PageNoticeOverlay(vm: WorkspaceViewModel, ui: WorkspaceState) {
+@Composable internal fun BoxScope.PageNoticeOverlay(vm: WorkspaceViewModel, ui: WorkspaceState, onAction: (NoticeActionKind) -> Unit = {}) {
     val notice = ui.notice ?: return
     val sheets = LocalNoticeSheets.current
     if ((sheets?.intValue ?: 0) > 0) return
     val failed = ui.saveStatus == SaveStatus.FAILED
+    // Zyklus 26: a button that belongs to exactly this notice text („<Gerät>: Latenz nicht kalibriert“ → „Kalibrieren“).
+    val action = ui.noticeAction?.takeIf { it.text == notice && !failed }
     TransientNotice(notice, if (failed) null else NoticeTiming.millis(notice), { if (vm.state.value.notice == notice) vm.showNotice(null) },
         Modifier.align(Alignment.BottomCenter).padding(horizontal = 12.dp, vertical = 8.dp)) {
+        if (action != null) TextButton(onClick = { vm.showNotice(null); onAction(action.kind) }, modifier = Modifier.testTag("notice-action")) { Text(action.label) }
         if (failed) {
             TextButton(onClick = vm::retrySave) { Text(stringResource(R.string.retry)) }
             IconButton(onClick = { vm.showNotice(null) }) { Icon(TabinoIcons.Close, stringResource(R.string.dismiss), Modifier.size(18.dp)) }

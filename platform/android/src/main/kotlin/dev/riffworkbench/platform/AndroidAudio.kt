@@ -39,7 +39,7 @@ val audioThreadStarter: (String, () -> Unit) -> Thread = { name, body ->
  * against 16 ms with 4 blocks; in return a single slow (cold, interpreted) block of up to 7 bursts no longer drops out.
  * The transport reports this latency through [SinkFormat.latencyFrames] and compensates the playhead with the timestamps.
  */
-class AudioTrackSink(private val context: Context) : AudioSink {
+class AudioTrackSink(private val context: Context, private val routes: AndroidAudioRouteMonitor? = null) : AudioSink {
     companion object {
         /** Output buffer in bursts; see the class note on the latency trade-off. */
         const val OUTPUT_BUFFER_BLOCKS = 8
@@ -78,6 +78,8 @@ class AudioTrackSink(private val context: Context) : AudioSink {
                 t.play()
             } catch (e: Exception) { t.release(); throw e }
             track = t
+            // Zyklus 26: the device this track is routed to selects the latency profile (once per open, not per block).
+            routes?.attach(t)
             val device = t.routedDevice?.productName?.toString() ?: "Lautsprecher"
             Outcome.Success(SinkFormat(rate, block, t.bufferSizeInFrames, device))
         }
@@ -107,6 +109,7 @@ class AudioTrackSink(private val context: Context) : AudioSink {
     override fun close() {
         val t = track ?: return
         track = null
+        routes?.detach(t)
         try { t.pause(); t.flush(); t.stop() } catch (_: IllegalStateException) { }
         t.release()
     }

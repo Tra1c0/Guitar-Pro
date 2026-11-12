@@ -14,8 +14,10 @@ import dev.riffworkbench.adapter.integrations.IntegrationCatalog
 import dev.riffworkbench.data.local.*
 import dev.riffworkbench.feature.workspace.WorkspaceServices
 import dev.riffworkbench.model.*
+import dev.riffworkbench.ports.RouteNoticeMemory
 import dev.riffworkbench.synth.DrumKit
 import dev.riffworkbench.synth.SampleBank
+import dev.riffworkbench.platform.AndroidAudioRouteMonitor
 import dev.riffworkbench.platform.AndroidPcmOutput
 import dev.riffworkbench.platform.AndroidSystemProbes
 import dev.riffworkbench.platform.AudioRecordSource
@@ -68,7 +70,11 @@ class AppContainer(application: Application) {
      * assets/licenses/avl-drumkits-README.txt), loaded in the background at start; until then the synthetic kit plays.
      */
     @Volatile var drumKit: DrumKit? = null; private set
-    val audioHost = RealtimeHost({ AudioTrackSink(application) }, audioThreadStarter, bankProvider = { guitarBank }, drumKitProvider = { drumKit })
+    /** Zyklus 26: the output device (routed device of the running track, else the connected outputs) for per-device latency. */
+    val audioRoutes = AndroidAudioRouteMonitor(application)
+    /** „<Gerät>: Latenz nicht kalibriert“ once per device and app process, across workspaces. */
+    val routeNotices = RouteNoticeMemory()
+    val audioHost = RealtimeHost({ AudioTrackSink(application, audioRoutes) }, audioThreadStarter, bankProvider = { guitarBank }, drumKitProvider = { drumKit })
     /** Reference audio: WAV in Kotlin, everything else through the device's MediaCodec decoders. */
     val audioDecoder = AudioDecoders(MediaCodecAudioDecoder())
     val transport = EngineTransport(audioHost, clipLoader = DecodingClipLoader(assets, audioDecoder), bankProvider = { guitarBank }, drumKitProvider = { drumKit })
@@ -78,7 +84,7 @@ class AppContainer(application: Application) {
     val formats = FormatRegistry.catalog()
     val integrations = IntegrationCatalog.entries
     val workspaceServices = WorkspaceServices(preview = transport, renderer = transport, formats = formats, tuner = tuner, assets = assets, audioDecoder = audioDecoder,
-        waveforms = StreamingWaveforms(assets, audioDecoder), audioLab = audioLab)
+        waveforms = StreamingWaveforms(assets, audioDecoder), audioLab = audioLab, audioRoutes = audioRoutes, routeNotices = routeNotices)
     private val guard = PlaybackGuard(application) { scope.launch { transport.pause() } }
 
     init {

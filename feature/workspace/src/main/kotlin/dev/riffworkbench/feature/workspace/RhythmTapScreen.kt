@@ -130,10 +130,17 @@ import dev.riffworkbench.ui.components.TabinoIcons
         }
         SoundChoice(vm, state, rhythm)
         Section(tr("Latenz", "Latency"))
+        // Zyklus 26: the value of the active output device; without its own calibration the device-less value applies.
+        rhythm.latencyDevice?.let { device ->
+            Text(tr("Ausgabegerät: $device", "Output: $device"), style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("rhythm-latency-device"))
+        }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(tr("Ausgleich: ${kotlin.math.round(rhythm.latencyMs).toInt()} ms", "Offset: ${kotlin.math.round(rhythm.latencyMs).toInt()} ms"), Modifier.weight(1f))
+            val millis = kotlin.math.round(rhythm.latencyMs).toInt()
+            val uncalibrated = rhythm.latencyDevice != null && !rhythm.latencyOwn
+            Text(if (uncalibrated) tr("Ausgleich: $millis ms (Gerät nicht kalibriert)", "Offset: $millis ms (device not calibrated)") else tr("Ausgleich: $millis ms", "Offset: $millis ms"),
+                Modifier.weight(1f))
             OutlinedButton(onClick = { vm.startTapCalibration() }, modifier = Modifier.testTag("rhythm-calibrate")) { Text(tr("Kalibrieren", "Calibrate")) }
-            if (rhythm.latencyMs != 0.0) TextButton(onClick = { vm.resetTapCalibration() }) { Text(tr("Zurücksetzen", "Reset")) }
+            if (if (rhythm.latencyDevice != null) rhythm.latencyOwn else rhythm.latencyMs != 0.0) TextButton(onClick = { vm.resetTapCalibration() }) { Text(tr("Zurücksetzen", "Reset")) }
         }
         Button(onClick = { vm.startRhythmTap() }, enabled = rhythm.bars.isNotEmpty(), modifier = Modifier.fillMaxWidth().height(56.dp).testTag("rhythm-start")) {
             Text(tr("Start (1 Takt Vorzähler)", "Start (1 bar count-in)"), fontWeight = FontWeight.Bold)

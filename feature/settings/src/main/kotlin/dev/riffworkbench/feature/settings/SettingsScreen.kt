@@ -8,6 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -35,7 +36,7 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
     } } }
 }
 
-@Composable fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit) {
+@Composable fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onLatency: () -> Unit = {}) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
     Scaffold { padding -> Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -49,6 +50,10 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
         Text(stringResource(R.string.pinch_zoom_hint), style = MaterialTheme.typography.bodySmall)
         ToggleRow(stringResource(R.string.strict_rhythm), settings.strictRhythm, {}, enabled = false)
         Text(stringResource(R.string.strict_hint), style = MaterialTheme.typography.bodySmall)
+        // Zyklus 26: tap latency per output device (own page: device, value, calibrate, list).
+        OutlinedButton(onClick = onLatency, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("settings-latency")) {
+            Text(if (english()) "Latency (output device) ›" else "Latenz (Ausgabegerät) ›")
+        }
         HorizontalDivider()
         Text(stringResource(R.string.shortcuts), style = MaterialTheme.typography.titleMedium)
         Text("Ctrl+Z · ${stringResource(R.string.undo)}\nCtrl+Shift+Z / Ctrl+Y · ${stringResource(R.string.redo)}\nCtrl+S · ${stringResource(R.string.save)}\n0–9 / Enter · ${stringResource(R.string.commit)}\n← / → · ${stringResource(R.string.previous)} / ${stringResource(R.string.next)}\nBackspace · ${stringResource(R.string.delete)}")

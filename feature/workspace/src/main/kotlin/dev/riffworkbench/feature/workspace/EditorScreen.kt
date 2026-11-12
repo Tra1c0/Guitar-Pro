@@ -174,8 +174,8 @@ import dev.riffworkbench.ui.score.pitchName
     val selection = state.selection
     val measureNumber = state.project.measures.indexOfFirst { it.id == selection.measureId } + 1
     val playing = transport.status == TransportStatus.PLAYING
-    val playhead = transport.position?.takeIf { playing || transport.status == TransportStatus.PAUSED }
-        ?.let { it.position.measureId to it.position.offset.toDouble() }
+    // Zyklus 26: on a calibrated Bluetooth output the visible playhead runs the extra output latency behind (audio unchanged).
+    val playhead = vm.displayedPlayhead(transport)?.let { it.position.measureId to it.position.offset.toDouble() }
     Box(modifier) {
         ScoreCanvas(
             layout = layout,

@@ -51,7 +51,7 @@ class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun WorkspaceScreen(vm: WorkspaceViewModel, onBack: () -> Unit, onExport: (ExportResult) -> Unit, onSettings: () -> Unit, initialPage: WorkspacePage = WorkspacePage.EDITOR,
-                                exportActions: ExportActions = ExportActions(onExport, {}, {})) {
+                                exportActions: ExportActions = ExportActions(onExport, {}, {}), onLatencySettings: () -> Unit = onSettings) {
     val ui by vm.state.collectAsStateWithLifecycle()
     // Only the status (play/pause icon): the position changes on every transport poll (~30 Hz) and recomposed the whole
     // workspace, open sheets and menus included, while playing (QA 23). Parts that show the position read it themselves.
@@ -102,7 +102,7 @@ class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget
                         }
                     }
                     ui.busy?.let { label -> BusyOverlay(label, ui.busyProgress) }
-                    PageNoticeOverlay(vm, ui)
+                    PageNoticeOverlay(vm, ui) { kind -> when (kind) { NoticeActionKind.CALIBRATE_LATENCY -> onLatencySettings() } }
                 }
                 if (!wide) PillNavBar(
                     items = listOf(

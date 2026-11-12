@@ -68,7 +68,8 @@ import kotlin.math.roundToLong
                 val bar = { id: EntityId -> (project?.measures?.indexOfFirst { it.id == id } ?: -1) + 1 }
                 Box(contentAlignment = Alignment.Center) { Text("${tr("Schleife", "Loop")} · ${tr("Takt", "bar")} ${bar(l.start.position.measureId)}–${bar(l.end.position.measureId)}", style = MaterialTheme.typography.labelMedium, color = Tabino.Lavender) }
             } }
-            val playhead = transport.position?.takeIf { playing || transport.status == TransportStatus.PAUSED }?.let { it.position.measureId to it.position.offset.toDouble() }
+            // Zyklus 26: same delayed playhead as the editor (Bluetooth latency).
+            val playhead = vm.displayedPlayhead(transport)?.let { it.position.measureId to it.position.offset.toDouble() }
             ws.editor?.let { e -> dev.riffworkbench.ui.score.ScoreCanvas(layout = layout, cursor = dev.riffworkbench.ui.score.ScoreCursor(e.selection.measureId, e.selection.offset, null, e.selection.rangeEnd),
                 playhead = playhead, follow = view.follow && playing, zoom = view.zoom, onZoom = vm::setZoom, onTap = { tap -> vm.tap(tap.measureId, tap.offset, tap.string); vm.seekToCursor() },
                 // Same display scale and pinch setting as the editor (QA 23).
