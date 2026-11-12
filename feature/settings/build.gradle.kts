@@ -20,6 +20,7 @@ android {
 kotlin { jvmToolchain(17) }
 dependencies {
     implementation(project(":core:ports"))
+    implementation(project(":core:editor"))
     implementation(project(":ui:components"))
     implementation(libs.coroutines.core)
     implementation(platform(libs.compose.bom))

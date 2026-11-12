@@ -20,7 +20,14 @@ data class WorkspaceState(
     val busy: String? = null,
     val busyProgress: Float? = null,
     val lastLosses: List<LossEntry> = emptyList(),
+    /** Button on the notice, valid only while [notice] is exactly [NoticeAction.text] (Zyklus 26). */
+    val noticeAction: NoticeAction? = null,
 )
+
+/** Zyklus 26: what the button of a notice does. */
+enum class NoticeActionKind { CALIBRATE_LATENCY }
+/** A notice button for the notice [text] only: any other notice text hides it (notices are set from many places). */
+data class NoticeAction(val text: String, val kind: NoticeActionKind, val label: String)
 
 data class NoteInput(
     val buffer: String = "",
@@ -71,6 +78,10 @@ data class WorkspaceServices(
     val waveforms: WaveformCache? = null,
     /** Audio measurements and blind comparisons (diagnostics page). */
     val audioLab: AudioLab? = null,
+    /** Zyklus 26: the output device (per-device tap latency, playhead correction, hint); null = unknown device. */
+    val audioRoutes: AudioRouteMonitor? = null,
+    /** Zyklus 26: „Latenz nicht kalibriert“ once per device and app process (one instance in the composition root). */
+    val routeNotices: RouteNoticeMemory = RouteNoticeMemory(),
 )
 
 /** Export targets offered in the exchange screen. */
@@ -111,6 +122,10 @@ data class RhythmTapState(
     val overwrites: Int = 0,
     /** Apply waiting for the overwrite confirmation. */
     val confirm: dev.riffworkbench.editor.RhythmMode? = null,
-    /** Calibrated tap latency in ms (AppSettings.tapLatencyMs). */
+    /** Tap latency in ms applied now: the active device's profile, else AppSettings.tapLatencyMs (Zyklus 26). */
     val latencyMs: Double = 0.0,
+    /** Active output device („WH-1000XM4 (Bluetooth)“), null while unknown (Zyklus 26). */
+    val latencyDevice: String? = null,
+    /** The active device has its own calibration (otherwise [latencyMs] is the device-less fallback). */
+    val latencyOwn: Boolean = false,
 )

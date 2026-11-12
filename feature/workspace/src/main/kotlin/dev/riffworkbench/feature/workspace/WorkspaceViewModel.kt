@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dev.riffworkbench.editor.*
 import dev.riffworkbench.model.*
 import dev.riffworkbench.notation.*
+import dev.riffworkbench.playback.DelayedPlayhead
 import dev.riffworkbench.ports.*
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -79,7 +80,10 @@ class WorkspaceViewModel(
             is Outcome.Success -> {
                 savedRevision = result.value.revision
                 session = EditorSession(result.value, ids)
-                mutable.value = WorkspaceState(loading = false, editor = session!!.state.value, notice = result.value.diagnostics.firstOrNull { it.code == "recovered" }?.message)
+                // A device hint (Zyklus 26) that arrived while loading stays unless the recovery message replaces it.
+                val hint = mutable.value.noticeAction?.takeIf { it.text == mutable.value.notice }
+                val recovered = result.value.diagnostics.firstOrNull { it.code == "recovered" }?.message
+                mutable.value = WorkspaceState(loading = false, editor = session!!.state.value, notice = recovered ?: hint?.text, noticeAction = hint.takeIf { recovered == null })
                 refreshSnapshots()
                 publish()
             }
@@ -749,7 +753,8 @@ class WorkspaceViewModel(
         if (!fretted && !drums) { showNotice("Rhythmus tippen gibt es für Gitarre, Bass und Schlagzeug"); return }
         val previous = rhythm.value
         mutableRhythm.value = RhythmTapState(RhythmTapPhase.SETUP, useRange = previous.useRange, barCount = previous.barCount, grid = previous.grid, accompaniment = previous.accompaniment,
-            fretted = fretted, drums = drums, string = 0, drumNote = if (drums) previous.drumNote else 38, latencyMs = settings.settings.value.tapLatencyMs)
+            fretted = fretted, drums = drums, string = 0, drumNote = if (drums) previous.drumNote else 38)
+        refreshRhythmLatency()
         refreshRhythmTarget()
     }
     fun closeRhythmTap() { if (rhythmBusy) cancelRhythmTap(); mutableRhythm.value = rhythm.value.copy(phase = RhythmTapPhase.IDLE, result = null, confirm = null) }
@@ -796,7 +801,9 @@ class WorkspaceViewModel(
             tracks = e.project.tracks.map { t -> t.copy(mix = t.mix.copy(solo = false, mute = if (r.accompaniment) t.id == track.id || t.mix.mute else true)) })
         val route = routeIndexFor(playback, bars.first()) ?: run { showNotice("Wiedergaberoute ungültig"); return@launch }
         strokes.clear()
-        mutableRhythm.value = r.copy(phase = RhythmTapPhase.COUNT_IN, taps = 0, result = null, confirm = null, latencyMs = settings.settings.value.tapLatencyMs)
+        rhythmRoute = audioRoute
+        mutableRhythm.value = r.copy(phase = RhythmTapPhase.COUNT_IN, taps = 0, result = null, confirm = null, latencyMs = tapLatencyMs(), latencyDevice = audioRoute?.label,
+            latencyOwn = LatencyProfiles.profile(settings.settings.value, audioRoute) != null)
         val spans = beginTapPlayback(playback, PlaybackOccurrence(ScorePosition(bars.first()), 1, route), bars.size) ?: return@launch
         if (spans.map { it.measureId } != bars) {
             abortRhythm("Der Bereich wird wegen Wiederholungen oder Sprüngen nicht am Stück gespielt – kürzeren Bereich wählen"); return@launch
@@ -878,7 +885,7 @@ class WorkspaceViewModel(
         val raw = transport.audiblePlanFrameAt(nanos)
         if (raw.isNaN()) return
         if (phase == RhythmTapPhase.CALIBRATING) { calibrationStrokes += TapStroke(raw); mutableRhythm.value = rhythm.value.copy(taps = calibrationStrokes.size); return }
-        strokes += TapStroke(raw - settings.settings.value.tapLatencyMs * rhythmRate / 1000.0)
+        strokes += TapStroke(raw - tapLatencyMs() * rhythmRate / 1000.0)
         mutableRhythm.value = rhythm.value.copy(taps = strokes.size)
     }
     /** Touch-up: the held time of the last stroke (calibration ignores it). */
@@ -889,7 +896,7 @@ class WorkspaceViewModel(
         if (i < 0) return
         val raw = transport.audiblePlanFrameAt(nanos)
         if (raw.isNaN()) return
-        strokes[i] = strokes[i].copy(upFrame = raw - settings.settings.value.tapLatencyMs * rhythmRate / 1000.0)
+        strokes[i] = strokes[i].copy(upFrame = raw - tapLatencyMs() * rhythmRate / 1000.0)
     }
 
     /** „Übernehmen“: one undo step; with notes in the target voice the first call only asks ([RhythmTapState.confirm]). */
@@ -946,13 +953,10 @@ class WorkspaceViewModel(
     fun startTapCalibration() { viewModelScope.launch {
         if (rhythmBusy) return@launch
         val e = session?.state?.value ?: return@launch
-        val p = e.project
-        val measures = List(2) { Measure(EntityId("tap-cal-m$it")) }
-        val cal = p.copy(revision = Long.MIN_VALUE + p.revision, measures = measures, sections = emptyList(), text = emptyList(), audio = AudioArrangement(),
-            tempo = listOf(TempoChange(ScorePosition(measures.first().id), 100.0)),
-            tracks = p.tracks.mapIndexed { ti, t -> t.copy(mix = t.mix.copy(mute = true, solo = false), staves = t.staves.take(1).map { st ->
-                st.copy(bars = measures.mapIndexed { mi, m -> Bar(EntityId("tap-cal-b$ti-$mi"), m.id, List(4) { v -> Voice(EntityId("tap-cal-v$ti-$mi-$v"), v) }) }) }) })
+        val cal = calibrationProject(e.project)
+        val measures = cal.measures
         calibrationStrokes.clear()
+        rhythmRoute = audioRoute
         mutableRhythm.value = rhythm.value.copy(phase = RhythmTapPhase.CALIBRATING, taps = 0)
         val spans = beginTapPlayback(cal, PlaybackOccurrence(ScorePosition(measures.first().id), 1, 0), 2) ?: return@launch
         calibrationClicks = transport.installedPlan()?.clicks?.map { it.frame }.orEmpty()
@@ -964,12 +968,58 @@ class WorkspaceViewModel(
         stopTapPlayback()
         val offset = TapCalibration.offsetMillis(TapCalibration.deltasMillis(calibrationStrokes.map { it.downFrame }, calibrationClicks, rhythmRate))
         if (offset == null) { showNotice("Kalibrierung unsicher – bitte zu jedem Klick tippen und wiederholen"); return }
-        settings.update(settings.settings.value.copy(tapLatencyMs = offset))
-        mutableRhythm.value = rhythm.value.copy(latencyMs = offset)
-        showNotice("Tipp-Latenz gespeichert: ${kotlin.math.round(offset).toInt()} ms")
+        // Zyklus 26: stored for the device the calibration ran on (without a known device: the device-less value).
+        val device = rhythmRoute
+        settings.update(LatencyProfiles.calibrated(settings.settings.value, device, offset, System.currentTimeMillis()))
+        refreshRhythmLatency()
+        showNotice("Tipp-Latenz gespeichert: ${kotlin.math.round(offset).toInt()} ms" + (device?.let { " für ${it.label}" } ?: ""))
     }
-    /** Back to 0 ms. */
-    fun resetTapCalibration() { viewModelScope.launch { settings.update(settings.settings.value.copy(tapLatencyMs = 0.0)); mutableRhythm.value = rhythm.value.copy(latencyMs = 0.0) } }
+    /** „Zurücksetzen“ for the active device (its profile goes, the fallback applies); without a known device back to 0 ms. */
+    fun resetTapCalibration() { viewModelScope.launch { settings.update(LatencyProfiles.reset(settings.settings.value, audioRoute)); refreshRhythmLatency() } }
+
+    // ------------------------------------------------------------------ output device (Zyklus 26)
+    /** The output device now, null while unknown (no monitor or nothing detected). */
+    val audioRoute: AudioRoute? get() = services.audioRoutes?.route?.value
+    /** Device the running recording/calibration started on. */
+    private var rhythmRoute: AudioRoute? = null
+    private fun tapLatencyMs(): Double = LatencyProfiles.tapLatencyMs(settings.settings.value, audioRoute)
+    private fun refreshRhythmLatency() {
+        if (rhythm.value.phase == RhythmTapPhase.IDLE) return
+        val device = audioRoute
+        mutableRhythm.value = rhythm.value.copy(latencyMs = tapLatencyMs(), latencyDevice = device?.label, latencyOwn = LatencyProfiles.profile(settings.settings.value, device) != null)
+    }
+    private fun onRouteChanged(device: AudioRoute?) {
+        var aborted: String? = null
+        if (rhythmBusy && device?.key != rhythmRoute?.key) {
+            val what = if (rhythm.value.phase == RhythmTapPhase.CALIBRATING) "Kalibrierung" else "Aufnahme"
+            aborted = "Ausgabegerät gewechselt (${device?.label ?: "unbekannt"}) – $what abgebrochen"
+            abortRhythm(null)
+        }
+        refreshRhythmLatency()
+        // Once per device and app process, only for radio links without their own calibration; after an abort both in one notice.
+        val hint = device?.takeIf { LatencyProfiles.needsCalibrationHint(settings.settings.value, it) && services.routeNotices.firstTime(it.key) }
+            ?.let { "${it.productName.ifBlank { it.kind.labelDe }}: Latenz nicht kalibriert" }
+        when {
+            hint != null -> {
+                val text = if (aborted != null) "$aborted. $hint" else hint
+                mutable.value = mutable.value.copy(notice = text, noticeAction = NoticeAction(text, NoticeActionKind.CALIBRATE_LATENCY, "Kalibrieren"))
+            }
+            aborted != null -> showNotice(aborted)
+        }
+    }
+
+    /**
+     * Zyklus 26: extra delay of the visible playhead on the active device, max(0, tap(device) − tap(speaker/wired)) when
+     * both are calibrated, else 0 (LatencyProfiles.playheadDelayMs). Audio is not delayed.
+     */
+    fun playheadDelayMs(): Double = LatencyProfiles.playheadDelayMs(settings.settings.value, audioRoute)
+    private val delayedPlayhead = DelayedPlayhead()
+    /**
+     * Playhead for the score: the transport position, delayed by [playheadDelayMs] while PLAYING (no backward steps; play,
+     * seek and stop show their target at once — see [DelayedPlayhead]); null when neither playing nor paused.
+     */
+    fun displayedPlayhead(s: TransportState, nanos: Long = System.nanoTime()): PlaybackOccurrence? =
+        delayedPlayhead.position(s, transport.installedPlan(), playheadDelayMs(), nanos)
 
     // ------------------------------------------------------------------ internals
     private fun publish() {
@@ -991,6 +1041,12 @@ class WorkspaceViewModel(
     }
     // viewModelScope is already cancelled when onCleared runs: a launch there never executes, so the microphone would stay open.
     override fun onCleared() { tunerJob?.cancel(); services.tuner?.let { t -> kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch { t.stop() } } }
+
+    init {
+        // Zyklus 26: the output device selects the latency profile; a switch aborts a running recording/calibration. Last in
+        // the class: viewModelScope runs on Main.immediate, so the first route arrives while the instance is constructed.
+        services.audioRoutes?.let { routes -> viewModelScope.launch { routes.route.collect { onRouteChanged(it) } } }
+    }
 
     companion object {
         /** Layout margin of the editor canvas (layout units). */
