@@ -99,8 +99,12 @@ sealed interface EditorCommand {
      * Zyklus 25 „Rhythmus tippen“: replaces the whole content of [voice] of [trackId] in the bars of [bars] (consecutive,
      * each filled exactly) by the tapped rhythm, as one undo step. GRID: rest placeholders with the tapped durations;
      * OPEN_STRING: fret 0 on [string] (held notes tied over barlines and value splits), drum tracks [drumNote] per attack.
+     * Zyklus 27: [appended] are measure ids of [bars] that do not exist yet: they are appended at the end of the piece first
+     * (signature, key and feel of the last bar, empty bars in every track, see [appendEmptyMeasures]) — in the same undo
+     * step. They must be the last target bars, follow the last bar of the piece, and the last of them must hold a tapped note.
      */
-    data class ApplyRhythm(val trackId: EntityId, val voice: Int, val bars: List<RhythmBar>, val mode: RhythmMode, val string: Int = 0, val drumNote: Int = 38) : EditorCommand
+    data class ApplyRhythm(val trackId: EntityId, val voice: Int, val bars: List<RhythmBar>, val mode: RhythmMode, val string: Int = 0, val drumNote: Int = 38,
+                           val appended: List<EntityId> = emptyList()) : EditorCommand
 }
 
 /** Single-owner dispatcher: call selection + commands on the same UI dispatcher. No adapter mutates this state. */
