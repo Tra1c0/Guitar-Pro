@@ -147,8 +147,12 @@ class EngineTransport(
         val previous = plan
         val program = EngineProgram.prepare(next)
         val loop = settings.loop?.let { loopFramesFor(next, it) }
+        // Zyklus 27: a plan that only appends bars (Rhythmus tippen extends its tapping copy while it plays) swaps without
+        // a remap: the playhead, the click grid and sounding notes go on untouched.
+        val seamless = previous != null && installedRate == rate && planProject == project.id &&
+            (mutable.value.status == TransportStatus.PLAYING || starting) && appendsTo(previous, next)
         if (previous == null || installedRate != rate) host.post(HostCommand.Install(program))
-        else host.post(HostCommand.Reprogram(program, previous, loop?.first ?: -1L, loop?.second ?: -1L))
+        else host.post(HostCommand.Reprogram(program, previous, loop?.first ?: -1L, loop?.second ?: -1L, seamless))
         postedPrograms++
         if (planProject != null && planProject != project.id) {
             // Another project: start from its top (or loop start), never from a bar of the previous one.
@@ -158,7 +162,7 @@ class EngineTransport(
         } else if (mutable.value.sample == null) mutable.value.position?.let { pos ->
             // Only a position was published (seek parked before a plan existed): express it in the new plan.
             next.frameFor(pos, orNearest = true)?.let { f -> place(mutable.value.copy(sample = SamplePosition(f, rate), position = next.positionAt(f))) }
-        } else if (previous != null && installedRate == rate && mutable.value.status == TransportStatus.PLAYING) mutable.value.sample?.let { s ->
+        } else if (!seamless && previous != null && installedRate == rate && mutable.value.status == TransportStatus.PLAYING) mutable.value.sample?.let { s ->
             // Playing: publish the remapped position at once (the engine remaps the same way when it applies the program).
             previous.positionAt(s.frame)?.let { pos -> next.frameFor(pos, orNearest = true) }?.let { f ->
                 place(mutable.value.copy(sample = SamplePosition(f, rate), position = next.positionAt(f)))
@@ -181,6 +185,28 @@ class EngineTransport(
         }
         if (mutable.value.status == TransportStatus.UNAVAILABLE || mutable.value.status == TransportStatus.FAILED) publish(TransportStatus.STOPPED, null)
         return Outcome.Success(Unit)
+    }
+
+    /**
+     * Zyklus 27: [next] continues [old] unchanged and only adds after its end — the same rate and speed, every span of [old]
+     * with the same bar, pass, route index and frames, the same clicks and note onsets (frame, track, pitch, note) before
+     * the old end, and nothing new before it. Then the engine can keep its position and voices ([HostCommand.Reprogram.seamless]).
+     * Ordinary edits change notes or times and keep the remapping path.
+     */
+    internal fun appendsTo(old: PlaybackPlan, next: PlaybackPlan): Boolean {
+        if (old.sampleRate != next.sampleRate || old.speed != next.speed || old.spans.isEmpty() || next.spans.size < old.spans.size) return false
+        for (i in old.spans.indices) {
+            val a = old.spans[i]; val b = next.spans[i]
+            if (a.measureId != b.measureId || a.occurrence != b.occurrence || a.routeIndex != b.routeIndex || a.length != b.length ||
+                !a.offsets.contentEquals(b.offsets) || !a.frames.contentEquals(b.frames)) return false
+        }
+        val end = old.totalFrames
+        if (next.clicks.size < old.clicks.size || next.clicks.subList(0, old.clicks.size) != old.clicks || next.clicks.drop(old.clicks.size).any { it.frame < end }) return false
+        val a = old.notes; val b = next.notes   // sorted by frame (PlaybackPlan)
+        if (b.size < a.size) return false
+        for (i in a.indices) if (a[i].frame != b[i].frame || a[i].noteId != b[i].noteId || a[i].trackId != b[i].trackId || a[i].pitch != b[i].pitch) return false
+        for (i in a.size until b.size) if (b[i].frame < end) return false
+        return true
     }
 
     /**

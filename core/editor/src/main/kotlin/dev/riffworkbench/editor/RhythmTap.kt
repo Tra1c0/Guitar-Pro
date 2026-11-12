@@ -258,6 +258,65 @@ object TapCalibration {
     private fun median(v: List<Double>): Double { val s = v.sorted(); val n = s.size; return if (n % 2 == 1) s[n / 2] else (s[n / 2 - 1] + s[n / 2]) / 2 }
 }
 
+/**
+ * Zyklus 27: appends one empty bar per id of [measureIds] at the end of [p] — signature, key and feel of the last bar (the
+ * tempo in effect at the end goes on by itself), an empty bar in every staff of every track, like „Takt anhängen“. The
+ * tapping copy and [EditorCommand.ApplyRhythm] both use it, so the bars that were played are the bars that are written.
+ */
+fun appendEmptyMeasures(p: Project, measureIds: List<EntityId>, ids: IdSource): Project {
+    if (measureIds.isEmpty()) return p
+    require(p.measures.size + measureIds.size <= 10_000) { "Zu viele Takte" }
+    val last = p.measures.lastOrNull()
+    val added = measureIds.map { Measure(it, last?.signature ?: TimeSignature(), last?.key ?: KeySignature(), feel = last?.feel ?: RhythmicFeel.STRAIGHT) }
+    val factory = ProjectFactory(ids)
+    return p.copy(measures = p.measures + added, tracks = p.tracks.map { t -> t.copy(staves = t.staves.map { st -> st.copy(bars = st.bars + added.map { factory.bar(it.id) }) }) })
+}
+
+/**
+ * Zyklus 27: the result without its trailing bars that hold nothing but rests (no attack, no held note), keeping at least
+ * the first [keep] bars (the existing target bars of a fixed range are replaced as a whole; an open recording keeps its
+ * start bar). Bars after the last tapped content are not written: buffer bars are discarded, existing bars stay untouched.
+ */
+fun RhythmResult.trimmed(keep: Int): RhythmResult {
+    val lastContent = bars.indexOfLast { b -> b.events.any { it.kind != RhythmEvent.Kind.REST } }
+    val count = maxOf(lastContent + 1, keep.coerceIn(0, bars.size))
+    return if (count == bars.size) this else copy(bars = bars.take(count))
+}
+
+/**
+ * Zyklus 27 „Offen (Takte anhängen)“: the recording runs over the bars that are played in written order from the start
+ * span on — [spans] from the start, cut before the first repeat or jump (a span that is not the next written bar).
+ */
+fun linearRun(spans: List<RouteSpan>): List<RouteSpan> {
+    if (spans.isEmpty()) return spans
+    var n = 1
+    while (n < spans.size && spans[n].measureIndex == spans[n - 1].measureIndex + 1) n++
+    return spans.subList(0, n)
+}
+
+/**
+ * Zyklus 27, Auto-Stopp of an open recording: after the first tap, [EMPTY_BARS] whole bars without a touch (no down, no
+ * release, no finger held) end it. Reason: the hands are on the tap surface or the instrument, so a hands-free end is
+ * welcome; one empty bar would cut phrases with a whole-bar rest, more than two only wait longer. Switchable off for
+ * music with longer rests (then only „Stopp“ ends it).
+ */
+object RhythmAutoStop {
+    const val EMPTY_BARS = 2
+    /** Plan frame at which the recording stops by itself, or null (no tap yet, a finger is down, or not enough bars yet). */
+    fun stopFrame(spans: List<RouteSpan>, strokes: List<TapStroke>): Long? {
+        val first = spans.firstOrNull() ?: return null
+        // A sixteenth of a bar of tolerance: a slightly early downbeat counts, and a touch just before a barline belongs
+        // to the next bar (it snaps onto its downbeat), so the empty bars are counted after that one.
+        fun tolerance(s: RouteSpan) = (s.endFrame - s.startFrame) / 16.0
+        val inside = strokes.filter { !it.downFrame.isNaN() && it.downFrame >= first.startFrame - tolerance(first) }
+        if (inside.isEmpty() || inside.any { it.upFrame.isNaN() }) return null
+        val lastTouch = inside.maxOf { maxOf(it.downFrame, it.upFrame) }
+        val bar = spans.indexOfFirst { lastTouch + tolerance(it) < it.endFrame }
+        if (bar < 0) return null
+        return spans.getOrNull(bar + EMPTY_BARS)?.endFrame
+    }
+}
+
 /** Notes that applying a rhythm to [voice] of [trackId] in [measures] would overwrite (confirmation „Überschreibt N Noten“). */
 fun rhythmOverwrites(p: Project, trackId: EntityId, voice: Int, measures: Collection<EntityId>): Int = RhythmEdits.notesIn(p, trackId, voice, measures)
 
@@ -268,7 +327,16 @@ internal object RhythmEdits {
         p.tracks.firstOrNull { it.id == trackId }?.staves?.firstOrNull()?.bars?.filter { it.measureId in measures }
             ?.sumOf { b -> b.voices.filter { it.index == voice }.sumOf { v -> v.beats.sumOf { it.notes.size } } } ?: 0
 
-    fun apply(p: Project, c: EditorCommand.ApplyRhythm, ids: IdSource): Project {
+    fun apply(original: Project, c: EditorCommand.ApplyRhythm, ids: IdSource): Project {
+        val p = if (c.appended.isEmpty()) original else {
+            // Zyklus 27: new bars first (same undo step); only as many as the rhythm needs.
+            require(c.appended.distinct().size == c.appended.size && c.appended.none { id -> original.measures.any { it.id == id } }) { "Neue Takte ungültig" }
+            require(c.bars.size >= c.appended.size && c.bars.takeLast(c.appended.size).map { it.measureId } == c.appended) { "Neue Takte müssen am Ende des Zielbereichs liegen" }
+            val existing = c.bars.dropLast(c.appended.size)
+            require(existing.isEmpty() || existing.last().measureId == original.measures.last().id) { "Neue Takte schließen nicht an das Stückende an" }
+            require(c.bars.last().events.any { it.kind != RhythmEvent.Kind.REST }) { "Leere neue Takte werden nicht angelegt" }
+            appendEmptyMeasures(original, c.appended, ids)
+        }
         val track = p.tracks.firstOrNull { it.id == c.trackId } ?: throw IllegalArgumentException("Spur fehlt")
         require(c.voice in 0..3) { "Stimme existiert nicht" }
         require(c.bars.isNotEmpty() && c.bars.map { it.measureId }.distinct().size == c.bars.size) { "Zieltakte ungültig" }

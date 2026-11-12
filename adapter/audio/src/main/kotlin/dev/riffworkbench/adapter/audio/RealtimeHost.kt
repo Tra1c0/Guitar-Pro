@@ -18,7 +18,12 @@ sealed interface HostCommand {
     class Clips(val clips: ClipSet) : HostCommand
     /** Replaces the program at a new speed and maps the playhead via the old plan's route position. */
     /** New plan plus its loop frames (-1 = none), applied in one step so no block plays the new plan with the old loop. */
-    class Reprogram(val program: EngineProgram, val mapFrom: PlaybackPlan?, val loopStart: Long = -2, val loopEnd: Long = -2) : HostCommand
+    /**
+     * [seamless] (Zyklus 27): the new plan only appends to the old one (same spans, clicks and onsets up to the old end, see
+     * [EngineTransport]): the program is swapped at the exact position without remapping, seeking or releasing voices, so
+     * the metronome and sounding notes go on without a gap or a jump (the remap rounds to 1/3840 of a whole note).
+     */
+    class Reprogram(val program: EngineProgram, val mapFrom: PlaybackPlan?, val loopStart: Long = -2, val loopEnd: Long = -2, val seamless: Boolean = false) : HostCommand
     /**
      * Replaces the engine (sample bank arrived after the session started). Posted by [RealtimeHost.refreshEngine] only
      * while nothing plays: the new engine starts empty, the transport re-installs rack, mix, clips, program and loop.
@@ -234,7 +239,10 @@ class RealtimeHost(
                     noteOnNanos = (System.nanoTime() - c.postedNanos) + queued * 1_000_000_000L / f.sampleRate
                 }
                 is HostCommand.Clips -> e.installClips(c.clips)
-                is HostCommand.Reprogram -> {
+                is HostCommand.Reprogram -> if (c.seamless) {
+                    e.install(c.program); programs++
+                    if (c.loopStart != -2L) e.setLoop(c.loopStart, c.loopEnd)
+                } else {
                     // Same mapping as mapFrom.positionAt(..) + frameFor(.., orNearest = true), without allocating (QA cycle 20).
                     val mapFrom = c.mapFrom
                     val target = if (mapFrom != null) c.program.plan.frameFromPlan(mapFrom, e.position) else -1L
