@@ -171,7 +171,14 @@ enum class LayoutMode { PAGE, CONTINUOUS, MULTITRACK }
      * Zyklus 26: calibrated tap latency per output device, keyed by AudioRoute.key („BLUETOOTH_A2DP|WH-1000XM4“: kind
      * class + product name, no address). Older files read as empty.
      */
-    val latencyProfiles: Map<String, LatencyProfile> = emptyMap())
+    val latencyProfiles: Map<String, LatencyProfile> = emptyMap(),
+    /**
+     * Zyklus 27: automatic update check at app start (at most every 6 h, GitHub releases of this app only). On by default;
+     * older files read as on. The manual check in the settings works regardless.
+     */
+    val updateChecks: Boolean = true,
+    /** Zyklus 27: when the last automatic update check was started (epoch ms, throttling only); older files read as 0 (never). */
+    val lastUpdateCheckEpochMs: Long = 0L)
 
 /** One device's calibration (Zyklus 26): the tap latency in ms and when it was measured (epoch ms, display only). */
 @Serializable data class LatencyProfile(val tapLatencyMs: Double, val calibratedAtEpochMs: Long = 0L)
