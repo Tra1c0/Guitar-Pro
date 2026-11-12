@@ -9,6 +9,11 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # Zyklus 27: update signing (see tools/ci_update_signing.sh). Empty secrets (forks, not yet set up) leave the build as before.
+    env:
+      RW_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      RW_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      RW_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -20,6 +25,10 @@ jobs:
         with:
           packages: 'platforms;android-36 build-tools;36.0.0'
       - uses: gradle/actions/setup-gradle@v4
+      - name: Version and update keystore (optional)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: bash tools/ci_update_signing.sh
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug --stacktrace
       - name: Upload debug APK
@@ -41,3 +50,56 @@ jobs:
             **/build/reports/
             **/build/test-results/
             build/verification.json
+  # Zyklus 27: every green push to the development branch becomes a GitHub release that the app's updater finds
+  # (/releases/latest). Only ccr-0b650dff-jnhups-qa: development happens there and ccr-0b650dff-jnhups is its fast-forward
+  # mirror, so releasing from both would publish every commit twice under two build numbers.
+  release:
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/ccr-0b650dff-jnhups-qa'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    concurrency:
+      group: artifret-release
+      cancel-in-progress: false
+    env:
+      RW_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      RW_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      RW_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Whole history and tags: the release text is the short log since the previous v<code> tag.
+          fetch-depth: 0
+      - name: Version and update keystore
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: bash tools/ci_update_signing.sh
+      - name: No release without the update keystore
+        if: steps.signing.outputs.signed != 'true'
+        run: echo "::notice title=Release::Kein Release - Secret ANDROID_KEYSTORE_BASE64 fehlt (siehe README, Abschnitt Updates)."
+      - uses: actions/setup-java@v4
+        if: steps.signing.outputs.signed == 'true'
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        if: steps.signing.outputs.signed == 'true'
+        with:
+          packages: 'platforms;android-36 build-tools;36.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.signing.outputs.signed == 'true'
+      - name: Build signed debug APK
+        if: steps.signing.outputs.signed == 'true'
+        run: ./gradlew :app:assembleDebug --stacktrace
+      - name: Show signing certificate
+        if: steps.signing.outputs.signed == 'true'
+        run: '"$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs app/build/outputs/apk/debug/app-debug.apk'
+      - name: Publish GitHub release
+        if: steps.signing.outputs.signed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash tools/ci_publish_release.sh
