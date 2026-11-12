@@ -121,8 +121,21 @@ import dev.riffworkbench.ui.components.TabinoIcons
         if (state.selection.rangeEnd != null) TileRow(listOf(
             Triple(tr("Markierter Bereich", "Selected range"), rhythm.useRange) { vm.setRhythmUseRange(true) },
             Triple(tr("Ab Cursor", "From cursor"), !rhythm.useRange) { vm.setRhythmUseRange(false) }), "rhythm-target")
-        if (state.selection.rangeEnd == null || !rhythm.useRange)
-            TileRow(listOf(1, 2, 4, 8).map { n -> Triple(if (n == 1) tr("1 Takt", "1 bar") else tr("$n Takte", "$n bars"), rhythm.barCount == n) { vm.setRhythmBarCount(n) } }, "rhythm-bars")
+        if (state.selection.rangeEnd == null || !rhythm.useRange) {
+            TileRow(listOf(1, 2, 4, 8).map { n -> Triple(if (n == 1) tr("1 Takt", "1 bar") else tr("$n Takte", "$n bars"), rhythm.barCount == n && !rhythm.openEnded) { vm.setRhythmBarCount(n) } }, "rhythm-bars")
+            // Zyklus 27: open-ended — from the cursor bar until „Stopp“, bars are appended at the end of the piece.
+            ChoiceTile(tr("Offen (Takte anhängen)", "Open (append bars)"), rhythm.openEnded, { vm.setRhythmOpenEnded(!rhythm.openEnded) },
+                Modifier.fillMaxWidth().height(48.dp).testTag("rhythm-open"), idle = MaterialTheme.colorScheme.surfaceVariant)
+            if (rhythm.openActive) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(tr("Auto-Stopp nach 2 leeren Takten", "Auto stop after 2 empty bars"), Modifier.weight(1f))
+                Switch(rhythm.autoStop, { vm.setRhythmAutoStop(it) }, Modifier.testTag("rhythm-autostop"))
+            }
+            if (rhythm.openActive) Text(tr("Läuft ab dem Cursor-Takt, bis du „Stopp“ tippst" + (if (rhythm.autoStop) " oder 2 Takte lang nichts tippst" else "") + ". Am Stückende werden Takte angehängt – übernommen werden nur die getippten.",
+                "Runs from the cursor bar until you tap “Stop”" + (if (rhythm.autoStop) " or tap nothing for 2 bars" else "") + ". Bars are appended at the end of the piece – only the tapped ones are kept."),
+                style = MaterialTheme.typography.bodySmall)
+            else if (rhythm.newBars > 0) Text(tr("Reicht über das Stückende: fehlende Takte werden angehängt.", "Goes past the end of the piece: missing bars are appended."),
+                style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("rhythm-new-bars-hint"))
+        }
         GridChoice(vm, rhythm)
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text(tr("Begleitung hören (Zielspur stumm)", "Hear the other tracks (target track muted)"), Modifier.weight(1f))
@@ -160,7 +173,8 @@ private fun eventNanos(uptimeMillis: Long): Long {
     val status = when (rhythm.phase) {
         RhythmTapPhase.COUNT_IN -> tr("Vorzähler …", "Count-in …")
         RhythmTapPhase.CALIBRATING -> tr("Kalibrieren: tippe genau auf jeden Klick", "Calibrating: tap exactly on every click")
-        else -> tr("Aufnahme – tippe den Rhythmus", "Recording – tap the rhythm")
+        else -> if (rhythm.openActive) tr("Aufnahme – tippe den Rhythmus, „Stopp“ beendet", "Recording – tap the rhythm, “Stop” ends it")
+            else tr("Aufnahme – tippe den Rhythmus", "Recording – tap the rhythm")
     }
     val onDown by rememberUpdatedState<(Long) -> Unit> { nanos -> vm.rhythmTapDown(nanos); view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY) }
     val onUp by rememberUpdatedState<(Long) -> Unit> { nanos -> vm.rhythmTapUp(nanos) }
@@ -168,6 +182,12 @@ private fun eventNanos(uptimeMillis: Long): Long {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(status, style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("rhythm-status"))
         Text(tr("${rhythm.taps} Anschläge", "${rhythm.taps} taps"), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("rhythm-taps"))
+        // Zyklus 27: an open recording ends with a large „Stopp“ (the tapped bars are kept); „Abbrechen“ discards. Above the
+        // tap surface, away from „Abbrechen“ and from the thumb that taps near the lower edge.
+        if (rhythm.openActive && rhythm.phase == RhythmTapPhase.RECORDING)
+            Button(onClick = { vm.stopRhythmTap(System.nanoTime()) }, modifier = Modifier.fillMaxWidth().height(64.dp).testTag("rhythm-stop")) {
+                Text(tr("Stopp", "Stop"), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            }
         // The tap surface: the whole width, most of the height. Its own handler takes every finger's down and up with the
         // event time (not the frame it is handled in), so two-finger drumming works and the handler's lag does not count.
         Box(Modifier.fillMaxWidth().weight(1f)
@@ -198,6 +218,9 @@ private fun eventNanos(uptimeMillis: Long): Long {
         if (result == null) Text(tr("Keine Anschläge erkannt", "No taps recognised"))
         else {
             Text(previewSummary(result), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("rhythm-summary"))
+            // Zyklus 27: bars „Übernehmen“ appends at the end of the piece.
+            if (rhythm.newBars > 0) Text(tr("+${rhythm.newBars} ${if (rhythm.newBars == 1) "Takt" else "Takte"} am Stückende", "+${rhythm.newBars} ${if (rhythm.newBars == 1) "bar" else "bars"} at the end"),
+                style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("rhythm-new-bars"))
             RhythmLine(result)
         }
         GridChoice(vm, rhythm)

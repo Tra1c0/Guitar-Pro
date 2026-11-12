@@ -105,9 +105,19 @@ data class RhythmTapState(
     /** Target: the visible bar range (Zyklus-23 rules) when there is one and [useRange], else [barCount] bars from the cursor bar. */
     val useRange: Boolean = true,
     val barCount: Int = 2,
-    /** Target bars (measure ids, consecutive) and a label such as „Takte 2–3“. */
+    /**
+     * Zyklus 27 „Offen (Takte anhängen)“ (the user's choice): the recording starts at the cursor bar and runs until „Stopp“
+     * (or Auto-Stopp); at the end of the piece bars are appended. [openActive]: the choice applies (no marked range used).
+     */
+    val openEnded: Boolean = false,
+    val openActive: Boolean = false,
+    /** Open recording: ends by itself after [dev.riffworkbench.editor.RhythmAutoStop.EMPTY_BARS] bars without a touch. */
+    val autoStop: Boolean = true,
+    /** Target bars that exist (measure ids, consecutive) and a label such as „Takte 2–3“ or „Takte 4–7 (+2 neu)“. */
     val bars: List<dev.riffworkbench.model.EntityId> = emptyList(),
     val label: String = "",
+    /** Bars appended at the end of the piece: setup — missing bars of a fixed target; preview — the bars „Übernehmen“ creates. */
+    val newBars: Int = 0,
     val grid: dev.riffworkbench.editor.RhythmGrid = dev.riffworkbench.editor.RhythmGrid.SIXTEENTH,
     /** Other tracks play along (the target track stays silent); off: metronome only. */
     val accompaniment: Boolean = false,

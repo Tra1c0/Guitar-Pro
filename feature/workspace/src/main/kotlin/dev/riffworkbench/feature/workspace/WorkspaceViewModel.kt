@@ -12,6 +12,7 @@ import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -742,6 +743,22 @@ class WorkspaceViewModel(
     /** Placeholders of the last „Raster“ apply: a fret entered on one jumps to the next (auto-advance between tapped attacks). */
     private var rhythmSlots: List<RhythmSlot> = emptyList()
     private var rhythmSlotVoice: Pair<EntityId, Int>? = null
+    /**
+     * Zyklus 27: the tapping copy (the score plus appended bars, muted tracks, own negative revision), the ids of its
+     * appended bars in order, whether the recording is open-ended, the existing target bars kept even when empty, the stop
+     * frame (NaN until „Stopp“ or Auto-Stopp), the route index of the start, the playback settings of the copy and the
+     * extension state (an open recording that met a repeat or jump ends before it and is never extended).
+     */
+    private var rhythmCopy: Project? = null
+    private var rhythmAppended: List<EntityId> = emptyList()
+    private var rhythmOpen = false
+    private var rhythmKeep = 0
+    private var rhythmStop = Double.NaN
+    private var rhythmStartRoute = 0
+    private var rhythmPractice = PracticeSettings()
+    private var rhythmBounded = false
+    private var rhythmExtending = false
+    private var rhythmCapNoticed = false
     private val rhythmBusy: Boolean get() = rhythm.value.phase == RhythmTapPhase.COUNT_IN || rhythm.value.phase == RhythmTapPhase.RECORDING || rhythm.value.phase == RhythmTapPhase.CALIBRATING
 
     fun openRhythmTap() {
@@ -753,12 +770,15 @@ class WorkspaceViewModel(
         if (!fretted && !drums) { showNotice("Rhythmus tippen gibt es für Gitarre, Bass und Schlagzeug"); return }
         val previous = rhythm.value
         mutableRhythm.value = RhythmTapState(RhythmTapPhase.SETUP, useRange = previous.useRange, barCount = previous.barCount, grid = previous.grid, accompaniment = previous.accompaniment,
-            fretted = fretted, drums = drums, string = 0, drumNote = if (drums) previous.drumNote else 38)
+            openEnded = previous.openEnded, autoStop = previous.autoStop, fretted = fretted, drums = drums, string = 0, drumNote = if (drums) previous.drumNote else 38)
         refreshRhythmLatency()
         refreshRhythmTarget()
     }
     fun closeRhythmTap() { if (rhythmBusy) cancelRhythmTap(); mutableRhythm.value = rhythm.value.copy(phase = RhythmTapPhase.IDLE, result = null, confirm = null) }
-    fun setRhythmBarCount(count: Int) { mutableRhythm.value = rhythm.value.copy(barCount = count.coerceIn(1, 8)); refreshRhythmTarget() }
+    fun setRhythmBarCount(count: Int) { mutableRhythm.value = rhythm.value.copy(barCount = count.coerceIn(1, 8), openEnded = false); refreshRhythmTarget() }
+    /** Zyklus 27: „Offen (Takte anhängen)“ instead of a bar count. */
+    fun setRhythmOpenEnded(open: Boolean) { mutableRhythm.value = rhythm.value.copy(openEnded = open); refreshRhythmTarget() }
+    fun setRhythmAutoStop(on: Boolean) { mutableRhythm.value = rhythm.value.copy(autoStop = on) }
     fun setRhythmUseRange(use: Boolean) { mutableRhythm.value = rhythm.value.copy(useRange = use); refreshRhythmTarget() }
     fun setRhythmAccompaniment(on: Boolean) { mutableRhythm.value = rhythm.value.copy(accompaniment = on) }
     fun setRhythmString(string: Int) { mutableRhythm.value = rhythm.value.copy(string = string) }
@@ -769,23 +789,34 @@ class WorkspaceViewModel(
         if (rhythm.value.phase == RhythmTapPhase.PREVIEW) quantizeRhythm()
     }
 
-    private fun rhythmTarget(e: EditorState, r: RhythmTapState): List<EntityId> {
+    /**
+     * Existing target bars and the bars missing after the end of the piece (Zyklus 27: appended instead of refused): the
+     * marked range; open — the cursor bar (the recording goes on from there); else [RhythmTapState.barCount] bars from the cursor.
+     */
+    private fun rhythmTarget(e: EditorState, r: RhythmTapState): Pair<List<EntityId>, Int> {
         val p = e.project
-        if (r.useRange && e.selection.rangeEnd != null) return e.selection.measureRange(p)
+        if (r.useRange && e.selection.rangeEnd != null) return e.selection.measureRange(p) to 0
         val i = p.measures.indexOfFirst { it.id == e.selection.measureId }
-        if (i < 0) return emptyList()
-        return p.measures.subList(i, minOf(p.measures.size, i + r.barCount)).map { it.id }
+        if (i < 0) return emptyList<EntityId>() to 0
+        if (r.openEnded) return listOf(p.measures[i].id) to 0
+        return p.measures.subList(i, minOf(p.measures.size, i + r.barCount)).map { it.id } to maxOf(0, i + r.barCount - p.measures.size)
     }
     private fun refreshRhythmTarget() {
         val e = state.value.editor ?: return
-        val bars = rhythmTarget(e, rhythm.value)
+        val (bars, missing) = rhythmTarget(e, rhythm.value)
+        val open = rhythm.value.openEnded && !(rhythm.value.useRange && e.selection.rangeEnd != null) && bars.isNotEmpty()
         val first = e.project.measures.indexOfFirst { it.id == bars.firstOrNull() } + 1
-        val label = when { bars.isEmpty() -> ""; bars.size == 1 -> "Takt $first"; else -> "Takte $first–${first + bars.size - 1}" } +
-            if (!(rhythm.value.useRange && e.selection.rangeEnd != null) && bars.size < rhythm.value.barCount) " (nur ${bars.size} vorhanden)" else ""
-        mutableRhythm.value = rhythm.value.copy(bars = bars, label = label)
+        val count = bars.size + missing
+        val label = when { bars.isEmpty() -> ""; open -> "Ab Takt $first, offen"; count == 1 -> "Takt $first"; else -> "Takte $first–${first + count - 1}" } +
+            if (missing > 0) " (+$missing neu)" else ""
+        mutableRhythm.value = rhythm.value.copy(bars = bars, label = label, newBars = missing, openActive = open)
     }
 
-    /** Start → count-in → recording. Stops by itself after the last target bar ([finishRhythmTap]). */
+    /**
+     * Start → count-in → recording. A fixed target stops by itself after its last bar ([finishRhythmTap]); bars it needs
+     * after the end of the piece are in the tapping copy (Zyklus 27). An open recording runs until „Stopp“ ([stopRhythmTap])
+     * or Auto-Stopp; its copy carries [OPEN_BUFFER_BARS] buffer bars after the end and is extended while it plays.
+     */
     fun startRhythmTap() { viewModelScope.launch {
         if (rhythmBusy) return@launch
         val e = session?.state?.value ?: return@launch
@@ -795,27 +826,111 @@ class WorkspaceViewModel(
         if (bars.isEmpty()) return@launch
         val track = e.project.tracks.firstOrNull { it.id == e.selection.trackId } ?: return@launch
         rhythmOrigin = e.selection.copy(rangeEnd = null)
+        val open = r.openActive
+        rhythmOpen = open
+        rhythmKeep = if (open) 1 else bars.size
+        rhythmStop = Double.NaN
+        rhythmBounded = false
+        rhythmExtending = false
+        rhythmCapNoticed = false
+        // Zyklus 27: bars after the end of the piece (fixed: the missing ones; open: a buffer) — the same function writes them on apply.
+        rhythmAppended = List(if (open) OPEN_BUFFER_BARS else r.newBars) { ids.next() }
         // Own (negative) revision: the transport skips a prepare with the same id, revision and settings, so a tapping copy
         // with the score's revision could survive the restore when the practice settings equal the tapping ones (muted tracks).
-        val playback = e.project.copy(revision = -1 - e.project.revision,
-            tracks = e.project.tracks.map { t -> t.copy(mix = t.mix.copy(solo = false, mute = if (r.accompaniment) t.id == track.id || t.mix.mute else true)) })
+        val base = appendEmptyMeasures(e.project, rhythmAppended, ids)
+        val playback = base.copy(revision = -1 - e.project.revision,
+            tracks = base.tracks.map { t -> t.copy(mix = t.mix.copy(solo = false, mute = if (r.accompaniment) t.id == track.id || t.mix.mute else true)) })
+        rhythmCopy = playback
         val route = routeIndexFor(playback, bars.first()) ?: run { showNotice("Wiedergaberoute ungültig"); return@launch }
+        rhythmStartRoute = route
         strokes.clear()
         rhythmRoute = audioRoute
         mutableRhythm.value = r.copy(phase = RhythmTapPhase.COUNT_IN, taps = 0, result = null, confirm = null, latencyMs = tapLatencyMs(), latencyDevice = audioRoute?.label,
             latencyOwn = LatencyProfiles.profile(settings.settings.value, audioRoute) != null)
-        val spans = beginTapPlayback(playback, PlaybackOccurrence(ScorePosition(bars.first()), 1, route), bars.size) ?: return@launch
-        if (spans.map { it.measureId } != bars) {
+        val all = beginTapPlayback(playback, PlaybackOccurrence(ScorePosition(bars.first()), 1, route), Int.MAX_VALUE) ?: return@launch
+        if (open) {
+            // Over the bars played in written order; a repeat or jump ahead ends the recording before it (nothing is appended).
+            val run = linearRun(all)
+            rhythmSpans = run
+            rhythmBounded = run.size < all.size
+            if (rhythmBounded) showNotice("Wiederholung oder Sprung nach Takt ${run.last().measureIndex + 1}: die Aufnahme endet dort")
+            watchTapPlayback(run.first().startFrame, if (rhythmBounded) run.last().endFrame else Long.MAX_VALUE, endsPiece = true, tick = ::openRecordingTick) { finishRhythmTap() }
+            return@launch
+        }
+        val spans = all.take(bars.size + rhythmAppended.size)
+        if (spans.map { it.measureId } != bars + rhythmAppended) {
             abortRhythm("Der Bereich wird wegen Wiederholungen oder Sprüngen nicht am Stück gespielt – kürzeren Bereich wählen"); return@launch
         }
         rhythmSpans = spans
         watchTapPlayback(spans.first().startFrame, spans.last().endFrame, spans.last().endFrame >= (transport.installedPlan()?.totalFrames ?: Long.MAX_VALUE)) { finishRhythmTap() }
     } }
 
+    /**
+     * Open recording, per transport state while recording: Auto-Stopp (two empty bars after the last touch, when on) and
+     * the extension of the copy once the playhead is in its second-to-last bar or less than two seconds from its end —
+     * [OPEN_EXTEND_BARS] more bars, prepared at the same position (EngineTransport swaps an appending plan seamlessly: the
+     * metronome and the tap time map go on unchanged). Returns true to end the recording.
+     */
+    private fun openRecordingTick(frame: Long): Boolean {
+        if (rhythm.value.phase != RhythmTapPhase.RECORDING) return false
+        val spans = rhythmSpans
+        if (spans.isEmpty()) return false
+        if (rhythm.value.autoStop) RhythmAutoStop.stopFrame(spans, strokes)?.let { stop -> if (frame >= stop) { rhythmStop = stop.toDouble(); return true } }
+        if (rhythmBounded || rhythmExtending) return false
+        val threshold = minOf(spans[maxOf(0, spans.size - 2)].startFrame, spans.last().endFrame - 2L * rhythmRate)
+        if (frame < threshold) return false
+        if (rhythmAppended.size >= OPEN_MAX_NEW_BARS) {
+            if (!rhythmCapNoticed) { rhythmCapNoticed = true; showNotice("Höchstens $OPEN_MAX_NEW_BARS neue Takte je Aufnahme – sie endet am Ende der angehängten Takte") }
+            return false
+        }
+        extendRhythmCopy()
+        return false
+    }
+
+    /**
+     * Appends [OPEN_EXTEND_BARS] buffer bars to the tapping copy and prepares it (same project id, next negative revision).
+     * Not cancelled halfway: a prepare cut off between posting the program and recording it would leave the transport's
+     * plan unlike the engine's. A finish or abort meanwhile queues its restore behind it (the transport's mutex is fair).
+     */
+    private fun extendRhythmCopy() {
+        val copy = rhythmCopy ?: return
+        rhythmExtending = true
+        val more = List(minOf(OPEN_EXTEND_BARS, OPEN_MAX_NEW_BARS - rhythmAppended.size)) { ids.next() }
+        val next = appendEmptyMeasures(copy, more, ids).copy(revision = copy.revision - 1)
+        viewModelScope.launch {
+            try {
+                if (!rhythmBusy || rhythmCopy !== copy) return@launch
+                val prepared = withContext(NonCancellable) { transport.prepare(next, rhythmPractice) }
+                if (!rhythmBusy || rhythmCopy !== copy || prepared is Outcome.Failure) return@launch
+                val plan = transport.installedPlan() ?: return@launch
+                rhythmCopy = next
+                rhythmAppended = rhythmAppended + more
+                val run = linearRun(plan.spans.drop(rhythmStartRoute))
+                if (run.size >= rhythmSpans.size) rhythmSpans = run
+            } finally { rhythmExtending = false }
+        }
+    }
+
+    /**
+     * „Stopp“ (open recording): ends it at the audible plan frame of [nanos] (calibration subtracted, like a tap); a finger
+     * still down is released there. In the count-in nothing was recorded: it cancels.
+     */
+    fun stopRhythmTap(nanos: Long = System.nanoTime()) {
+        val phase = rhythm.value.phase
+        if (!rhythmOpen || (phase != RhythmTapPhase.RECORDING && phase != RhythmTapPhase.COUNT_IN)) return
+        if (phase == RhythmTapPhase.COUNT_IN) { abortRhythm(null); return }
+        val raw = transport.audiblePlanFrameAt(nanos)
+        val at = if (raw.isNaN()) transport.state.value.sample?.frame?.toDouble() ?: return else raw - tapLatencyMs() * rhythmRate / 1000.0
+        rhythmStop = at
+        rhythmJob?.cancel(); rhythmJob = null
+        viewModelScope.launch { finishRhythmTap() }
+    }
+
     /** Prepares, seeks and plays [playback] with metronome and a one-bar count-in; returns [count] spans from the start. */
     private suspend fun beginTapPlayback(playback: Project, start: PlaybackOccurrence, count: Int): List<RouteSpan>? {
         transport.stop()
-        val prepared = transport.prepare(playback, PracticeSettings(speed = practice.value.speed, countInBars = 1, metronome = true))
+        rhythmPractice = PracticeSettings(speed = practice.value.speed, countInBars = 1, metronome = true)
+        val prepared = transport.prepare(playback, rhythmPractice)
         if (prepared is Outcome.Failure) { abortRhythm(prepared.message); return null }
         transport.seek(start)
         val played = transport.play()
@@ -829,7 +944,7 @@ class WorkspaceViewModel(
      * Follows the transport: count-in → recording; ends at [end] (or when the transport stops at the end of the piece,
      * [endsPiece]) with [onEnd]; a pause, failure or stop before the end (audio focus, headphones) aborts without writing.
      */
-    private fun watchTapPlayback(start: Long, end: Long, endsPiece: Boolean, onEnd: suspend () -> Unit) {
+    private fun watchTapPlayback(start: Long, end: Long, endsPiece: Boolean, tick: ((Long) -> Boolean)? = null, onEnd: suspend () -> Unit) {
         rhythmJob?.cancel()
         rhythmJob = viewModelScope.launch {
             var interrupted = false
@@ -840,6 +955,7 @@ class WorkspaceViewModel(
                     mutableRhythm.value = rhythm.value.copy(phase = RhythmTapPhase.RECORDING)
                 when {
                     s.status == TransportStatus.PLAYING && frame != null && frame >= end -> true
+                    tick != null && s.status == TransportStatus.PLAYING && !s.countingIn && frame != null && tick(frame) -> true
                     s.status == TransportStatus.STOPPED && endsPiece && frame != null && frame >= start -> true
                     s.status != TransportStatus.PLAYING && s.status != TransportStatus.PREPARING -> { interrupted = true; true }
                     else -> false
@@ -866,6 +982,15 @@ class WorkspaceViewModel(
     private suspend fun finishRhythmTap() {
         if (rhythm.value.phase != RhythmTapPhase.RECORDING && rhythm.value.phase != RhythmTapPhase.COUNT_IN) return
         mutableRhythm.value = rhythm.value.copy(phase = RhythmTapPhase.PREVIEW)
+        if (rhythmOpen && !rhythmStop.isNaN()) {
+            // Zyklus 27: up to the stop — later touches go, a finger still down is released there; the spans keep the stop
+            // bar and the next one (a tap just before its downbeat snaps there), empty bars are trimmed after quantising.
+            val stop = rhythmStop
+            strokes.removeAll { it.downFrame > stop }
+            for (i in strokes.indices) if (strokes[i].upFrame.isNaN()) strokes[i] = strokes[i].copy(upFrame = stop)
+            val bar = rhythmSpans.indexOfFirst { stop < it.endFrame }.let { if (it < 0) rhythmSpans.lastIndex else it }
+            rhythmSpans = rhythmSpans.take(minOf(rhythmSpans.size, bar + 2))
+        }
         stopTapPlayback()
         quantizeRhythm()
     }
@@ -873,9 +998,15 @@ class WorkspaceViewModel(
         val e = session?.state?.value ?: return
         val origin = rhythmOrigin ?: return
         val r = rhythm.value
-        val compound = { b: Int -> e.project.measures.firstOrNull { it.id == rhythmSpans.getOrNull(b)?.measureId }?.signature?.let { s -> s.denominator >= 8 && s.numerator % 3 == 0 && s.numerator > 3 } == true }
-        val result = try { RhythmQuantizer.quantize(strokes.toList(), rhythmSpans, rhythmRate, r.grid, compound) } catch (x: IllegalArgumentException) { showNotice(x.message); return }
-        mutableRhythm.value = r.copy(result = result, overwrites = rhythmOverwrites(e.project, origin.trackId, origin.voice, rhythmSpans.map { it.measureId }))
+        // The copy knows the appended bars too.
+        val measures = (rhythmCopy ?: e.project).measures
+        val compound = { b: Int -> measures.firstOrNull { it.id == rhythmSpans.getOrNull(b)?.measureId }?.signature?.let { s -> s.denominator >= 8 && s.numerator % 3 == 0 && s.numerator > 3 } == true }
+        val raw = try { RhythmQuantizer.quantize(strokes.toList(), rhythmSpans, rhythmRate, r.grid, compound) } catch (x: IllegalArgumentException) { showNotice(x.message); return }
+        // Zyklus 27: new bars only as far as tapped (buffer bars after the last content are dropped); a fixed target keeps its existing bars.
+        val result = raw.trimmed(rhythmKeep)
+        val appended = rhythmAppended.toSet()
+        mutableRhythm.value = r.copy(result = result, overwrites = rhythmOverwrites(e.project, origin.trackId, origin.voice, result.bars.map { it.measureId }),
+            newBars = result.bars.count { it.measureId in appended })
     }
 
     /** Touch-down on the tap surface; [nanos] = event time (System.nanoTime base). Haptics are the UI's. */
@@ -906,7 +1037,9 @@ class WorkspaceViewModel(
         val origin = rhythmOrigin ?: return
         if (r.phase != RhythmTapPhase.PREVIEW) return
         if (!confirmed && r.overwrites > 0) { mutableRhythm.value = r.copy(confirm = mode); return }
-        val outcome = command(EditorCommand.ApplyRhythm(origin.trackId, origin.voice, result.bars, mode, r.string, r.drumNote))
+        // Zyklus 27: the bars after the end of the piece are appended in the same undo step.
+        val appended = rhythmAppended.toSet()
+        val outcome = command(EditorCommand.ApplyRhythm(origin.trackId, origin.voice, result.bars, mode, r.string, r.drumNote, appended = result.bars.map { it.measureId }.filter { it in appended }))
         if (outcome is Outcome.Failure) { mutableRhythm.value = r.copy(confirm = null); return }
         val slots = result.slots()
         if (mode == RhythmMode.GRID && slots.isNotEmpty()) {
@@ -914,8 +1047,9 @@ class WorkspaceViewModel(
             moveCursorTo(origin.copy(measureId = slots.first().measureId, offset = slots.first().offset, string = if (r.fretted) r.string else origin.string))
         } else moveCursorTo(origin.copy(measureId = result.bars.first().measureId, offset = Fraction.ZERO))
         mutableRhythm.value = r.copy(phase = RhythmTapPhase.IDLE, result = null, confirm = null)
-        showNotice(if (mode == RhythmMode.GRID) "Rhythmus übernommen: ${result.onsets} Anschläge – Bünde eingeben, der Cursor springt zum nächsten Anschlag"
-            else "Rhythmus übernommen: ${result.onsets} Anschläge")
+        val added = if (r.newBars > 0) ", +${r.newBars} ${if (r.newBars == 1) "Takt" else "Takte"}" else ""
+        showNotice(if (mode == RhythmMode.GRID) "Rhythmus übernommen: ${result.onsets} Anschläge$added – Bünde eingeben, der Cursor springt zum nächsten Anschlag"
+            else "Rhythmus übernommen: ${result.onsets} Anschläge$added")
     }
     fun cancelRhythmConfirm() { mutableRhythm.value = rhythm.value.copy(confirm = null) }
     /** „Verwerfen“: closes the preview; the score is unchanged. */
@@ -1053,5 +1187,9 @@ class WorkspaceViewModel(
         const val EDITOR_MARGIN = 6f
         private const val MAX_AUDIO_BYTES = 64 * 1024 * 1024
         private const val MAX_CLIP_MICROS = 600_000_000L
+        /** Zyklus 27, open recording: buffer bars after the end of the piece at the start, bars per extension, limit per recording. */
+        const val OPEN_BUFFER_BARS = 4
+        const val OPEN_EXTEND_BARS = 4
+        const val OPEN_MAX_NEW_BARS = 64
     }
 }
