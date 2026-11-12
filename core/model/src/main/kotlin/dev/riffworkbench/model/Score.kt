@@ -163,5 +163,15 @@ enum class LayoutMode { PAGE, CONTINUOUS, MULTITRACK }
     /**
      * Tap latency (Zyklus 25, „Rhythmus tippen“ → Kalibrieren): how much later than the audible click the user's taps land,
      * in ms (median of 8 calibration taps); subtracted from every tap. Default 0; older files read as 0.
+     * Since Zyklus 26 the fallback for an output device without its own entry in [latencyProfiles] (and the value
+     * written when no device is known); it is never attributed to a device (see LatencyProfiles in core:ports).
      */
-    val tapLatencyMs: Double = 0.0)
+    val tapLatencyMs: Double = 0.0,
+    /**
+     * Zyklus 26: calibrated tap latency per output device, keyed by AudioRoute.key („BLUETOOTH_A2DP|WH-1000XM4“: kind
+     * class + product name, no address). Older files read as empty.
+     */
+    val latencyProfiles: Map<String, LatencyProfile> = emptyMap())
+
+/** One device's calibration (Zyklus 26): the tap latency in ms and when it was measured (epoch ms, display only). */
+@Serializable data class LatencyProfile(val tapLatencyMs: Double, val calibratedAtEpochMs: Long = 0L)
