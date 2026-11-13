@@ -12,8 +12,10 @@ import kotlin.math.floor
  */
 enum class RhythmGrid(val label: String, val step: Fraction?) {
     EIGHTH("1/8", Fraction.of(1, 8)), SIXTEENTH("1/16", Fraction.of(1, 16)), THIRTY_SECOND("1/32", Fraction.of(1, 32)),
-    /** Per beat straight 16ths or 8th/16th triplets, by the smallest error with a penalty against triplets. */
-    AUTO("Auto", null),
+    /** Zyklus 25: per beat straight 16ths or 8th/16th triplets, by the smallest error with a penalty against triplets. */
+    AUTO("16tel/Triolen", null),
+    /** Zyklus 28 „Auto“ (default): pulse tracking, grid as model choice per beat, repeated figures decided together ([RhythmSmoother]). */
+    SMART("Auto", null),
 }
 
 /** GRID: rest placeholders with the tapped durations (frets are entered afterwards); OPEN_STRING: open-string notes (drums: one kit piece). */
@@ -27,7 +29,8 @@ data class RhythmEvent(val offset: Fraction, val duration: WrittenDuration, val 
     enum class Kind { ONSET, CONTINUATION, REST }
 }
 data class RhythmBar(val measureId: EntityId, val length: Fraction, val events: List<RhythmEvent>)
-data class RhythmResult(val bars: List<RhythmBar>, val onsets: Int, val discarded: Int, val merged: Int, val tripletBeats: Int)
+/** [analysis]: Zyklus 28, only for [RhythmGrid.SMART] (info line, meter guess). */
+data class RhythmResult(val bars: List<RhythmBar>, val onsets: Int, val discarded: Int, val merged: Int, val tripletBeats: Int, val analysis: RhythmAnalysis? = null)
 
 /** Where a tapped attack sits (GRID mode): its placeholder beat and the continuation beats that belong to the same held note. */
 data class RhythmSlot(val measureId: EntityId, val offset: Fraction, val continuations: List<Pair<EntityId, Fraction>>)
@@ -73,6 +76,7 @@ object RhythmQuantizer {
 
     fun quantize(taps: List<TapStroke>, spans: List<RouteSpan>, sampleRate: Int, grid: RhythmGrid, compound: (Int) -> Boolean = { false }): RhythmResult {
         require(spans.isNotEmpty()) { "Kein Zielbereich" }
+        if (grid == RhythmGrid.SMART) return RhythmSmoother.quantize(taps, spans, sampleRate, compound)
         val lengths = spans.map { it.length }
         val starts = ArrayList<Fraction>(); var acc = Fraction.ZERO
         for (l in lengths) { starts += acc; acc += l }

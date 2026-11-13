@@ -152,11 +152,11 @@ class Qa28TapConsistencyTest {
         assertTrue(r.anchorErrorsMs.maxOf { abs(it) } > 5.0)
     }
 
-    /** End to end: taps exactly on every click over 32 bars, quantised (1/16 and Auto) → every bar the same figure (quarters / clicks). */
+    /** End to end: taps exactly on every click over 32 bars, quantised (1/16, Zyklus-25 Auto and Zyklus-28 Auto) → every bar the same figure (quarters / clicks). */
     @Test fun tapsOnEveryClickGiveIdenticalBars() {
         val r = run(44_100, 200.0, 120.0, 80.0, extend = true)
         val spans = r.plan.spans
-        for (grid in listOf(RhythmGrid.SIXTEENTH, RhythmGrid.AUTO)) {
+        for (grid in listOf(RhythmGrid.SIXTEENTH, RhythmGrid.AUTO, RhythmGrid.SMART)) {
             // Count-in taps fall before the range and are discarded.
             val q = RhythmQuantizer.quantize(r.taps, spans, 44_100, grid) { false }
             assertEquals("$grid: 32 Takte", 32, q.bars.size)
