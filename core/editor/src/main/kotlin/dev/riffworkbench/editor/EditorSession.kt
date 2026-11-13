@@ -104,7 +104,12 @@ sealed interface EditorCommand {
      * step. They must be the last target bars, follow the last bar of the piece, and the last of them must hold a tapped note.
      */
     data class ApplyRhythm(val trackId: EntityId, val voice: Int, val bars: List<RhythmBar>, val mode: RhythmMode, val string: Int = 0, val drumNote: Int = 38,
-                           val appended: List<EntityId> = emptyList()) : EditorCommand
+                           val appended: List<EntityId> = emptyList(),
+                           /**
+                            * Zyklus 28 „Taktart erkennen“: new meters of target bars in the same undo step - appended bars are
+                            * created with it, existing ones change it (only bars empty in every track, see [meterEligible]).
+                            */
+                           val signatures: Map<EntityId, TimeSignature> = emptyMap()) : EditorCommand
 }
 
 /** Single-owner dispatcher: call selection + commands on the same UI dispatcher. No adapter mutates this state. */

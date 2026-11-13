@@ -97,6 +97,9 @@ enum class ExportTarget(val id: String, val labelDe: String, val labelEn: String
     STEMS("stems", "Stems + MIDI für die DAW (.zip)", "Stems + MIDI for the DAW (.zip)", "zip", streamed = true),
 }
 
+/** Zyklus 28: meter of the tapped bars — detected (AUTO), as they are (KEEP) or the one chosen by hand (FIXED). */
+enum class RhythmMeterMode { AUTO, KEEP, FIXED }
+
 /** Zyklus 25 „Rhythmus tippen“: where the flow is. COUNT_IN/RECORDING/CALIBRATING run the transport. */
 enum class RhythmTapPhase { IDLE, SETUP, COUNT_IN, RECORDING, PREVIEW, CALIBRATING }
 
@@ -118,7 +121,21 @@ data class RhythmTapState(
     val label: String = "",
     /** Bars appended at the end of the piece: setup — missing bars of a fixed target; preview — the bars „Übernehmen“ creates. */
     val newBars: Int = 0,
-    val grid: dev.riffworkbench.editor.RhythmGrid = dev.riffworkbench.editor.RhythmGrid.SIXTEENTH,
+    /**
+     * Zyklus 28: default „Auto“ ([dev.riffworkbench.editor.RhythmGrid.SMART], pulse tracking and grid per beat); the manual
+     * grids (1/8 … 1/32, the Zyklus-25 „16tel/Triolen“) stay under „Raster manuell“ ([manualOpen], folded by default).
+     * Changed default (was 1/16): the new Auto is at least as exact as every fixed grid on the evaluation (QA journal).
+     */
+    val grid: dev.riffworkbench.editor.RhythmGrid = dev.riffworkbench.editor.RhythmGrid.SMART,
+    val manualOpen: Boolean = false,
+    /** Zyklus 28 „Taktart erkennen“: Auto (detected meter for bars that may change), keep, or a fixed meter ([meterFixed]). */
+    val meterMode: RhythmMeterMode = RhythmMeterMode.AUTO,
+    val meterFixed: dev.riffworkbench.model.TimeSignature? = null,
+    /** Preview info line („erkannt: 16tel, Triolen in Takt 3“) and the meter line („Erkannt: 7/8“ or why bars keep theirs). */
+    val info: String = "",
+    val meterInfo: String? = null,
+    /** Zyklus 28: the practice speed the metronome of the recording runs at (Übungsseite), shown when ≠ 100 %. */
+    val speed: Double = 1.0,
     /** Other tracks play along (the target track stays silent); off: metronome only. */
     val accompaniment: Boolean = false,
     /** Fretted track: string for „Leersaite“ (0 = lowest); drum track: kit piece. */

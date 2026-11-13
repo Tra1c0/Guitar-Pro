@@ -32,6 +32,7 @@ import dev.riffworkbench.editor.RhythmGrid
 import dev.riffworkbench.editor.RhythmMode
 import dev.riffworkbench.editor.RhythmResult
 import dev.riffworkbench.model.InstrumentKind
+import dev.riffworkbench.model.TimeSignature
 import dev.riffworkbench.model.WrittenDuration
 import dev.riffworkbench.ui.components.BigTitle
 import dev.riffworkbench.ui.components.ChoiceTile
@@ -85,9 +86,47 @@ import dev.riffworkbench.ui.components.TabinoIcons
     }
 }
 
+/**
+ * Zyklus 28: the grid is „Auto“ by default (pulse tracking, grid per beat, repeats decided together) and needs no click.
+ * „Raster manuell“ folds out the fixed grids (and the Zyklus-25 „16tel/Triolen“) plus the meter choice.
+ */
 @Composable private fun GridChoice(vm: WorkspaceViewModel, rhythm: RhythmTapState) {
+    val current = if (rhythm.grid == RhythmGrid.SMART) tr("Auto", "Auto") else rhythm.grid.label
+    val meter = when (rhythm.meterMode) {
+        RhythmMeterMode.AUTO -> tr("Taktart Auto", "meter auto")
+        RhythmMeterMode.KEEP -> tr("Taktart beibehalten", "meter kept")
+        RhythmMeterMode.FIXED -> rhythm.meterFixed?.let { "${it.numerator}/${it.denominator}" } ?: tr("Taktart Auto", "meter auto")
+    }
+    TextButton(onClick = { vm.toggleRhythmManual() }, modifier = Modifier.fillMaxWidth().testTag("rhythm-manual")) {
+        Text((if (rhythm.manualOpen) "▾ " else "▸ ") + tr("Raster manuell", "Manual grid") + " · $current · $meter", Modifier.weight(1f))
+    }
+    if (!rhythm.manualOpen) return
     Section(tr("Raster", "Grid"))
-    TileRow(RhythmGrid.entries.map { g -> Triple(g.label, rhythm.grid == g) { vm.setRhythmGrid(g) } }, "rhythm-grid")
+    val order = listOf(RhythmGrid.SMART, RhythmGrid.EIGHTH, RhythmGrid.SIXTEENTH, RhythmGrid.THIRTY_SECOND, RhythmGrid.AUTO)
+    TileRow(order.map { g -> Triple(g.label, rhythm.grid == g) { vm.setRhythmGrid(g) } }, "rhythm-grid")
+    Section(tr("Taktart (neue oder leere Takte am Ende)", "Meter (new or empty bars at the end)"))
+    val fixed = listOf(TimeSignature(4, 4), TimeSignature(3, 4), TimeSignature(2, 4), TimeSignature(6, 8), TimeSignature(12, 8), TimeSignature(5, 4), TimeSignature(7, 8),
+        TimeSignature(5, 8), TimeSignature(9, 8), TimeSignature(7, 4), TimeSignature(11, 8), TimeSignature(13, 8), TimeSignature(15, 16))
+    Row(Modifier.horizontalScroll(rememberScrollState()).testTag("rhythm-meter"), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        ChoiceTile(tr("Auto", "Auto"), rhythm.meterMode == RhythmMeterMode.AUTO, { vm.setRhythmMeter(RhythmMeterMode.AUTO) },
+            Modifier.size(64.dp, 44.dp).testTag("rhythm-meter-auto"), idle = MaterialTheme.colorScheme.surfaceVariant)
+        ChoiceTile(tr("Beibehalten", "Keep"), rhythm.meterMode == RhythmMeterMode.KEEP, { vm.setRhythmMeter(RhythmMeterMode.KEEP) },
+            Modifier.size(96.dp, 44.dp).testTag("rhythm-meter-keep"), idle = MaterialTheme.colorScheme.surfaceVariant)
+        fixed.forEach { sig ->
+            ChoiceTile("${sig.numerator}/${sig.denominator}", rhythm.meterMode == RhythmMeterMode.FIXED && rhythm.meterFixed == sig, { vm.setRhythmMeter(RhythmMeterMode.FIXED, sig) },
+                Modifier.size(56.dp, 44.dp).testTag("rhythm-meter-${sig.numerator}-${sig.denominator}"), idle = MaterialTheme.colorScheme.surfaceVariant)
+        }
+    }
+    // „eigene“: any n/d the model allows (n 1–64, d a power of two up to 64).
+    var own by remember { mutableStateOf("") }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(own, { own = it.take(5) }, singleLine = true, label = { Text(tr("Eigene, z. B. 17/16", "Own, e.g. 17/16")) },
+            modifier = Modifier.weight(1f).testTag("rhythm-meter-own"))
+        val parsed = own.split("/").takeIf { it.size == 2 }?.let { (n, d) -> n.trim().toIntOrNull()?.let { a -> d.trim().toIntOrNull()?.let { b -> a to b } } }
+            ?.takeIf { (a, b) -> a in 1..64 && b in 1..64 && b.countOneBits() == 1 }
+        OutlinedButton(onClick = { parsed?.let { (a, b) -> vm.setRhythmMeter(RhythmMeterMode.FIXED, TimeSignature(a, b)) } }, enabled = parsed != null,
+            modifier = Modifier.testTag("rhythm-meter-own-apply")) { Text(tr("Setzen", "Set")) }
+    }
 }
 
 /** String (fretted) or kit piece (drums) for „Leersaite“. */
@@ -117,6 +156,10 @@ import dev.riffworkbench.ui.components.TabinoIcons
     Column(modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(tr("Tippe zum Metronom. Lang halten = langer Notenwert, kurz tippen = kurze Note mit Pausen danach.",
             "Tap along with the metronome. Hold = long value, quick tap = short note followed by rests."), style = MaterialTheme.typography.bodyMedium)
+        // Zyklus 28: the practice speed also sets the metronome here - say so instead of a silently slower click.
+        if (kotlin.math.abs(rhythm.speed - 1.0) > 1e-9) Text(tr("Übungstempo ${kotlin.math.round(rhythm.speed * 100).toInt()} %: das Metronom läuft entsprechend langsamer.",
+            "Practice speed ${kotlin.math.round(rhythm.speed * 100).toInt()} %: the metronome runs accordingly."), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("rhythm-speed"))
         Section(tr("Zielbereich", "Target"))
         if (state.selection.rangeEnd != null) TileRow(listOf(
             Triple(tr("Markierter Bereich", "Selected range"), rhythm.useRange) { vm.setRhythmUseRange(true) },
@@ -218,6 +261,9 @@ private fun eventNanos(uptimeMillis: Long): Long {
         if (result == null) Text(tr("Keine Anschläge erkannt", "No taps recognised"))
         else {
             Text(previewSummary(result), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("rhythm-summary"))
+            // Zyklus 28: what Auto found („erkannt: 16tel, Triolen in Takt 3“) and the meter („Erkannt: 7/8“).
+            if (rhythm.info.isNotEmpty()) Text(rhythm.info, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("rhythm-info"))
+            rhythm.meterInfo?.let { Text(it, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("rhythm-meter-info")) }
             // Zyklus 27: bars „Übernehmen“ appends at the end of the piece.
             if (rhythm.newBars > 0) Text(tr("+${rhythm.newBars} ${if (rhythm.newBars == 1) "Takt" else "Takte"} am Stückende", "+${rhythm.newBars} ${if (rhythm.newBars == 1) "bar" else "bars"} at the end"),
                 style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("rhythm-new-bars"))
@@ -246,8 +292,8 @@ private fun eventNanos(uptimeMillis: Long): Long {
     if (r.discarded > 0) append(tr(", ${r.discarded} außerhalb verworfen", ", ${r.discarded} outside discarded"))
 }
 
-/** Written value as a short label: 1/4, 1/8. (dotted), 1/8³ (triplet). */
-private fun valueLabel(d: WrittenDuration): String = "1/${d.denominator}" + ".".repeat(d.dots) + if (d.tuplets.isNotEmpty()) "³" else ""
+/** Written value as a short label: 1/4, 1/8. (dotted), 1/8³ (triplet), 1/16⁵ (quintuplet), 1/8³³ (nested triplet). */
+private fun valueLabel(d: WrittenDuration): String = "1/${d.denominator}" + ".".repeat(d.dots) + d.tuplets.joinToString("") { t -> t.actual.toString().map { "⁰¹²³⁴⁵⁶⁷⁸⁹"[it - '0'] }.joinToString("") }
 
 /**
  * Rhythm line: one row per bar, each event as a box whose width is its duration (notes filled, rests outlined, a held

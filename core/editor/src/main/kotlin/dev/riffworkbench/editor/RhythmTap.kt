@@ -267,11 +267,12 @@ object TapCalibration {
  * tempo in effect at the end goes on by itself), an empty bar in every staff of every track, like „Takt anhängen“. The
  * tapping copy and [EditorCommand.ApplyRhythm] both use it, so the bars that were played are the bars that are written.
  */
-fun appendEmptyMeasures(p: Project, measureIds: List<EntityId>, ids: IdSource): Project {
+fun appendEmptyMeasures(p: Project, measureIds: List<EntityId>, ids: IdSource, signatures: Map<EntityId, TimeSignature> = emptyMap()): Project {
     if (measureIds.isEmpty()) return p
     require(p.measures.size + measureIds.size <= 10_000) { "Zu viele Takte" }
     val last = p.measures.lastOrNull()
-    val added = measureIds.map { Measure(it, last?.signature ?: TimeSignature(), last?.key ?: KeySignature(), feel = last?.feel ?: RhythmicFeel.STRAIGHT) }
+    // Zyklus 28: a detected meter for a new bar ([signatures]), else the last bar's.
+    val added = measureIds.map { Measure(it, signatures[it] ?: last?.signature ?: TimeSignature(), last?.key ?: KeySignature(), feel = last?.feel ?: RhythmicFeel.STRAIGHT) }
     val factory = ProjectFactory(ids)
     return p.copy(measures = p.measures + added, tracks = p.tracks.map { t -> t.copy(staves = t.staves.map { st -> st.copy(bars = st.bars + added.map { factory.bar(it.id) }) }) })
 }
@@ -321,6 +322,62 @@ object RhythmAutoStop {
     }
 }
 
+/**
+ * Zyklus 28 „Taktart erkennen“: may the meter of [measures] change without surprising anyone? Each bar is empty in every
+ * track, staff and voice, is not a pickup, has no tempo change after its downbeat and a straight feel, and every bar after
+ * it in the piece is empty too (so a change of bar lengths never moves a written note).
+ */
+fun meterEligible(p: Project, measures: Collection<EntityId>): Boolean {
+    if (measures.isEmpty()) return false
+    val index = p.measures.withIndex().associate { it.value.id to it.index }
+    val first = measures.minOf { index[it] ?: return false }
+    fun empty(i: Int): Boolean {
+        val id = p.measures[i].id
+        return p.tracks.all { t -> t.staves.all { st -> st.bars.filter { it.measureId == id }.all { b -> b.voices.all { v -> v.beats.all { it.notes.isEmpty() } } } } }
+    }
+    for (i in first until p.measures.size) if (!empty(i)) return false
+    for (id in measures) {
+        val m = p.measures[index.getValue(id)]
+        if (m.pickupLength != null || m.feel != RhythmicFeel.STRAIGHT) return false
+        if (p.tempo.any { it.position.measureId == id && it.position.offset > Fraction.ZERO }) return false
+    }
+    return true
+}
+
+/**
+ * Zyklus 28: the route spans of a re-barred recording. The bars [from]… of [spans] (constant tempo, straight) are replaced
+ * by bars of [meter] (a first bar of [phase] when it is not 0) covering at least the same time; the frame map is the old
+ * one (the tempo in quarters per minute stays, so every written note keeps its real time - in x/8 the 8th keeps its
+ * length). [measureIds] name the new bars in order (existing ids first). Returns the spans and the signature per bar.
+ */
+fun rebarSpans(spans: List<RouteSpan>, from: Int, meter: TimeSignature, phase: Fraction, measureIds: (Int) -> EntityId): Pair<List<RouteSpan>, List<TimeSignature>> {
+    require(from in spans.indices)
+    val head = spans.take(from)
+    val first = spans[from]
+    val fpw = (first.frames.last() - first.frames.first()) / first.length.toDouble()
+    val total = spans.drop(from).fold(Fraction.ZERO) { a, s -> a + s.length }
+    val lengths = ArrayList<Fraction>()
+    if (phase > Fraction.ZERO) lengths += phase
+    var covered = lengths.fold(Fraction.ZERO) { a, l -> a + l }
+    while (covered < total) { lengths += meter.length(); covered += meter.length() }
+    var frame = first.frames.first(); var routeIndex = first.routeIndex; var measureIndex = first.measureIndex
+    val out = ArrayList<RouteSpan>(); val sigs = ArrayList<TimeSignature>()
+    for ((k, len) in lengths.withIndex()) {
+        val end = frame + len.toDouble() * fpw
+        out += RouteSpan(routeIndex++, measureIds(k), measureIndex++, 1, len, doubleArrayOf(0.0, len.toDouble()), doubleArrayOf(frame, end))
+        sigs += if (k == 0 && phase > Fraction.ZERO) signatureOf(len, meter) else meter
+        frame = end
+    }
+    return (head + out) to sigs
+}
+
+/** A meter of length [len] in the unit of [like] (a pickup bar of 3/8 before 7/8 bars), finer when needed. */
+fun signatureOf(len: Fraction, like: TimeSignature): TimeSignature {
+    var den = like.denominator.toLong()
+    while ((len * Fraction.of(den)).denominator != 1L && den < 64) den *= 2
+    return TimeSignature((len * Fraction.of(den)).numerator.toInt(), den.toInt())
+}
+
 /** Notes that applying a rhythm to [voice] of [trackId] in [measures] would overwrite (confirmation „Überschreibt N Noten“). */
 fun rhythmOverwrites(p: Project, trackId: EntityId, voice: Int, measures: Collection<EntityId>): Int = RhythmEdits.notesIn(p, trackId, voice, measures)
 
@@ -331,7 +388,18 @@ internal object RhythmEdits {
         p.tracks.firstOrNull { it.id == trackId }?.staves?.firstOrNull()?.bars?.filter { it.measureId in measures }
             ?.sumOf { b -> b.voices.filter { it.index == voice }.sumOf { v -> v.beats.sumOf { it.notes.size } } } ?: 0
 
-    fun apply(original: Project, c: EditorCommand.ApplyRhythm, ids: IdSource): Project {
+    fun apply(original0: Project, c: EditorCommand.ApplyRhythm, ids: IdSource): Project {
+        // Zyklus 28: meter changes of existing target bars first (only bars that are empty in every track and not a pickup,
+        // so no written note moves); appended bars get theirs when they are created.
+        val original = if (c.signatures.isEmpty()) original0 else {
+            val existing = c.signatures.filterKeys { id -> original0.measures.any { it.id == id } }
+            for ((id, sig) in existing) {
+                require(sig.numerator in 1..64 && sig.denominator in listOf(1, 2, 4, 8, 16, 32)) { "Taktart ungültig" }
+                require(id in c.bars.map { it.measureId }) { "Taktwechsel nur in Zieltakten" }
+                require(meterEligible(original0, listOf(id))) { "Takt enthält Noten – Taktart bleibt" }
+            }
+            original0.copy(measures = original0.measures.map { m -> existing[m.id]?.let { m.copy(signature = it) } ?: m })
+        }
         val p = if (c.appended.isEmpty()) original else {
             // Zyklus 27: new bars first (same undo step); only as many as the rhythm needs.
             require(c.appended.distinct().size == c.appended.size && c.appended.none { id -> original.measures.any { it.id == id } }) { "Neue Takte ungültig" }
@@ -339,7 +407,7 @@ internal object RhythmEdits {
             val existing = c.bars.dropLast(c.appended.size)
             require(existing.isEmpty() || existing.last().measureId == original.measures.last().id) { "Neue Takte schließen nicht an das Stückende an" }
             require(c.bars.last().events.any { it.kind != RhythmEvent.Kind.REST }) { "Leere neue Takte werden nicht angelegt" }
-            appendEmptyMeasures(original, c.appended, ids)
+            appendEmptyMeasures(original, c.appended, ids, c.signatures)
         }
         val track = p.tracks.firstOrNull { it.id == c.trackId } ?: throw IllegalArgumentException("Spur fehlt")
         require(c.voice in 0..3) { "Stimme existiert nicht" }

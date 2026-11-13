@@ -759,6 +759,9 @@ class WorkspaceViewModel(
     private var rhythmBounded = false
     private var rhythmExtending = false
     private var rhythmCapNoticed = false
+    /** Zyklus 28: meters of re-barred target bars (detected or chosen) and ids of bars the re-barring needs beyond the copy's. */
+    private var rhythmSignatures: Map<EntityId, TimeSignature> = emptyMap()
+    private var rhythmExtraBars: List<EntityId> = emptyList()
     private val rhythmBusy: Boolean get() = rhythm.value.phase == RhythmTapPhase.COUNT_IN || rhythm.value.phase == RhythmTapPhase.RECORDING || rhythm.value.phase == RhythmTapPhase.CALIBRATING
 
     fun openRhythmTap() {
@@ -770,7 +773,8 @@ class WorkspaceViewModel(
         if (!fretted && !drums) { showNotice("Rhythmus tippen gibt es für Gitarre, Bass und Schlagzeug"); return }
         val previous = rhythm.value
         mutableRhythm.value = RhythmTapState(RhythmTapPhase.SETUP, useRange = previous.useRange, barCount = previous.barCount, grid = previous.grid, accompaniment = previous.accompaniment,
-            openEnded = previous.openEnded, autoStop = previous.autoStop, fretted = fretted, drums = drums, string = 0, drumNote = if (drums) previous.drumNote else 38)
+            openEnded = previous.openEnded, autoStop = previous.autoStop, fretted = fretted, drums = drums, string = 0, drumNote = if (drums) previous.drumNote else 38,
+            manualOpen = previous.manualOpen, meterMode = previous.meterMode, meterFixed = previous.meterFixed, speed = practice.value.speed)
         refreshRhythmLatency()
         refreshRhythmTarget()
     }
@@ -786,6 +790,13 @@ class WorkspaceViewModel(
     /** Grid change; in the preview the same taps are quantised again (no new recording). */
     fun setRhythmGrid(grid: RhythmGrid) {
         mutableRhythm.value = rhythm.value.copy(grid = grid)
+        if (rhythm.value.phase == RhythmTapPhase.PREVIEW) quantizeRhythm()
+    }
+    /** Zyklus 28: „Raster manuell“ folds out the manual grids and the meter choice (folded by default: Auto needs no click). */
+    fun toggleRhythmManual() { mutableRhythm.value = rhythm.value.copy(manualOpen = !rhythm.value.manualOpen) }
+    /** Zyklus 28 „Taktart“: Auto, keep, or a fixed meter ([sig]); in the preview the same taps are quantised again. */
+    fun setRhythmMeter(mode: RhythmMeterMode, sig: TimeSignature? = null) {
+        mutableRhythm.value = rhythm.value.copy(meterMode = if (mode == RhythmMeterMode.FIXED && sig == null) RhythmMeterMode.AUTO else mode, meterFixed = if (mode == RhythmMeterMode.FIXED) sig else rhythm.value.meterFixed)
         if (rhythm.value.phase == RhythmTapPhase.PREVIEW) quantizeRhythm()
     }
 
@@ -1000,13 +1011,74 @@ class WorkspaceViewModel(
         val r = rhythm.value
         // The copy knows the appended bars too.
         val measures = (rhythmCopy ?: e.project).measures
-        val compound = { b: Int -> measures.firstOrNull { it.id == rhythmSpans.getOrNull(b)?.measureId }?.signature?.let { s -> s.denominator >= 8 && s.numerator % 3 == 0 && s.numerator > 3 } == true }
-        val raw = try { RhythmQuantizer.quantize(strokes.toList(), rhythmSpans, rhythmRate, r.grid, compound) } catch (x: IllegalArgumentException) { showNotice(x.message); return }
-        // Zyklus 27: new bars only as far as tapped (buffer bars after the last content are dropped); a fixed target keeps its existing bars.
-        val result = raw.trimmed(rhythmKeep)
+        fun isCompound(s: TimeSignature) = s.denominator >= 8 && s.numerator % 3 == 0 && s.numerator > 3
+        val compound = { b: Int -> measures.firstOrNull { it.id == rhythmSpans.getOrNull(b)?.measureId }?.signature?.let(::isCompound) == true }
+        rhythmSignatures = emptyMap(); rhythmExtraBars = emptyList()
+        if (r.grid != RhythmGrid.SMART) {
+            val raw = try { RhythmQuantizer.quantize(strokes.toList(), rhythmSpans, rhythmRate, r.grid, compound) } catch (x: IllegalArgumentException) { showNotice(x.message); return }
+            // Zyklus 27: new bars only as far as tapped (buffer bars after the last content are dropped); a fixed target keeps its existing bars.
+            val result = raw.trimmed(rhythmKeep)
+            val appended = rhythmAppended.toSet()
+            mutableRhythm.value = r.copy(result = result, overwrites = rhythmOverwrites(e.project, origin.trackId, origin.voice, result.bars.map { it.measureId }),
+                newBars = result.bars.count { it.measureId in appended }, info = "", meterInfo = null)
+            return
+        }
+        // Zyklus 28 „Auto“: smoothing, and the meter of the bars that may change (appended ones, and empty bars at the end).
+        val spans = rhythmSpans
         val appended = rhythmAppended.toSet()
+        val from = meterRegionStart(e.project, spans, appended)
+        val current = measures.firstOrNull { it.id == spans.getOrNull(maxOf(0, from))?.measureId }?.signature ?: TimeSignature()
+        val first = try { RhythmSmoother.quantize(strokes.toList(), spans, rhythmRate, compound, current = current, meterFrom = maxOf(0, from)) } catch (x: IllegalArgumentException) { showNotice(x.message); return }
+        val guess = first.analysis?.meter
+        val target: Pair<TimeSignature, Fraction>? = when (r.meterMode) {
+            RhythmMeterMode.KEEP -> null
+            RhythmMeterMode.FIXED -> r.meterFixed?.takeIf { it != current }?.let { it to Fraction.ZERO }
+            RhythmMeterMode.AUTO -> guess?.takeIf { it.changes }?.let { it.signature!! to it.phase }
+        }
+        var result = first.trimmed(rhythmKeep)
+        var meterInfo: String? = guess?.takeIf { it.changes && r.meterMode == RhythmMeterMode.AUTO }?.let { g ->
+            if (from < 0) "Erkannt: ${g.signature!!.numerator}/${g.signature!!.denominator} – vorhandene Takte behalten ${current.numerator}/${current.denominator}" else null }
+        if (target != null && from >= 0) {
+            val (sig, phase) = target
+            // Existing bars of the region first (their ids keep their place), then the appended ones, then new ids.
+            val regionIds = spans.drop(from).map { it.measureId }
+            val extra = ArrayList<EntityId>()
+            val (rebarred, sigs) = rebarSpans(spans, from, sig, phase) { k -> regionIds.getOrNull(k) ?: extra.getOrElse(k - regionIds.size) { ids.next().also { extra += it } } }
+            val existingIds = regionIds.filter { it !in appended }
+            val newCompound = { b: Int -> if (b < from) compound(b) else isCompound(sigs[b - from]) }
+            val again = try { RhythmSmoother.quantize(strokes.toList(), rebarred, rhythmRate, newCompound) } catch (x: IllegalArgumentException) { null }
+            // New bars must follow the piece's end: with existing bars after the region (empty ones) more bars cannot be inserted.
+            val endsPiece = existingIds.isEmpty() || existingIds.last() == e.project.measures.last().id
+            if (again != null && (endsPiece || rebarred.size - from <= existingIds.size)) {
+                val keep = from + minOf(existingIds.size, rebarred.size - from)
+                result = again.trimmed(maxOf(keep, minOf(rhythmKeep, from + 1)))
+                rhythmExtraBars = extra
+                rhythmSignatures = result.bars.drop(from).mapIndexed { k, b -> b.measureId to sigs[k] }.toMap()
+                val phaseNote = if (phase > Fraction.ZERO) " (erster Takt ${sigs[0].numerator}/${sigs[0].denominator})" else ""
+                meterInfo = "Erkannt: ${sig.numerator}/${sig.denominator}$phaseNote".let { if (r.meterMode == RhythmMeterMode.FIXED) "Taktart: ${sig.numerator}/${sig.denominator}$phaseNote" else it }
+            } else meterInfo = "Erkannt: ${sig.numerator}/${sig.denominator} – vorhandene Takte behalten ${current.numerator}/${current.denominator}"
+        } else if (target != null && r.meterMode == RhythmMeterMode.FIXED) meterInfo = "Taktart ${target.first.numerator}/${target.first.denominator}: nur für neue oder leere Takte am Ende – vorhandene behalten ${current.numerator}/${current.denominator}"
+        val newIds = appended + rhythmExtraBars
         mutableRhythm.value = r.copy(result = result, overwrites = rhythmOverwrites(e.project, origin.trackId, origin.voice, result.bars.map { it.measureId }),
-            newBars = result.bars.count { it.measureId in appended })
+            newBars = result.bars.count { it.measureId in newIds }, info = result.analysis?.summary ?: first.analysis?.summary.orEmpty(), meterInfo = meterInfo)
+    }
+
+    /**
+     * Zyklus 28: index in [spans] from which the meter may change — every span from there is an appended bar or an existing
+     * bar that is empty in every track with only empty bars after it ([meterEligible]), at one tempo and straight; -1: none.
+     */
+    private fun meterRegionStart(p: Project, spans: List<RouteSpan>, appended: Set<EntityId>): Int {
+        if (spans.isEmpty()) return -1
+        fun fpw(s: RouteSpan) = (s.frames.last() - s.frames.first()) / s.length.toDouble()
+        var from = spans.size
+        while (from > 0) {
+            val s = spans[from - 1]
+            val ok = s.offsets.size == 2 && kotlin.math.abs(fpw(s) - fpw(spans.last())) < 1e-6 * fpw(s) &&
+                (s.measureId in appended || meterEligible(p, spans.subList(from - 1, spans.size).map { it.measureId }.filter { it !in appended }))
+            if (!ok) break
+            from--
+        }
+        return if (from < spans.size) from else -1
     }
 
     /** Touch-down on the tap surface; [nanos] = event time (System.nanoTime base). Haptics are the UI's. */
@@ -1039,7 +1111,9 @@ class WorkspaceViewModel(
         if (!confirmed && r.overwrites > 0) { mutableRhythm.value = r.copy(confirm = mode); return }
         // Zyklus 27: the bars after the end of the piece are appended in the same undo step.
         val appended = rhythmAppended.toSet()
-        val outcome = command(EditorCommand.ApplyRhythm(origin.trackId, origin.voice, result.bars, mode, r.string, r.drumNote, appended = result.bars.map { it.measureId }.filter { it in appended }))
+        val newIds = appended + rhythmExtraBars
+        val outcome = command(EditorCommand.ApplyRhythm(origin.trackId, origin.voice, result.bars, mode, r.string, r.drumNote, appended = result.bars.map { it.measureId }.filter { it in newIds },
+            signatures = rhythmSignatures.filterKeys { id -> result.bars.any { it.measureId == id } }))
         if (outcome is Outcome.Failure) { mutableRhythm.value = r.copy(confirm = null); return }
         val slots = result.slots()
         if (mode == RhythmMode.GRID && slots.isNotEmpty()) {
