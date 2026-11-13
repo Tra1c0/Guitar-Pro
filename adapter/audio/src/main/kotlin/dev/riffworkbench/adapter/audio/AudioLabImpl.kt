@@ -80,7 +80,7 @@ class EngineAudioLab(
 ) : AudioLab {
     override fun stats(): AudioStats? = transport.stats()?.let { s ->
         AudioStats(s.sampleRate, s.blockFrames, s.blocks, s.budgetMicros, s.renderMedianMicros, s.renderP99Micros, s.renderMaxMicros, s.overruns, s.underruns,
-            s.outputLatencyMs, s.noteOnLatencyMs, s.voices, s.hasSamples, s.deviceName, s.hasDrumSamples)
+            s.outputLatencyMs, s.noteOnLatencyMs, s.voices, s.hasSamples, s.deviceName, s.hasDrumSamples, s.engineRate, s.deviceRate)
     }
 
     override suspend fun stressTest(seconds: Int, onSample: (StressSample) -> Unit): Outcome<StressReport> {

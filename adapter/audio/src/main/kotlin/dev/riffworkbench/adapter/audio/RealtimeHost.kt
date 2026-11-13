@@ -49,6 +49,9 @@ data class HostStats(
     val underruns: Long, val outputLatencyMs: Double?, val noteOnLatencyMs: Double?, val voices: Int, val hasSamples: Boolean, val deviceName: String,
     /** The engine plays the sampled drum kit (QA cycle 24); false = synthetic kit (not loaded yet or missing). */
     val hasDrumSamples: Boolean = false,
+    /** Zyklus 28: the rate the engine renders at and the device's mixer rate (0 = unknown); see [SinkFormat]. */
+    val engineRate: Int = 0,
+    val deviceRate: Int = 0,
 )
 
 /**
@@ -295,7 +298,7 @@ class RealtimeHost(
         val presented = sink?.presentedFrame()
         return HostStats(f.sampleRate, f.blockFrames, count, f.blockFrames * 1e6 / f.sampleRate, pct(0.5), pct(0.99), if (n == 0) 0.0 else sorted[n - 1] / 1000.0,
             overruns, sink?.underruns() ?: 0, presented?.let { (written - it).coerceAtLeast(0) * 1000.0 / f.sampleRate }, noteOnNanos.takeIf { it >= 0 }?.let { it / 1e6 },
-            lastVoices, engine?.hasBank == true, f.deviceName, engine?.hasDrumKit == true)
+            lastVoices, engine?.hasBank == true, f.deviceName, engine?.hasDrumKit == true, engine?.sampleRate ?: 0, f.deviceRate)
     }
 
     /**

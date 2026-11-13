@@ -97,6 +97,7 @@ import dev.riffworkbench.ui.score.pitchName
     val info = "${stringResource(R.string.measure)} ${index + 1} · $sig" + (bpm?.let { " · ${it.toInt()} BPM" } ?: "")
     Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         BigTitle(p.metadata.title, null, Modifier.weight(1f), size = 22)
+        HeaderSpeedChip(vm)
         HeaderBeatDots(vm, p)
         val action = stringResource(R.string.bar_settings)
         // Touch target 40 dp instead of Material's 48 (QA 20 / Partitur-Kopf): the 32-dp pill set the height of the whole
@@ -107,6 +108,27 @@ import dev.riffworkbench.ui.score.pitchName
                 Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(info, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Zyklus 28 („Metronom zu langsam“): the practice speed (Üben → Geschwindigkeit, speed trainer) also applies to Play in the
+ * editor. Below or above 100 % a small chip says so, with the BPM that really plays; tapping it returns to 100 %. Nothing
+ * at 100 %. Reads only the practice settings (no 30 Hz transport polls); with the trainer running, the start speed shows.
+ */
+@Composable private fun HeaderSpeedChip(vm: WorkspaceViewModel) {
+    val practice by vm.practice.collectAsStateWithLifecycle()
+    val speed = practice.speed
+    if (kotlin.math.abs(speed - 1.0) < 1e-9) return
+    val percent = kotlin.math.round(speed * 100).toInt()
+    val label = tr("Übungstempo $percent %", "Practice speed $percent %") + tr(". Tippen: zurück auf 100 %", ". Tap: back to 100 %")
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides HeaderTouchTarget) {
+        Surface(onClick = { vm.setSpeed(1.0) }, shape = RoundedCornerShape(16.dp), color = Tabino.Lime.copy(alpha = 0.18f), contentColor = Tabino.Lime,
+            modifier = Modifier.heightIn(min = 32.dp).semantics { contentDescription = label }.testTag("practice-speed-chip")) {
+            Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("$percent %", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1)
             }
         }
     }

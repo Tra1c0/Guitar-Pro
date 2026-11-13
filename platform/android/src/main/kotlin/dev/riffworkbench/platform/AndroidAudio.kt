@@ -77,11 +77,19 @@ class AudioTrackSink(private val context: Context, private val routes: AndroidAu
                 }
                 t.play()
             } catch (e: Exception) { t.release(); throw e }
+            // Zyklus 28 („Metronom zu langsam“): engine, plan and the timestamp extrapolation must run at the rate this
+            // track really consumes frames at, not at the requested one. A track built with an explicit rate reports that
+            // rate, and AudioFlinger resamples it to the device without changing speed; reading it back (and the playback
+            // rate, which a later setPlaybackRate would change) makes a device that substitutes another rate play at the
+            // right tempo and pitch instead of ~8 % slow and low (48 kHz rendered, 44.1 kHz consumed).
+            val actual = t.playbackRate.takeIf { it in 8_000..192_000 } ?: t.sampleRate.takeIf { it in 8_000..192_000 } ?: rate
+            rate = actual
             track = t
             // Zyklus 26: the device this track is routed to selects the latency profile (once per open, not per block).
             routes?.attach(t)
             val device = t.routedDevice?.productName?.toString() ?: "Lautsprecher"
-            Outcome.Success(SinkFormat(rate, block, t.bufferSizeInFrames, device))
+            val mixer = try { AudioTrack.getNativeOutputSampleRate(AudioManager.STREAM_MUSIC) } catch (_: Exception) { 0 }
+            Outcome.Success(SinkFormat(actual, block, t.bufferSizeInFrames, device, deviceRate = mixer.takeIf { it in 8_000..192_000 } ?: 0))
         }
     } catch (e: Exception) {
         Outcome.Failure(FailureCode.UNAVAILABLE, e.message ?: "Audioausgabe nicht verfügbar", contractId = "C-AUDIO")

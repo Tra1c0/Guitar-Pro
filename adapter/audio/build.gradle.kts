@@ -9,6 +9,8 @@ dependencies {
     implementation(project(":core:playback"))
     implementation(libs.coroutines.core)
     testImplementation(libs.junit)
+    // Zyklus 28: the default project (ProjectFactory) and the tap time map end to end.
+    testImplementation(project(":core:editor"))
     testImplementation(libs.coroutines.test)
     testImplementation(libs.serialization.json)
 }

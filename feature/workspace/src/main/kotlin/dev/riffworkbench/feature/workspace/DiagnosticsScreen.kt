@@ -42,6 +42,10 @@ import kotlinx.coroutines.launch
             if (s == null) Text(tr("Noch keine Ausgabe geöffnet – einmal abspielen oder unten „Note-on messen“.", "No output opened yet – play once or use “Measure note-on” below."), style = MaterialTheme.typography.bodySmall)
             else {
                 Line(tr("Gerät", "Device"), "${s.deviceName} · ${s.sampleRate} Hz · Block ${s.blockFrames}")
+                // Zyklus 28: the rate the track consumes vs. the rate the engine renders at; any difference changes tempo and pitch.
+                Line(tr("Ausgabe / Engine", "Output / engine"), tr("Ausgabe: ${s.sampleRate} Hz, Engine: ${s.engineRate} Hz", "Output: ${s.sampleRate} Hz, engine: ${s.engineRate} Hz") +
+                    (if (s.deviceRate > 0 && s.deviceRate != s.sampleRate) tr(" · Gerät ${s.deviceRate} Hz (System resampelt)", " · device ${s.deviceRate} Hz (resampled by the system)") else "") +
+                    (if (s.engineRate > 0 && s.engineRate != s.sampleRate) tr(" – ABWEICHUNG", " – MISMATCH") else ""))
                 Line(tr("Gitarren-Samples", "Guitar samples"), if (s.hasSamples) tr("aktiv", "active") else tr("nicht geladen (modelliert)", "not loaded (modelled)"))
                 Line(tr("Schlagzeug-Samples", "Drum samples"), if (s.hasDrumSamples) tr("aktiv (ArtiFret Pearl Kit)", "active (ArtiFret Pearl Kit)") else tr("nicht geladen (synthetisch)", "not loaded (synthetic)"))
                 Line(tr("Renderzeit Median / P99 / Max", "Render median / P99 / max"), "%.0f / %.0f / %.0f µs".format(s.renderMedianMicros, s.renderP99Micros, s.renderMaxMicros))

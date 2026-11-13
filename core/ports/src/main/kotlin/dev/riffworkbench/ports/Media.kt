@@ -95,7 +95,12 @@ interface AudioSink {
     fun underruns(): Long = 0
     fun close()
 }
-data class SinkFormat(val sampleRate: Int, val blockFrames: Int, val latencyFrames: Int, val deviceName: String)
+/**
+ * [sampleRate] is the rate the opened output actually consumes frames at (Zyklus 28: read back from the device after
+ * opening, never the requested one); engine, plan and timestamps all use it. [deviceRate] is the hardware mixer rate when
+ * the platform reports one (0 = unknown) - informational: the platform resamples [sampleRate] to it without changing speed.
+ */
+data class SinkFormat(val sampleRate: Int, val blockFrames: Int, val latencyFrames: Int, val deviceName: String, val deviceRate: Int = 0)
 
 /** C-TUNER input boundary; Android implements it with AudioRecord. */
 interface AudioInputSource {
@@ -129,6 +134,9 @@ data class AudioStats(
     val underruns: Long, val outputLatencyMs: Double?, val noteOnLatencyMs: Double?, val voices: Int, val hasSamples: Boolean, val deviceName: String,
     /** The sampled drum kit plays (false: synthetic kit, not loaded or missing). */
     val hasDrumSamples: Boolean = false,
+    /** Zyklus 28: rate the engine renders at (0 = no engine yet) and the device's mixer rate (0 = unknown); see [SinkFormat]. */
+    val engineRate: Int = 0,
+    val deviceRate: Int = 0,
 )
 /** One second of a stress run. */
 data class StressSample(val second: Int, val stats: AudioStats?, val memoryMb: Double?, val thermal: String?, val cpuMhz: List<Int>)
