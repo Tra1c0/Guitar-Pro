@@ -982,3 +982,142 @@ Auftrag (Nutzerwunsch): „Der Rhythmus-Tipp-Modus soll selbstständig neue Takt
 **Nur CI-prüfbar:** Android-Kompilat/Lint von `RhythmTapScreen` (Kachel, Schalter, Stopp, Vorschauzeile) und Robolectric `Qa27RhythmAppendUiTest` sowie die bestehenden Rhythmus-UI-Tests mit dem geänderten Setup.
 
 **Restrisiken:** Gerätetests offen: Nachladen auf dem Telefon (Compile-Zeit großer Partituren im Verhältnis zu den ≥ 2 s Vorlauf; kommt das Nachladen zu spät, endet die Aufnahme am Kopie-Ende — es wird nichts geschrieben, was nicht getippt wurde), Bedienbarkeit von „Stopp“ während des Tippens. Die Takt-Bezeichnung im Dialogtitel zeigt die Planung („+3 neu“), die Vorschau die tatsächlich angelegten Takte. Feste Zielbereiche legen leere neue Takte am Ende nicht an (Nutzerwunsch „nur so viele, wie getippt“); wer bewusst Pausentakte will, hängt sie mit „Takt anhängen“ an. Offen höchstens 64 neue Takte je Aufnahme. Bei Stopp landet ein Tipp, der auf den Taktstrich danach rundet, im nächsten Takt (die Kopie hält dafür einen Takt hinter dem Stopp vor).
+
+### Zyklus 28 / Metronom-Tempo, Rhythmus-Glättung, Konsistenz
+
+Auftrag (Nutzer): (1) „Das Metronom fühlt sich zu langsam an“ (echtes Handy) – nur Belegtes ändern; (2) autonome Rhythmus-Glättung im Rhythmus-Tipper mit höchstens einem Klick, Unterscheidung gerade/Prog/Tuplets; Zusatzwunsch während der Arbeit: (2b) Taktart selbst erkennen; (3) Konsistenz der Tipp-Zeitabbildung über 32+ Takte. Lokal JVM-Harness, ViewModel-Shim, Compose-Desktop-Typcheck mit Android-Stubs (plus die Desktop-Varianten der Rhythmus-UI-Tests); Android-Kompilat, Lint und Robolectric nur CI.
+
+**Aufgabe 1 – Metronom (Messung je Hypothese, `Qa28MetronomeTempoTest`, Live-Pfad EngineTransport → renderBlock → Testsenke, Klick-Onsets im Ausgang gemessen):**
+- a) Samplerate Ende-zu-Ende: Engine (`SynthEngine(f.sampleRate)`), Plan (`compileNow(project, format.sampleRate)`), Rack, Count-in und Zeitstempel-Extrapolation nehmen alle `SinkFormat.sampleRate`. `AudioTrackSink` öffnete den Track mit expliziter Rate = `PROPERTY_OUTPUT_SAMPLE_RATE` und meldete dieselbe Zahl – AudioFlinger resampelt dann ohne Tempofehler. **Kein Mismatch im Code belegbar.** Senke mit anderer Rate als angefragt (44,1/48/96 kHz bei Wunsch 48 kHz): Plan, Engine und Klickabstand folgen der Senke (120 BPM: 22 050 / 24 000 / 48 000 Frames, je 0 Frames Abweichung); Neuöffnen nach Leerlauf mit anderer Rate (Bluetooth-Wiederverbindung): Plan neu kompiliert, 150 BPM bei 44,1 kHz = 17 640 Frames (mit altem 48-kHz-Plan wären es 19 200, 8,8 % langsamer). Härtung trotzdem: `AudioTrackSink` liest die Rate nach dem Bauen zurück (`playbackRate`, sonst `sampleRate`) und meldet sie; `SinkFormat.deviceRate` = Mixer-Rate des Geräts (`getNativeOutputSampleRate`). Diagnose zeigt neu „Ausgabe: <rate> Hz, Engine: <rate> Hz“ (+ Geräterate bei Resampling, „ABWEICHUNG“ falls Engine ≠ Ausgabe). Bänke (44,1-kHz-Samples): Gitarren-A2 bei Engine 44,1/48/96 kHz = 110,06/110,07/110,07 Hz, Snare 326,5/325,2 ms – Tonhöhe und Länge stimmen.
+- b) Übungstempo: Die Geschwindigkeit der Übungsseite (Chips 50/70/85 %, Speed-Trainer setzt beim Einschalten 70 %) gilt im ganzen Workspace, also auch für Play im Editor und für das Metronom von „Rhythmus tippen“ – und war im Editor **nirgends sichtbar**. Das ist der plausibelste Grund für „fühlt sich langsamer an“, ohne dass etwas falsch rechnet. Neu: Chip „70 %“ im Editor-Kopf, sobald ≠ 100 % (Tippen = zurück auf 100 %, Semantik „Übungstempo 70 %“), im Rhythmus-Dialog die Zeile „Übungstempo 70 %: das Metronom läuft entsprechend langsamer“. Bei 100 % unverändert (keine Kopf-Höhenänderung).
+- c) Klick-Einheit: x/4 klickt Viertel (angezeigtes BPM = Klicks/min: 150 bei 4/4, 3/4, 5/4, 2/4, 6/4), x/8 ungerade Achtel (7/8, 5/8, 3/8: 300/min), zusammengesetzte Takte punktierte Viertel (6/8, 9/8, 12/8: 100/min bei „150 BPM“), 11/16 Sechzehntel (600/min), 2/2 Halbe (75/min). BPM bezieht sich überall auf Viertel (`TempoChange.quarterNotesPerMinute`). Das Standardprojekt (4/4, 150 BPM) klickt gemessen exakt 150/min (19 200 Frames). Kein Fehler; in 6/8/12/8 und 2/2 klingt der Klick bewusst „halb so oft“ wie die Zahl – bleibt so (musikalische Konvention), ist jetzt im Journal benannt.
+- d) Live-Timing: 60/120/150/200 BPM mit Vorzähler, mit und ohne Kabinett-Latenzausgleich: alle Abstände exakt (0 Frames), Übergang Vorzähler → Takt 1 inklusive; Seek mitten im Spiel: Raster bleibt (erster Klick 9 600 Frames = ½ Schlag nach dem Seek-Block), Loop-Umbruch 200 BPM: 27 Klicks à 14 400; nahtloses Verlängern bei 44,1 kHz: 20 Klicks à 22 050.
+- **Ergebnis:** Kein Tempofehler im Code (Rate, Klickraster, Timing belegt); sichtbar gemacht, was das Tempo heimlich ändern konnte (Übungstempo). **Am Gerät prüfen:** Diagnose „Ausgabe/Engine“ und Geräterate ablesen (bei Lautsprecher und Bluetooth), Underrun-Zähler nach einer Minute Metronom (Underruns dehnen die Zeit hörbar – das wäre ein Leistungs-, kein Ratenfehler), ob der Chip „70 %“ im Editor stand, als es sich langsam anfühlte; ggf. 4/4 vs. 6/8 der betroffenen Stelle.
+
+**Aufgabe 3 – Konsistenz der Tipp-Zeitabbildung (`Qa28TapConsistencyTest`):** Senke mit Gerätemodell: DAC verbraucht rate·(1+ppm) Frames pro nanoTime-Sekunde, AudioTrack-Zeitstempel nur alle 0,5 s erneuert und mit der Nennrate extrapoliert (wie `AudioTrackSink`). 32 Takte mit Takt- und Tempowechseln (4/4@120, 3/4, 7/8@140, 4/4@96, 5/4), stummer Gitarre (Kabinett-Latenz), Vorzähler, Senke 1 536 Frames; Tipp = Zeitpunkt, an dem der gemessene Klick-Onset den DAC verlässt, + Touch-Latenz des Profils, abgebildet 30–250 ms später. Ergebnisse (152 Klicks je Lauf): 48 kHz/0 ppm: 0,000 ms; 48 kHz/+200 ppm, BT-Profil 180 ms, 20 nahtlos angehängte Takte: Takt 1 max 0,035 ms, Takt 32 max 0,028 ms, gesamt 0,077 ms; 44,1 kHz/−200 ppm, Zustellung 250 ms, angehängt: Takt 1 0,036 ms, Takt 32 0,082 ms. Derselbe Lauf über einen einmaligen Startanker: 12,8 ms Fehler am Ende (der Test belegt seine Empfindlichkeit). **Befund:** `audiblePlanFrameAt` nutzt bei jedem Tipp ein frisches (Frame, Zeit)-Paar; Drift wirkt nur über Zeitstempelalter und Zustellverzögerung – kein Fix nötig. End-to-End: Tipps exakt auf allen Klicks über 32 Takte → mit 1/16, „16tel/Triolen“ und neuem Auto jeder Takt Anschläge genau auf den Klicks, alle Takte gleicher Länge identisch notiert.
+
+**Aufgabe 2 – Rhythmus-Glättung „Auto“ (`RhythmSmoother`, core:editor, rein, JVM):**
+1. Pulsverfolgung: Tipp-Positionen in geschriebenen Ganzen (Tempo-Map der Aufnahme). Die glatte Abweichung w(t) (eilen/schleppen) ist eine robuste, nicht-kausale Kernregression (Gauß, σ = 1 Viertel, leave-one-out, Huber-Gewichte c = 1,5 σ, Ridge zu 0, Grenze ±⅛ Viertel) der Rasterresiduen – vorwärts und rückwärts über die ganze Aufnahme (Glättung statt Filterung). Startschätzung aus den Residuen zum Achtelraster (Tukey-Gewicht: nur Tipps nahe einer Achtel zählen, Triolen/16tel-Offbeats nicht). 4 Runden: Modellwahl → Residuen → neues w und Tipp-Streuung σ (1,4826·MAD, 6–40 ms). Downs und Ups werden entzerrt. Gemessen: Bandbreite 1 Viertel besser als 0,5/1,5/2,5 (Mittel σ 15–20: 96,1/95,4/93,5 % exakt).
+2. Rasterwahl je Zählzeit (Viertel; punktierte Viertel in 6/8 …; Rest ungerader Takte eigenes Fenster) und je Viertelpaar (Viertel-Triolen, verschachtelte Triolen) als MDL-Modellwahl per dynamischer Programmierung über den Takt: Datenkosten Σ min(½(e/σ)², 6) mit e in Sekunden + Kodierkosten ln(Rasterpunkte je Viertel) je Tipp + Modell-Prior (8tel/16tel 0, 32tel 3, 64tel 4,5, Triolen 3, Sextolen 3,5, Quintolen 5, Septolen 6,5, verschachtelt 7 + 1 je Drittel). Kontext: eine Tuplet-Familie, die die Aufnahme sonst nicht nutzt, zahlt +1,5 (Einführung), eine oft genutzte die Hälfte; ein Tuplet-Fenster, dessen Rasterpunkte genau je einen Anschlag tragen (volle Triole/Quintole), −2. Gehaltene Releases (nicht direkt vor dem nächsten Anschlag) gehen mit Gewicht 0,4/0,5 und eigener Streuung max(2σ, 30 ms) in dieselbe Wahl ein.
+3. Globale Konsistenz: Takte gleicher Länge und Anschlagzahl, deren Tipps innerhalb von 0,6 Rasterschritten bzw. 3,5 σ am Median der Gruppe liegen (≤ 20 % Positionsabweichler, ≤ ⅓ Artikulationsabweichler gegen die Gruppenmehrheit), sind eine Figur: Kosten summiert, Prior einmal, Positionen und Releases aus dem Median der Mitglieder, kurz/gehalten per Mehrheit → identische Notation. Zweiter Durchgang: ein einzelner Takt mit genau einem Tipp, der einen ganzen Schritt daneben liegt (Ausrutscher), schließt sich einer Gruppe ≥ 2 an – nicht, wenn ein zweiter Takt genauso aussieht (dann ist es eine Variation). Zwei verschiedene Tipps auf demselben Rasterpunkt (Ausreißer in dichten Läufen): der fernere rückt auf den freien Nachbarpunkt. Positionen werden nur aufs gewählte Raster gezogen (3+3+2, 5+5+6, Synkopen über den Taktstrich bleiben).
+4. Dauern: Zyklus-25-Regeln (kurzer Tipp < max(120 ms, 0,6 × Kurzwert) = Anschlag + Pausen; Kurzwert = Rasterschritt, in binären Fenstern höchstens 1/16; höchstens bis zum nächsten Anschlag; über den Taktstrich als Fortsetzung). Ups entzerrt und mit dem Raster ihres Fensters gerundet; ein Release kurz vor dem nächsten Anschlag (Abstand < 0,6 Schritte + 30 ms) hält bis dorthin (menschliches frühes Loslassen).
+5. Schreiben: Tuplet-Ketten allgemein (`writeIn`): 3:2, 5:4, 7:4, Viertel-Triolen über zwei Viertel, verschachtelt [3:2, 3:2]; Schnitte an Tuplet-Grenzen; was nicht darstellbar wäre, fällt auf das Zyklus-25-Auto zurück (nie verlorene Tipps).
+
+**Zusatzwunsch – Taktart erkennen (`MeterDetector`):** Auf den geglätteten Noten: Anschlagvektor auf Achtel/16tel, je Kandidat (4/4, 3/4, 6/8, 2/4, 12/8, 5/4, 7/8, 5/8, 9/8, 7/4, 11/8, 13/8, 15/16, 11/16, 15/8) Dice-Selbstähnlichkeit bei Lag 1 Takt oder 2 Takte (zweitaktige Riffs) minus Komplexitätsstrafe (0 … 0,11); mindestens zwei volle Perioden; 3/4 ↔ 6/8 über das Akzentprofil (Haltedauer, Lücke davor); Wechsel nur bei Ähnlichkeit ≥ 0,85 und ≥ 0,08 über der aktuellen Taktart. Phase: Aufnahmebeginn („1“ nach dem Vorzähler), nach einer Pause ≥ 1/8 der erste Anschlag (eigener kurzer erster Takt). Akzent-basierte Phasen wurden gemessen und verworfen (0 % bei Riffs, deren längste Note nicht die erste ist). Angewandt nur, wo es niemanden überrascht: angehängte Takte (offen) und Zieltakte, die in keiner Spur Noten haben, wenn auch alle Takte danach leer sind (`meterEligible`), bei gleichem Tempo und geradem Feel; dann `rebarSpans` (gleiche Zeitabbildung, das Tempo in Vierteln/min bleibt – die Achtel behält ihre Länge, die Klickeinheit folgt der neuen Taktart) und neu quantisieren; `ApplyRhythm.signatures` setzt die Taktarten im selben Undo-Schritt. Sonst Hinweis „Erkannt: 7/8 – vorhandene Takte behalten 4/4“. Das Metronom läuft während der Aufnahme im bestehenden Puls.
+
+**Bedienung (Klicks):** Unverändert gegenüber heute: Start → tippen → Stopp/Auto-Stopp → Vorschau → „Übernehmen“. Neu ohne Zusatzklick: Auto ist Standard, Infozeile „erkannt: 16tel, Triolen in Takt 3, Takt 1=2=4 gleich“ und ggf. „Erkannt: 7/8“. Eingeklappt „▸ Raster manuell · Auto · Taktart Auto“: Raster Auto | 1/8 | 1/16 | 1/32 | 16tel/Triolen (das Zyklus-25-Auto, Label von „Auto“ umbenannt) und Taktart Auto | Beibehalten | 4/4 … 15/16 | eigene (n/d); jede Änderung quantisiert dieselben Tipps neu. **Gewollte Verhaltensänderung:** Standardraster 1/16 → Auto (Begründung: Evaluation unten; Qa25-/Qa26-/Qa27-ViewModel-Tests laufen unverändert grün mit dem neuen Standard, die Desktop-Varianten der Rhythmus-UI-Tests ebenso).
+
+**Evaluation (reproduzierbar, `Qa28RhythmEvaluationTest`, Generator `Qa28HumanTaps`):** 13 Klassen × σ ∈ {8, 15, 20, 25} ms × 20 Seeds × 8 Takte (Figuren in A A B A A A B C-Reihenfolge). Mensch: Tempo aus Klassenbereich, Drift d(t) = Bias ±15 ms + A·sin (Steigung bis ±6 %, |A| ≤ ⅒ Schlag), Jitter N(0, σ) auf Downs, N(0, 1,3σ) + 10–50 ms frühes Loslassen auf Ups, kurze Tipps 50–100 ms, Ausreißer 1,5 % (±50–110 ms), Doppeltipps 1,5 % (12–30 ms). Metriken: exakt = gleiche Onset-Position und Gesamtdauer, geteilt durch max(Soll, Ist); Wiederholungen = Anteil der Takte identischer Soll-Figur, die wie die Mehrheit notiert sind; Tuplet-Fehlalarm = Viertelfenster mit Tuplet-Wert in Klassen ohne Tuplets. „alt“ = Zyklus-25-Auto.
+
+| Klasse | σ ms | alt exakt % | neu exakt % | alt Wdh. % | neu Wdh. % | alt Tuplet-FA % | neu Tuplet-FA % |
+|---|---|---|---|---|---|---|---|
+| Rock 8tel | 8 | 84.4 | 99.3 | 52.1 | 97.9 | 2.2 | 0.0 |
+| Rock 8tel | 15 | 77.2 | 98.3 | 38.6 | 95.0 | 9.1 | 0.2 |
+| Rock 8tel | 20 | 65.8 | 95.8 | 29.3 | 88.6 | 14.8 | 0.3 |
+| Rock 8tel | 25 | 58.2 | 90.1 | 28.6 | 71.4 | 22.5 | 0.3 |
+| Metal 16tel | 8 | 81.3 | 99.7 | 55.7 | 99.3 | 17.3 | 0.0 |
+| Metal 16tel | 15 | 76.8 | 99.0 | 46.4 | 89.3 | 21.9 | 0.3 |
+| Metal 16tel | 20 | 73.5 | 98.5 | 45.7 | 91.4 | 25.9 | 0.3 |
+| Metal 16tel | 25 | 66.9 | 96.2 | 37.1 | 80.7 | 31.4 | 1.3 |
+| Gallop | 8 | 87.9 | 99.3 | 53.1 | 95.0 | 10.6 | 0.2 |
+| Gallop | 15 | 70.9 | 98.0 | 32.5 | 88.8 | 28.3 | 0.2 |
+| Gallop | 20 | 61.3 | 95.6 | 26.9 | 80.6 | 35.5 | 0.6 |
+| Gallop | 25 | 58.4 | 91.1 | 25.6 | 73.1 | 39.4 | 2.0 |
+| Synkopen über den Taktstrich | 8 | 84.5 | 98.0 | 65.6 | 93.8 | 2.7 | 0.0 |
+| Synkopen über den Taktstrich | 15 | 83.8 | 99.5 | 61.9 | 98.1 | 2.3 | 0.0 |
+| Synkopen über den Taktstrich | 20 | 72.1 | 96.6 | 50.0 | 96.3 | 6.7 | 0.0 |
+| Synkopen über den Taktstrich | 25 | 69.3 | 92.7 | 48.8 | 93.8 | 8.0 | 0.3 |
+| Djent/Prog 3+3+2, 5+5+6 | 8 | 80.4 | 99.3 | 60.7 | 99.3 | 9.4 | 0.2 |
+| Djent/Prog 3+3+2, 5+5+6 | 15 | 73.3 | 97.9 | 47.1 | 97.9 | 12.3 | 0.8 |
+| Djent/Prog 3+3+2, 5+5+6 | 20 | 64.5 | 96.7 | 40.7 | 96.4 | 16.6 | 0.0 |
+| Djent/Prog 3+3+2, 5+5+6 | 25 | 56.0 | 93.5 | 33.6 | 89.3 | 22.7 | 0.0 |
+| 7/8 und 5/4 | 8 | 83.8 | 99.6 | 56.9 | 97.5 | 4.7 | 0.0 |
+| 7/8 und 5/4 | 15 | 75.4 | 98.8 | 43.8 | 95.0 | 9.9 | 0.0 |
+| 7/8 und 5/4 | 20 | 66.9 | 97.9 | 36.9 | 92.5 | 13.8 | 0.1 |
+| 7/8 und 5/4 | 25 | 58.3 | 96.1 | 29.4 | 85.0 | 22.1 | 0.0 |
+| Taktwechsel + Tempowechsel | 8 | 85.4 | 98.6 | 71.9 | 96.9 | 3.9 | 0.0 |
+| Taktwechsel + Tempowechsel | 15 | 75.4 | 97.1 | 61.3 | 96.3 | 5.9 | 0.0 |
+| Taktwechsel + Tempowechsel | 20 | 66.1 | 96.3 | 56.9 | 91.3 | 12.3 | 0.0 |
+| Taktwechsel + Tempowechsel | 25 | 55.9 | 85.7 | 55.0 | 76.9 | 16.1 | 1.3 |
+| Riff mit 16tel-Variation | 8 | 86.0 | 99.0 | 61.3 | 96.3 | 12.3 | 0.0 |
+| Riff mit 16tel-Variation | 15 | 81.8 | 98.5 | 50.0 | 90.6 | 16.4 | 0.0 |
+| Riff mit 16tel-Variation | 20 | 71.1 | 98.2 | 38.8 | 91.9 | 26.4 | 0.0 |
+| Riff mit 16tel-Variation | 25 | 65.1 | 98.0 | 35.6 | 86.3 | 32.0 | 0.0 |
+| Shuffle/Swing | 8 | 72.2 | 98.3 | 50.0 | 97.5 | – | – |
+| Shuffle/Swing | 15 | 67.3 | 97.3 | 40.0 | 95.6 | – | – |
+| Shuffle/Swing | 20 | 50.8 | 90.2 | 28.7 | 86.9 | – | – |
+| Shuffle/Swing | 25 | 53.1 | 85.3 | 27.5 | 84.4 | – | – |
+| Triolen-Fill | 8 | 93.5 | 99.9 | 74.4 | 98.8 | – | – |
+| Triolen-Fill | 15 | 80.4 | 94.5 | 48.8 | 95.0 | – | – |
+| Triolen-Fill | 20 | 79.6 | 92.3 | 41.3 | 91.9 | – | – |
+| Triolen-Fill | 25 | 71.1 | 72.0 | 38.8 | 85.6 | – | – |
+| Quintolen | 8 | 34.5 | 98.5 | 48.1 | 96.3 | – | – |
+| Quintolen | 15 | 31.6 | 96.5 | 33.8 | 91.3 | – | – |
+| Quintolen | 20 | 33.3 | 98.2 | 35.6 | 94.4 | – | – |
+| Quintolen | 25 | 32.6 | 91.9 | 31.3 | 88.1 | – | – |
+| Sextolen | 8 | 89.8 | 98.4 | 71.9 | 94.4 | – | – |
+| Sextolen | 15 | 82.8 | 98.7 | 52.5 | 88.1 | – | – |
+| Sextolen | 20 | 81.1 | 96.7 | 43.1 | 79.4 | – | – |
+| Sextolen | 25 | 71.0 | 87.2 | 33.8 | 71.3 | – | – |
+| Verschachtelte Triolen | 8 | 65.1 | 98.0 | 54.4 | 96.9 | – | – |
+| Verschachtelte Triolen | 15 | 60.7 | 91.3 | 46.9 | 95.6 | – | – |
+| Verschachtelte Triolen | 20 | 60.0 | 92.2 | 35.0 | 93.8 | – | – |
+| Verschachtelte Triolen | 25 | 59.3 | 91.2 | 38.8 | 92.5 | – | – |
+
+**Taktart-Erkennung (`Qa28MeterDetectionTest`, Riffs zum 4/4-Klick, 6 Takte, 20 Seeds):**
+
+| Fall | σ ms | Taktart erkannt % | Phase richtig % | Umdeutung vorgeschlagen % |
+|---|---|---|---|---|
+| 7/8 | 8 | 95 | 95 | 95 |
+| 7/8 | 15 | 100 | 95 | 100 |
+| 7/8 | 20 | 95 | 95 | 100 |
+| 7/8 mit Auftakt-Note | 8 | 100 | 0 | 100 |
+| 7/8 mit Auftakt-Note | 15 | 100 | 5 | 100 |
+| 7/8 mit Auftakt-Note | 20 | 100 | 0 | 100 |
+| 7/8 nach 1/4 Pause | 8 | 95 | 95 | 95 |
+| 7/8 nach 1/4 Pause | 15 | 100 | 100 | 100 |
+| 7/8 nach 1/4 Pause | 20 | 90 | 90 | 100 |
+| 5/4 | 8 | 90 | 85 | 90 |
+| 5/4 | 15 | 80 | 80 | 80 |
+| 5/4 | 20 | 85 | 80 | 90 |
+| 6/8 | 8 | 95 | 95 | 100 |
+| 6/8 | 15 | 95 | 95 | 100 |
+| 6/8 | 20 | 90 | 90 | 100 |
+| 3/4 | 8 | 90 | 90 | 100 |
+| 3/4 | 15 | 85 | 85 | 100 |
+| 3/4 | 20 | 95 | 95 | 100 |
+| 11/8 | 8 | 100 | 100 | 100 |
+| 11/8 | 15 | 100 | 100 | 100 |
+| 11/8 | 20 | 95 | 90 | 95 |
+| 15/16 | 8 | 90 | 90 | 100 |
+| 15/16 | 15 | 70 | 70 | 85 |
+| 15/16 | 20 | 60 | 60 | 75 |
+| 4/4 Riff | 8 | 100 | 100 | 0 |
+| 4/4 Riff | 15 | 100 | 100 | 0 |
+| 4/4 Riff | 20 | 100 | 100 | 0 |
+| 4/4 Synkope über den Taktstrich | 8 | 100 | 100 | 0 |
+| 4/4 Synkope über den Taktstrich | 15 | 100 | 100 | 0 |
+| 4/4 Synkope über den Taktstrich | 20 | 100 | 100 | 0 |
+| 4/4 mit 3er-Gruppen (3+3+3+3+4) | 8 | 100 | 100 | 0 |
+| 4/4 mit 3er-Gruppen (3+3+3+3+4) | 15 | 100 | 100 | 0 |
+| 4/4 mit 3er-Gruppen (3+3+3+3+4) | 20 | 100 | 100 | 0 |
+| 4/4 mit 3er-Gruppen über 2 Takte (3x10+2) | 8 | 100 | 100 | 0 |
+| 4/4 mit 3er-Gruppen über 2 Takte (3x10+2) | 15 | 100 | 100 | 0 |
+| 4/4 mit 3er-Gruppen über 2 Takte (3x10+2) | 20 | 100 | 100 | 0 |
+| 4/4 Achtel durchgehend | 8 | 100 | 100 | 0 |
+| 4/4 Achtel durchgehend | 15 | 100 | 100 | 0 |
+| 4/4 Achtel durchgehend | 20 | 100 | 100 | 0 |
+
+Zusätzlich alle 4/4-Klassen der Rhythmus-Evaluation (880 Läufe): 3 umgedeutet. Fehlalarmrate 4/4 gesamt 0,3 % (Ziel ≤ 2 %), Treffer andere Taktarten 90,2 % (Phase 89,3 %).
+
+**Akzeptanz, ehrlich:** Neu ≥ alt in jeder Klasse und jedem σ (exakt und Wiederholungen; knappster Fall Triolen-Fill σ 25: 72,0 gegen 71,1 %). Tuplet-Fehlalarme ≤ 1 % bei geraden Rhythmen bis σ 20 (max 0,8 %; bei σ 25 bis 2,0 % Gallop). **Verfehlt:** 98 % exakt bei geraden Rhythmen σ ≤ 20 nur bei σ 8/15 durchweg erreicht (Ausnahmen Djent σ15 97,9 %, Taktwechsel σ15 97,1 %); bei σ 20: Rock 95,8, Gallop 95,6, Synkopen 96,6, Djent 96,7, 7/8+5/4 97,9, Taktwechsel 96,3 % (Metal 98,5, Variation 98,2 % erreicht). Hauptursachen gemessen: gehaltene Achteln bei ≥ 150 BPM, die mit frühem Loslassen unter 120 ms fallen (Zyklus-25-Kurztipp-Regel, bewusst beibehalten), und 16tel bei 160 BPM mit σ 20 ms (halber Schritt = 2,3 σ). Wiederholte Figuren identisch: ≥ 95 % bei σ 8 fast überall, bei σ 15 88–99 %, bei σ 20 79–96 % (Ziel 95 % verfehlt; Ursache: ein falsch gesetzter Tipp ändert die Anschlagzahl, dann ist der Takt keine Wiederholung mehr). Variation (eine 16tel verschoben, gleiche Artikulation) bleibt erhalten: 98 % exakt. Test-Untergrenzen deshalb: exakt ≥ 95 % (gerade, σ ≤ 20), Wiederholungen ≥ 88 % (σ ≤ 15).
+
+**Tests (neu):** `Qa28MetronomeTempoTest` (adapter:audio, 9), `Qa28TapConsistencyTest` (adapter:audio, 4), `Qa28RhythmSmootherTest` (core:editor, 7: Zyklus-25-Muster 60–240 BPM, Triolen gegen 16tel, Quintolen/Viertel-/verschachtelte Triolen exakt geschrieben, Pulsverfolgung bei ±55 ms Drift – 1/16 fest liegt daneben, Wiederholung identisch + Variation bleibt, Zyklus-25-Regeln, Tuplet-Ketten), `Qa28RhythmEvaluationTest`, `Qa28MeterDetectionTest`, `Qa28MeterApplyTest` (core:editor, 2: Zeitabbildung neuer Takte, Auftakt-Takt, Taktwechsel nur leerer Takte, ein Undo, Ablehnung ohne Änderung), `Qa28RhythmAutoViewModelTest` (Shim, 4: Auto als Standard mit Infozeile und einem Undo; 7/8-Riff offen am Stückende → 4 Takte 7/8, Tempo unverändert, ein Undo; manuell Beibehalten/3/4; Bassnoten → Hinweis, Taktart bleibt; Übungstempo sichtbar). Rot vorher: Pulsverfolgungstest gegen festes 1/16 (daneben), Ankerprobe in Qa28TapConsistencyTest (12,8 ms).
+
+**Gehalten:** Volle JVM-Suite 733/733 (inkl. allocTest ohne Escape-Analyse), ViewModel-Shim 76/76 (72 + 4), Compose-Desktop-Typcheck grün, Desktop-Varianten `Qa25RhythmTapDesktopTest`/`Qa27RhythmAppendDesktopTest` grün. Race-Tests unter Last (6 Busy-Loops auf 4 Kernen): `Qa19PlayStartRaceTest`, `PlayStartRegressionTest`, `Qa20PollEpochTest`, `AudioRaceRegressionTest`, `Qa25TapTimingTest`, `Qa27AppendTransportTest`, `Qa28MetronomeTempoTest`, `Qa28TapConsistencyTest` in 5 von 5 Läufen grün. `verify_architecture.py` grün.
+
+**Nur CI-prüfbar:** Android-Kompilat/Lint von `AudioTrackSink` (Rate zurücklesen, `getNativeOutputSampleRate`), Diagnose-Zeile, Kopf-Chip, Rhythmus-Dialog („Raster manuell“, Taktart-Kacheln, „eigene“, Info-/Taktartzeile, Übungstempo-Zeile); Robolectric `Qa25RhythmTapUiTest`/`Qa27RhythmAppendUiTest` mit dem neuen Standard.
+
+**Restrisiken:** Gerät: ob die Rückleserate je von der angefragten abweicht (bisher nur Code-Härtung), Underruns als echte Ursache von „langsam“, Gefühl der Glättung bei echten Daumen (Touch-Jitter, Batching). Der Generator ist ein Modell: Klassen mit hoher Geschwindigkeit und σ 20–25 ms bleiben unter den Zielwerten (siehe oben). Phase: ein Riff, das mit einer Auftakt-Note beginnt, wird ab dem Aufnahmebeginn gezählt (0 % Phasentreffer in diesem Fall); 5/4- und 15/16-Riffs mit inneren 4er-Mustern werden bei σ ≥ 15 nur zu 60–85 % erkannt (dann bleibt 4/4). Taktwechsel nur für neue oder leere Takte am Stückende; in einem festen Bereich mitten im Stück mit leeren Takten danach werden keine Takte eingefügt (Hinweis). Wie der Notensatz verschachtelte Tuplets (Kette [3:2, 3:2]) und Quintolen/Septolen klammert, ist nicht geprüft (Längen und Wiedergabe sind exakt, der Validator meldet keinen Fehler).
+
+Ergebnis Zyklus 28 (Branch `worktree-agent-afe71035474034b3e`, Basis 61f3f2d): 006dc95 (Metronom: Track-Rate, Übungstempo-Chip, Diagnose, Messtests), fd855be (Zeitabbildung über 32 Takte), 26eb3c5 (RhythmSmoother, MeterDetector, Evaluation), 2172053 (ViewModel/UI: Auto als Standard, Raster manuell, Taktart übernehmen), dazu dieser Journal-Eintrag.
