@@ -148,6 +148,27 @@ class WorkspaceViewModel(
     }
     /** Bar map: jump to the start of [measureId] (in range mode, like a tap, it extends the range). */
     fun selectMeasure(measureId: EntityId) { val s = state.value.editor?.selection ?: return; navigateTo(s.copy(measureId = measureId, offset = Fraction.ZERO), moveCursor = false) }
+
+    /**
+     * Zyklus 30 „Cursor selbst schieben“: a drag on a positioning strip (drum ruler/guitar lane, the score's number lane)
+     * started. While playing, following pauses so the view does not run away under the finger; nothing else changes.
+     */
+    fun beginPositioning() { if (transport.state.value.status == TransportStatus.PLAYING) suspendFollow() }
+
+    /**
+     * Release of a positioning drag (or a tap on the strip) at the snapped position: only the cursor/start marker moves —
+     * no note, no range, no edit (the project revision stays). While playing, ONE seek to it (and following resumes);
+     * paused or stopped, the next Play starts there (Zyklus 18). Inside a beat of the edited voice the cursor takes that
+     * beat's start (Zyklus 23). False if the bar does not exist.
+     */
+    fun positionCursor(measureId: EntityId, offset: Fraction): Boolean {
+        val s = session ?: return false
+        val current = s.state.value.selection
+        val moved = moveCursorTo(current.copy(measureId = measureId, offset = offset, rangeEnd = null))
+        if (moved && transport.state.value.status == TransportStatus.PLAYING) seekToCursor()
+        else if (view.value.followSuspended && transport.state.value.status != TransportStatus.PLAYING) resumeFollow()
+        return moved
+    }
     fun putNoteAt(string: Int, fret: Int) {
         val selection = state.value.editor?.selection ?: return
         if (selectCell(selection.copy(string = string))) command(EditorCommand.PutNote(fret = fret, duration = input.value.duration))

@@ -196,3 +196,67 @@ object DrumGridGeometry {
     fun follow(columnX: Float, scroll: Float, viewport: Float, content: Float, margin: Float = CELL + GAP): Float =
         dev.riffworkbench.notation.ViewportScroll.minimal(columnX + CELL / 2, CELL / 2, scroll, viewport, content, margin)
 }
+
+/**
+ * Zyklus 30: what the continuous drum grid draws per bar beyond the cells — pure (JVM shim), so the glow timing, the guitar
+ * lane geometry and the cursor snap are testable without Compose. x values are dp inside the bar item.
+ */
+object DrumGridActivity {
+    /** Height (dp) of the guitar lane above the bar header; it is also part of the positioning strip. */
+    const val LANE = 8f
+    /** Snap radius (dp) of the positioning strip: half a cell, at least 16 dp. */
+    val SNAP_RADIUS = maxOf(DrumGridGeometry.CELL / 2, 16f)
+
+    /**
+     * x (dp, inside the bar) of [offset]: piecewise linear between the cell starts (cells are not linear in time because of
+     * the wider beat gap), the last cell running to its right edge at the barline.
+     */
+    fun xAt(cells: List<dev.riffworkbench.editor.DrumGrid.Cell>, xs: FloatArray, length: Fraction, offset: Double): Float {
+        if (cells.isEmpty()) return DrumGridGeometry.BAR_START
+        if (offset <= cells[0].offset.toDouble()) return xs[0]
+        for (i in 1 until cells.size) {
+            val o = cells[i].offset.toDouble()
+            if (offset < o) {
+                val p = cells[i - 1].offset.toDouble()
+                return xs[i - 1] + ((offset - p) / (o - p)).toFloat() * (xs[i] - xs[i - 1])
+            }
+        }
+        val p = cells.last().offset.toDouble()
+        val span = (length.toDouble() - p).coerceAtLeast(1e-9)
+        return xs.last() + ((offset - p) / span).toFloat().coerceIn(0f, 1f) * DrumGridGeometry.CELL
+    }
+
+    /** A glowing set cell: bar index, cell index, kit element, intensity 0…1. */
+    data class Glow(val bar: Int, val cell: Int, val midi: Int, val intensity: Float)
+
+    /**
+     * The set cells that glow at score time [now] (seconds of [dev.riffworkbench.playback.ScoreClock], i.e. the displayed
+     * playhead incl. the Bluetooth delay): every hit that lies exactly on a cell of the grid (the cell shows it as set) and
+     * started less than [dev.riffworkbench.playback.HitGlow.DECAY_SECONDS] ago (real time: divided by [speed]).
+     */
+    fun glowing(bars: List<dev.riffworkbench.editor.DrumGrid.Bar>, hits: List<dev.riffworkbench.playback.HitGlow.Hit>, now: Double, speed: Double = 1.0): List<Glow> =
+        dev.riffworkbench.playback.HitGlow.glowing(hits, now, speed).mapNotNull { (h, i) ->
+            val cell = bars.getOrNull(h.bar)?.cells?.firstOrNull { it.offset == h.offset } ?: return@mapNotNull null
+            Glow(h.bar, cell.index, h.midi, i)
+        }
+
+    /**
+     * Snap candidates of the positioning strip over all bars (global dp: [DrumGridGeometry.barStarts] + cell x): onsets are
+     * the set drum cells of [beats] (per bar) and the guitar attacks of [lanes]; the grid is every cell.
+     */
+    fun snapTargets(bars: List<dev.riffworkbench.editor.DrumGrid.Bar>, beats: List<List<Beat>>, lanes: List<dev.riffworkbench.playback.GuitarActivity.BarLane>):
+        Pair<List<dev.riffworkbench.notation.CursorSnap.Target>, List<dev.riffworkbench.notation.CursorSnap.Target>> {
+        val starts = DrumGridGeometry.barStarts(bars)
+        val onsets = ArrayList<dev.riffworkbench.notation.CursorSnap.Target>()
+        val grid = ArrayList<dev.riffworkbench.notation.CursorSnap.Target>()
+        bars.forEachIndexed { i, bar ->
+            val xs = DrumGridGeometry.cellX(bar.cells)
+            bar.cells.forEach { c -> grid += dev.riffworkbench.notation.CursorSnap.Target(starts[i] + xs[c.index], bar.measureId, c.offset) }
+            val offsets = sortedSetOf<Fraction>()
+            beats.getOrNull(i)?.forEach { b -> if (b.notes.isNotEmpty()) offsets += b.offset }
+            lanes.getOrNull(i)?.attacks?.forEach { offsets += it }
+            offsets.forEach { o -> if (o < bar.length) onsets += dev.riffworkbench.notation.CursorSnap.Target(starts[i] + xAt(bar.cells, xs, bar.length, o.toDouble()), bar.measureId, o) }
+        }
+        return onsets to grid
+    }
+}
