@@ -145,6 +145,33 @@ class Qa29DurationRippleTest {
         e.valid(); e.full(drums)
     }
 
+    /** Model-test finding (seeds 29126/29197): empty room inside the moved material reached the next bar as a gap. */
+    @Test fun emptyRoomThatMovesIntoTheNextBarBecomesRests() {
+        val e = session(); e.bars(2)
+        e.at(0, Fraction.ZERO); e.ok(EditorCommand.PutNote(fret = 1, duration = q))
+        e.at(0, f(1, 4)); e.ok(EditorCommand.PutNote(fret = 2, duration = WrittenDuration(8)))
+        e.at(0, f(1, 2)); e.ok(EditorCommand.PutNote(fret = 3, duration = q))   // empty room 3/8 … 1/2
+        e.at(0, f(3, 4)); e.ok(EditorCommand.PutNote(fret = 4, duration = q))
+        e.quarters(1, 5, 6, 7, 8)
+        e.at(0, Fraction.ZERO); e.ok(EditorCommand.SetDuration(WrittenDuration(1)))
+        assertEquals(listOf(Triple(f(0, 1), 2, f(1, 8)), Triple(f(1, 8), null, f(1, 8)), Triple(f(1, 4), 3, f(1, 4)), Triple(f(1, 2), 4, f(1, 4)), Triple(f(3, 4), 5, f(1, 4))), e.shape(1))
+        assertEquals(listOf(6, 7, 8), e.beats(2).mapNotNull { it.notes.firstOrNull()?.fret })
+        e.valid(); e.full()
+    }
+
+    /** Model-test finding (seeds 29003/29007/29025): DeleteBeat left a full bar with a gap at its end. */
+    @Test fun deleteBeatKeepsAFullBarFull() {
+        val e = session(); e.quarters(0, 1, 2, 3, 4)
+        e.at(0, f(1, 4)); e.ok(EditorCommand.DeleteBeat)
+        assertEquals(listOf(Triple(f(0, 1), 1, f(1, 4)), Triple(f(1, 4), 3, f(1, 4)), Triple(f(1, 2), 4, f(1, 4)), Triple(f(3, 4), null, f(1, 4))), e.shape(0))
+        e.valid(); e.full()
+        // A bar that was not full keeps its contract (later beats move earlier, nothing added).
+        val g = session()
+        g.at(0, Fraction.ZERO); g.ok(EditorCommand.PutNote(fret = 1, duration = q)); g.at(0, f(1, 4)); g.ok(EditorCommand.PutNote(fret = 2, duration = q))
+        g.at(0, Fraction.ZERO); g.ok(EditorCommand.DeleteBeat)
+        assertEquals(listOf(Triple(f(0, 1), 2, f(1, 4))), g.shape(0))
+    }
+
     @Test fun aTiedNoteKeepsItsTieWhenItMoves() {
         val e = session(); e.bars(2)
         e.quarters(0, 1, 2, 3, 4)

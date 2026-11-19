@@ -85,6 +85,9 @@ internal object DurationRipple {
             val m = project.measures[k]
             val cap = NoteEdits.capacity(m)
             val existing = beatsOf(project, m.id)
+            // Empty room inside the moved material (a voice that was not full) arrives as rests: a full bar stays full
+            // (Zyklus 29 model test, seeds 29126/29197: gaps were carried into the next bar, or it then began late).
+            carried = withRestsInGaps(carried, split)
             val length = carried.maxOf { it.offset + it.duration.length() }
             val result = settle(carried + makeRoom(existing, Fraction.ZERO, length, cap, split), cap, split)
             var bar = result.first
@@ -127,6 +130,18 @@ internal object DurationRipple {
         }
         val shift = amount - free
         return sorted.filter { wall != null && it.offset >= wall }.map { it.copy(offset = it.offset + shift) }
+    }
+
+    /** [beats] (offsets from the downbeat) with every gap from 0 on filled by rests in the next beat's tuplet family. */
+    private fun withRestsInGaps(beats: List<Beat>, split: Splitter): List<Beat> {
+        val out = ArrayList<Beat>()
+        var at = Fraction.ZERO
+        for (b in beats.sortedBy { it.offset }) {
+            if (b.offset > at) out += split.rests(at, b.offset, b.duration.tuplets)
+            out += b
+            at = maxOf(at, b.offset + b.duration.length())
+        }
+        return out
     }
 
     /** [beats] fitted into a bar of [cap]: trailing free room past the barline is dropped, the rest moves to the next bar. */

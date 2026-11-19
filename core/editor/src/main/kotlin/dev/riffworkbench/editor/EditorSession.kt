@@ -238,7 +238,7 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
             NoteEdits.updateSelectedBeat(p, s) { it.copy(fermata = c.fermata) }
         }
         is EditorCommand.SetStrum -> NoteEdits.updateSelectedBeat(p, s) { it.copy(strum = c.strum) }
-        EditorCommand.DeleteBeat -> NoteEdits.deleteBeat(p, s)
+        EditorCommand.DeleteBeat -> NoteEdits.deleteBeat(p, s, ids)
         is EditorCommand.InsertBeat -> NoteEdits.insertBeat(p, s, c.duration, ids)
         is EditorCommand.SetText -> requireText(c.text, "Text").let { NoteEdits.setText(p, s, c.text, c.kind, ids) }
         is EditorCommand.InsertMeasures -> StructureEdits.insert(p, c.index, c.count, c.signature, ids)
