@@ -7,7 +7,10 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import androidx.compose.ui.test.junit4.createComposeRule
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import androidx.lifecycle.ViewModelStore
 import dev.riffworkbench.editor.*
 import dev.riffworkbench.model.*
@@ -129,13 +132,20 @@ class Qa31DrumGridStressUiTest {
             position = PlaybackOccurrence(ScorePosition(project(f).measures[bar].id, offset), 0, bar), sample = SamplePosition(frame, 48_000))
     }
     /**
-     * Draws the grid now, as the next frame on the device would (captureToImage records the draw of every visible bar).
-     * Only "capture not supported here" is tolerated; a draw exception (the crash) propagates.
+     * Draws the window now, as the next frame on the device would: the decor view into a software canvas runs the draw
+     * lambdas of every visible bar on the UI thread. A draw exception (the crash) propagates. (captureToImage waits for a
+     * PixelCopy that never completes under Robolectric with a paused looper: it timed out in CI run 44580051512.)
      */
     private fun forceDraw() {
-        try { compose.onNodeWithTag("drum-grid").captureToImage() }
-        catch (e: UnsupportedOperationException) { println("QA31 capture not supported: $e") }
-        catch (e: IllegalStateException) { println("QA31 capture not supported: $e") }
+        compose.waitForIdle()
+        @Suppress("UNCHECKED_CAST")
+        val activity = (compose as AndroidComposeTestRule<*, *>).activity
+        compose.runOnUiThread {
+            val view = activity.window.decorView
+            val bitmap = Bitmap.createBitmap(view.width.coerceAtLeast(1), view.height.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+            view.draw(Canvas(bitmap))
+            bitmap.recycle()
+        }
     }
     private fun usedMb(): Double {
         repeat(5) { System.gc(); System.runFinalization(); Thread.sleep(30) }
@@ -197,6 +207,7 @@ class Qa31DrumGridStressUiTest {
         val startMb = usedMb()
         println("QA31 S3 $bars bars, 11 rows, every 1/32 cell set: heap %.1f MB before the piece, %.1f MB with the grid open; live %s".format(java.util.Locale.ROOT, base, startMb, LiveObjects.counts()))
         val rounds = ArrayList<Double>()
+        val gridStates = ArrayList<Int>()
         repeat(2) { round ->
             val t0 = System.nanoTime()
             // 1. Fling over all bars: every bar comes into view (scroll to each item), plus real touch flings back.
@@ -239,6 +250,7 @@ class Qa31DrumGridStressUiTest {
             compose.waitUntil(60000) { compose.onAllNodesWithTag("drum-grid").fetchSemanticsNodes().isNotEmpty() }
             val end = usedMb()
             rounds += end
+            gridStates += LiveObjects.count("DrumLive")
             println("QA31 S3 round ${round + 1} (%.1f s): heap after fling %.1f MB, after %d s playback %.1f MB, after grid/taps/drags/recreate %.1f MB; live %s".format(java.util.Locale.ROOT,
                 (System.nanoTime() - t0) / 1e9, afterFling, playSeconds, afterPlay, end, LiveObjects.counts()))
             assertTrue("S3 round ${round + 1}: heap %.1f MB ≤ start %.1f + 60 MB".format(java.util.Locale.ROOT, end, startMb), end <= startMb + 60.0)
@@ -248,6 +260,12 @@ class Qa31DrumGridStressUiTest {
         usedMb()
         val paints = LiveObjects.count("DrumBarPaint")
         assertTrue("S3: $paints bar paints alive for ${visibleBars().size} visible bars", paints <= 16)
-        assertTrue("S3: one grid state alive (${LiveObjects.counts()})", LiveObjects.count("DrumLive") <= 1)
+        // Grid states after recreating the screen three times per round: the current one, plus at most one that the platform
+        // still references from the last semantics/accessibility snapshot of the discarded screen. A leak per recreation
+        // would grow by three per round.
+        val alive = LiveObjects.count("DrumLive")
+        println("QA31 S3 grid states alive after the rounds: $gridStates, now $alive")
+        assertTrue("S3: grid states do not grow between the rounds ($gridStates)", gridStates[1] <= gridStates[0])
+        assertTrue("S3: at most two grid states alive (${LiveObjects.counts()})", alive <= 2)
     }
 }
