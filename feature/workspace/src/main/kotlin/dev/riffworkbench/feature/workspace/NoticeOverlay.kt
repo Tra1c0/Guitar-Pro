@@ -77,6 +77,19 @@ internal object RenderCounts {
     fun hit(name: String) { counts.merge(name, 1, Int::plus) }
 }
 
+/**
+ * Test hook (Zyklus 31): weakly tracks objects of named kinds (per-bar draw data of the drum grid, its live state) while
+ * [enabled], so a memory test can count how many are still reachable after GC. Production never enables it.
+ */
+internal object LiveObjects {
+    @Volatile var enabled = false
+    private val objects = java.util.WeakHashMap<Any, String>()
+    fun track(kind: String, obj: Any) { if (enabled) synchronized(objects) { objects[obj] = kind } }
+    fun count(kind: String): Int = synchronized(objects) { objects.values.count { it == kind } }
+    fun counts(): Map<String, Int> = synchronized(objects) { objects.values.groupingBy { it }.eachCount() }
+    fun reset() = synchronized(objects) { objects.clear() }
+}
+
 /** Counts one composition of the enclosing scope (non-restartable: it runs whenever that scope runs, and is never skipped). */
 @Composable @NonRestartableComposable internal fun ProbeComposition(name: String) {
     if (RenderCounts.enabled) SideEffect { RenderCounts.hit(name) }

@@ -265,15 +265,19 @@ private class DrumLive {
 /** Fixed name column plus the lazy row of bars; playhead, glow, guitar lane highlight and cursor handle are draw-phase reads of [DrumLive]. */
 @Composable private fun DrumGridArea(vm: WorkspaceViewModel, project: Project, track: Track, selection: Selection, bars: List<DrumGrid.Bar>, listState: LazyListState) {
     ProbeComposition("DrumGrid")
-    val live = remember { DrumLive() }
+    val live = remember { DrumLive().also { LiveObjects.track("DrumLive", it) } }
     val clock = remember(project.measures, project.tempo, project.tracks) { ScoreClock(project) }
     // Common activity of all guitars (GuitarActivity); no guitar: no lane.
     val lanes = remember(project.measures, project.tracks) { GuitarActivity.lanes(project) }
     val voice = selection.voice
     val staff = track.staves.first()
-    val beatsByBar = remember(staff, bars, voice) { bars.map { b -> staff.bars.firstOrNull { it.measureId == b.measureId }?.voices?.firstOrNull { it.index == voice }?.beats.orEmpty() } }
+    // Zyklus 31: by measure id (was a search over all bars per bar: quadratic in the bar count).
+    val beatsByBar = remember(staff, bars, voice) {
+        val byMeasure = staff.bars.associateBy { it.measureId }
+        bars.map { b -> byMeasure[b.measureId]?.voices?.firstOrNull { it.index == voice }?.beats.orEmpty() }
+    }
     val starts = remember(bars) { DrumGridGeometry.barStarts(bars) }
-    DrumPlayheadFollower(vm, bars, lanes, clock, listState, live)
+    DrumPlayheadFollower(vm, bars, starts, lanes, clock, listState, live)
     // The cursor is the start marker (Zyklus 18); a positioning drag moves it.
     val cursorBar = bars.indexOfFirst { it.measureId == selection.measureId }
     val cursorOffset = selection.offset.toDouble()
@@ -329,12 +333,18 @@ private class DrumLive {
  * A frame ticker runs only while playing, so the glow fades smoothly between polls; it writes one state that only the
  * bars around the playhead read in their draw phase.
  */
-@Composable private fun DrumPlayheadFollower(vm: WorkspaceViewModel, bars: List<DrumGrid.Bar>, lanes: List<GuitarActivity.BarLane>, clock: ScoreClock, listState: LazyListState, live: DrumLive) {
+@Composable private fun DrumPlayheadFollower(vm: WorkspaceViewModel, bars: List<DrumGrid.Bar>, starts: FloatArray, lanes: List<GuitarActivity.BarLane>, clock: ScoreClock,
+                                             listState: LazyListState, live: DrumLive) {
     val currentBars by rememberUpdatedState(bars)
+    val currentStarts by rememberUpdatedState(starts)
     val currentLanes by rememberUpdatedState(lanes)
     val currentClock by rememberUpdatedState(clock)
     val density = LocalDensity.current.density
-    LaunchedEffect(vm, listState) {
+    // Zyklus 31 (P0 „stürzt bei zu viel Drum-Grid ab“): restarted when the bars change (grid switch, meter change, bars
+    // added/removed). The transport's StateFlow then delivers its current value again, so a column that stands still
+    // (paused, or between two polls) is located in the NEW cells at once; the draw phase additionally ignores a column
+    // index the bar does not have for the frame before that.
+    LaunchedEffect(vm, listState, bars) {
         vm.transport.state.collect { s ->
             val shown = vm.displayedPlayhead(s)
             val all = currentBars
@@ -352,7 +362,8 @@ private class DrumLive {
             }
             val view = vm.view.value
             if (column != null && s.status == TransportStatus.PLAYING && view.follow && !view.followSuspended) {
-                val starts = DrumGridGeometry.barStarts(all)
+                // Bar starts are remembered per grid (was: recomputed over all bars on every poll).
+                val starts = currentStarts
                 val viewport = listState.layoutInfo.viewportSize.width / density
                 val first = listState.firstVisibleItemIndex
                 if (viewport > 0f && first < all.size) {
@@ -385,7 +396,7 @@ private class DrumPositioning(private val vm: WorkspaceViewModel, private val li
     private var onsets: List<CursorSnap.Target> = emptyList()
     private var grid: List<CursorSnap.Target> = emptyList()
     private var haptics: androidx.compose.ui.hapticfeedback.HapticFeedback? = null
-    private var source: Any? = null
+    private var source: Triple<List<DrumGrid.Bar>, List<List<Beat>>, List<GuitarActivity.BarLane>>? = null
     private var fingerInView = 0f
     private var target: CursorSnap.Target? = null
     var density = 1f
@@ -393,8 +404,12 @@ private class DrumPositioning(private val vm: WorkspaceViewModel, private val li
     fun update(bars: List<DrumGrid.Bar>, starts: FloatArray, beats: List<List<Beat>>, lanes: List<GuitarActivity.BarLane>, haptics: androidx.compose.ui.hapticfeedback.HapticFeedback) {
         this.haptics = haptics
         this.starts = starts
-        val key = Triple(bars, beats, lanes)
-        if (key != source) { source = key; DrumGridActivity.snapTargets(bars, beats, lanes).let { (o, g) -> onsets = o; grid = g } }
+        // Zyklus 31: by identity (the lists are remembered); `equals` compared every bar, beat and note on each recomposition.
+        val old = source
+        if (old == null || old.first !== bars || old.second !== beats || old.third !== lanes) {
+            source = Triple(bars, beats, lanes)
+            DrumGridActivity.snapTargets(bars, beats, lanes).let { (o, g) -> onsets = o; grid = g }
+        }
     }
     private fun scroll(): Float {
         val first = listState.firstVisibleItemIndex
@@ -474,7 +489,7 @@ private class DrumBarPaint(val xs: FloatArray, val active: BooleanArray, val glo
         } }
         val spans = lane?.spans.orEmpty().flatMap { (a, b) -> listOf(DrumGridActivity.xAt(bar.cells, xs, bar.length, a.toDouble()), DrumGridActivity.xAt(bar.cells, xs, bar.length, b.toDouble())) }.toFloatArray()
         val attacks = lane?.attacks.orEmpty().map { DrumGridActivity.xAt(bar.cells, xs, bar.length, it.toDouble()) }.toFloatArray()
-        DrumBarPaint(xs, active, gr.toIntArray(), gc.toIntArray(), go.toDoubleArray(), spans, attacks)
+        DrumBarPaint(xs, active, gr.toIntArray(), gc.toIntArray(), go.toDoubleArray(), spans, attacks).also { LiveObjects.track("DrumBarPaint", it) }
     }
     val colors = MaterialTheme.colorScheme
     val barline = colors.outline
@@ -502,9 +517,10 @@ private class DrumBarPaint(val xs: FloatArray, val active: BooleanArray, val glo
         drawContent()
         drawRect(barline, topLeft = Offset.Zero, size = Size(2.dp.toPx(), size.height))
         val cellPx = DrumGridGeometry.CELL.dp.toPx()
-        // Playhead column over the ruler and all rows.
+        // Playhead column over the ruler and all rows. Zyklus 31: only a cell this bar has — a column located in another
+        // grid (switched while paused or between polls) indexed past the cells and the draw threw: the device crash.
         val column = live.column.value
-        if (column != null && column.first == bar.index) {
+        if (column != null && column.first == bar.index && column.second in paint.xs.indices) {
             val top = rulerTop.dp.toPx()
             drawRect(tint, topLeft = Offset((paint.xs[column.second] - 2f).dp.toPx(), top), size = Size(cellPx + 4.dp.toPx(), size.height - top))
         }

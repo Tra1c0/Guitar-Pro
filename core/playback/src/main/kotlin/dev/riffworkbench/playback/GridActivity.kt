@@ -92,11 +92,14 @@ object GuitarActivity {
         if (tracks.isEmpty()) return emptyList()
         val continuations = HashSet<EntityId>()
         for (t in tracks) for (st in t.staves) for (bar in st.bars) for (v in bar.voices) for (b in v.beats) for (n in b.notes) for (l in n.links) if (l.kind == LinkKind.TIE) continuations += l.target
+        // Zyklus 31: the bars of every guitar staff by measure id (was: every staff's bars searched per measure — quadratic).
+        val barsByMeasure = HashMap<EntityId, MutableList<Bar>>()
+        for (t in tracks) for (st in t.staves) for (bar in st.bars) barsByMeasure.getOrPut(bar.measureId) { ArrayList(2) } += bar
         return project.measures.map { m ->
             val spans = ArrayList<Pair<Fraction, Fraction>>()
             val attacks = sortedSetOf<Fraction>()
             val length = m.pickupLength ?: m.signature.length()
-            for (t in tracks) for (st in t.staves) for (bar in st.bars) if (bar.measureId == m.id) for (v in bar.voices) for (b in v.beats) {
+            for (bar in barsByMeasure[m.id].orEmpty()) for (v in bar.voices) for (b in v.beats) {
                 if (b.notes.isEmpty()) continue
                 val end = minOf(b.offset + b.duration.length(), length)
                 spans += b.offset to end
