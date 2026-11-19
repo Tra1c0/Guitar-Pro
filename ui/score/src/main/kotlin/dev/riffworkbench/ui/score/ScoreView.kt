@@ -100,6 +100,15 @@ fun ScoreCanvas(
     scale: Float = 1f,
     /** Pinch zoom (QA 23: off by default in the app, "Zoomen per Geste" in the settings). Off, two fingers only pan. */
     zoomGesture: Boolean = true,
+    /**
+     * Zyklus 30 „Cursor selbst schieben“: a touch in the number lane above a system ([CursorSnap.laneAt]) only positions
+     * the cursor — [onPositionStart] when it begins (the owner pauses following), then a handle follows the finger over
+     * bars and systems (auto-scroll at the edges) and snaps to the nearest note onset within 16 dp, else to the nearest
+     * column; [onPosition] once on release with the snapped bar/offset. No note is selected or moved, no range starts.
+     * Null disables it (the lane behaves as before).
+     */
+    onPositionStart: (() -> Unit)? = null,
+    onPosition: ((EntityId, Fraction) -> Unit)? = null,
 ) {
     val density = LocalDensity.current.density
     val palette = rememberInkPalette()
@@ -131,6 +140,11 @@ fun ScoreCanvas(
     val currentOnRangeStart by rememberUpdatedState(onRangeStart)
     val currentOnRangeExtend by rememberUpdatedState(onRangeExtend)
     val currentOnRangeEnd by rememberUpdatedState(onRangeEnd)
+    val currentOnPositionStart by rememberUpdatedState(onPositionStart)
+    val currentOnPosition by rememberUpdatedState(onPosition)
+    // Positioning handle (layout units): finger x/system and the snapped target; read only in the draw phase.
+    var positionFinger by remember { mutableStateOf<Offset?>(null) }
+    var positionSnap by remember { mutableStateOf<CursorSnap.Target?>(null) }
     // Long-press range: started by the tap detector's long press, followed bar by bar by the range tracker below.
     val range = remember { RangeDrag() }
     // Finger position (viewport px) while a selected note is dragged, and the drop target it would commit (null: none).
@@ -323,6 +337,68 @@ fun ScoreCanvas(
             }
         }
         .pointerInput(Unit) {
+            // Zyklus 30, positioning lane — innermost detector, so it sees the down first. Hit-test order of a touch on the
+            // score: (1) here: down in the number lane of a system → positioning only (the down and every move are consumed,
+            // so the tap/long-press detector — note select, range, signature — and the note drag never start and pan/zoom
+            // ends); (2) note drag on the selected note; (3) long-press range tracker; (4) tap / long press (signature first,
+            // then bar range); (5) pan/zoom. Outside the lane nothing changes.
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                if (currentOnPosition == null) return@awaitEachGesture
+                val l = currentLayout ?: return@awaitEachGesture
+                val ly = (down.position.y + offsetY) / factorNow()
+                if (CursorSnap.laneAt(l, ly) == null) return@awaitEachGesture
+                down.consume()
+                currentOnPositionStart?.invoke()
+                var finger = down.position
+                var target: CursorSnap.Target? = null
+                fun track() {
+                    val lay = currentLayout ?: return
+                    val f = factorNow()
+                    val x = (finger.x + offsetX) / f; val y = (finger.y + offsetY) / f
+                    val system = (lay.systemAt(y) ?: lay.systems.firstOrNull())?.index ?: return
+                    val (onsets, grid) = CursorSnap.scoreTargets(lay, system)
+                    val snap = CursorSnap.snap(x, onsets, grid, 16f * density / f)
+                    positionFinger = Offset(x, y)
+                    positionSnap = snap
+                    if (snap != null && snap != target) { if (target != null) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); target = snap }
+                }
+                track()
+                // Finger resting near an edge: auto-scroll (horizontal and vertical) about every frame, then re-snap.
+                fun edgeStep(): Offset {
+                    val edge = 32f * density
+                    val dx = when { finger.x < edge -> -(edge - finger.x) / 3f; finger.x > viewport.width - edge -> (finger.x - viewport.width + edge) / 3f; else -> 0f }
+                    val dy = when { finger.y < edge -> -(edge - finger.y) / 3f; finger.y > viewport.height - edge -> (finger.y - viewport.height + edge) / 3f; else -> 0f }
+                    val l = currentLayout ?: return Offset.Zero
+                    val f = factorNow()
+                    val nx = ViewportScroll.clamp(offsetX + dx, l.width * f, viewport.width.toFloat())
+                    val ny = ViewportScroll.clamp(offsetY + dy, l.height * f, viewport.height.toFloat())
+                    return Offset(nx - offsetX, ny - offsetY)
+                }
+                try {
+                    while (true) {
+                        // Only at an edge that can still scroll does the loop wake up without pointer events.
+                        val event = if (edgeStep() != Offset.Zero) withTimeoutOrNull(16L) { awaitPointerEvent() } else awaitPointerEvent()
+                        if (event == null) {
+                            val step = edgeStep()
+                            if (step != Offset.Zero) { offsetX += step.x; offsetY += step.y; userScrolled(); track() }
+                            continue
+                        }
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) {
+                            val cancelled = change.isConsumed
+                            change.consume()
+                            if (!cancelled) target?.let { currentOnPosition?.invoke(it.measureId, it.offset) }
+                            break
+                        }
+                        change.consume()
+                        finger = change.position
+                        track()
+                    }
+                } finally { positionFinger = null; positionSnap = null }
+            }
+        }
+        .pointerInput(Unit) {
             // End of a pinch: once the last finger lifts (or the gesture is cancelled), the owner hears the final zoom — one
             // ViewModel update (and one re-wrap of wrapped systems) per pinch instead of one per step (QA 23). Only reads.
             awaitEachGesture {
@@ -346,6 +422,9 @@ fun ScoreCanvas(
                 cursor?.let { c -> drawCursor(nc, l, c, overlay, startMarker = playhead == null) }
                 // Drop target while dragging a note (none inside the dead zone: the note stays).
                 dragDrop?.let { target -> drawCursor(nc, l, target, overlay) }
+                // Positioning handle: the snapped start marker (▶ cap) and a thin line under the finger.
+                positionSnap?.let { s -> drawCursor(nc, l, ScoreCursor(s.measureId, s.offset, null), overlay, startMarker = true) }
+                positionFinger?.let { f -> l.systemAt(f.y)?.let { sys -> nc.drawLine(f.x, sys.top + 4f, f.x, sys.bottom - 8f, overlay.column) } }
                 // Cull by system first (y), then by x inside the painter: off-screen systems cost nothing per frame.
                 val y0 = offsetY / factor; val y1 = (offsetY + size.height) / factor
                 l.systems.forEachIndexed { i, sys -> if (sys.bottom >= y0 - 40f && sys.top <= y1 + 40f) painter.draw(nc, l.glyphsBySystem[i], x0, x1) }

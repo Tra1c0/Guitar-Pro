@@ -218,6 +218,9 @@ import dev.riffworkbench.ui.score.pitchName
             onRangeEnd = vm::endRange,
             // A pan/zoom/drag while following: the view stays where the finger put it until the chip (or Play/seek/stop) resumes.
             onUserScroll = vm::suspendFollow,
+            // Zyklus 30: the number lane above each system positions the cursor only (snap to onsets/columns, one seek on release while playing).
+            onPositionStart = vm::beginPositioning,
+            onPosition = { measureId, offset -> vm.positionCursor(measureId, offset) },
             scale = ScoreScale.EDITOR,
             zoomGesture = settings.pinchZoom,
             // No top padding: the layout's own margin (EDITOR_MARGIN) already separates the score from the row above (QA 20).
