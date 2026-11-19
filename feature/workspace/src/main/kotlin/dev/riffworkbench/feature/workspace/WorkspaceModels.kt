@@ -156,3 +156,43 @@ data class RhythmTapState(
     /** The active device has its own calibration (otherwise [latencyMs] is the device-less fallback). */
     val latencyOwn: Boolean = false,
 )
+
+/**
+ * Zyklus 29: geometry (dp) of the continuous drum grid — one LazyRow item per bar, cells at fixed x so the playhead column
+ * can be drawn and followed without measuring. Pure, so the JVM shim tests the follow rule.
+ */
+object DrumGridGeometry {
+    const val CELL = 48f
+    const val GAP = 4f
+    /** Extra gap before a beat start (the ruler numbers stand there). */
+    const val BEAT_GAP = 6f
+    /** Room after the barline at the start of each bar item. */
+    const val BAR_START = 12f
+    const val BAR_END = 4f
+    const val HEADER = 22f
+    const val RULER = 18f
+    const val ROW_GAP = 4f
+
+    fun cellX(cells: List<dev.riffworkbench.editor.DrumGrid.Cell>): FloatArray {
+        val xs = FloatArray(cells.size)
+        var x = BAR_START
+        cells.forEachIndexed { i, c ->
+            if (i > 0) x += CELL + GAP + if (c.beatStart) BEAT_GAP else 0f
+            xs[i] = x
+        }
+        return xs
+    }
+    fun barWidth(cells: List<dev.riffworkbench.editor.DrumGrid.Cell>): Float = (cellX(cells).lastOrNull() ?: BAR_START) + CELL + BAR_END
+    /** Start x of every bar and, last, the total width. */
+    fun barStarts(bars: List<dev.riffworkbench.editor.DrumGrid.Bar>): FloatArray {
+        val out = FloatArray(bars.size + 1)
+        bars.forEachIndexed { i, b -> out[i + 1] = out[i] + barWidth(b.cells) }
+        return out
+    }
+    /**
+     * Playback follow: the view moves only when the sounding column leaves the visible part (minus one cell of margin), and
+     * then just far enough ([dev.riffworkbench.notation.ViewportScroll.minimal]): no jumps, no paging.
+     */
+    fun follow(columnX: Float, scroll: Float, viewport: Float, content: Float, margin: Float = CELL + GAP): Float =
+        dev.riffworkbench.notation.ViewportScroll.minimal(columnX + CELL / 2, CELL / 2, scroll, viewport, content, margin)
+}
