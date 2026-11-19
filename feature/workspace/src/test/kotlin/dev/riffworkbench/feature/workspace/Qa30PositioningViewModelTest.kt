@@ -169,4 +169,16 @@ class Qa30PositioningViewModelTest {
         // A drag 20 dp before bar 2's crash (still in bar 1) snaps onto it; the last cell of bar 1 is farther.
         assertEquals(crash, dev.riffworkbench.notation.CursorSnap.snap(crash.x - 20f, onsets, grid, DrumGridActivity.SNAP_RADIUS))
     }
+
+    /** A2: the bar layer's coordinate hit test replaces one button per cell: every cell centre hits its cell, gaps hit nothing. */
+    @Test fun a2_cellHitTestByCoordinate() {
+        val cells = DrumGrid.cells(Measure(EntityId("a2"), TimeSignature(4, 4)), Fraction.of(1, 16))
+        val xs = DrumGridGeometry.cellX(cells)
+        val c = DrumGridGeometry.CELL
+        for (row in 0 until 11) for (i in xs.indices) assertEquals(row to i, DrumGridGeometry.cellAt(xs, 11, xs[i] + c / 2, row * (c + DrumGridGeometry.ROW_GAP) + c / 2))
+        assertNull("gap between cells", DrumGridGeometry.cellAt(xs, 11, xs[1] - 1f, 10f))
+        assertNull("gap between rows", DrumGridGeometry.cellAt(xs, 11, xs[0] + 5f, c + DrumGridGeometry.ROW_GAP / 2))
+        assertNull("below the last row", DrumGridGeometry.cellAt(xs, 11, xs[0] + 5f, DrumGridGeometry.rowsHeight(11) + 1f))
+        assertNull(DrumGridGeometry.cellAt(xs, 11, xs[0] + 5f, -1f))
+    }
 }

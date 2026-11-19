@@ -1149,3 +1149,119 @@ Tests: `Qa29DrumGridGeometryTest` (Shim, 2): Zellen überlappen nicht, Zählzeit
 **Restrisiken:** Der Raster-Befund selbst ist lokal nicht reproduziert — Gerätebestätigung nötig (1/8 … 1/16 T, quer und hoch). Folgen/Hervorhebung am Gerät (Bluetooth-Verzögerung, Gefühl des minimalen Folgens, das bei 1/32 alle ~50 dp nachzieht). Haltebogen-Regeln bleiben bewusst streng und werden jetzt häufiger sichtbar, weil Bögen automatisch entstehen: einen gebundenen Ursprung kürzen („Haltebogen würde unterbrochen“, Zyklus 25), eine Fortsetzung umgreifen oder als Beat löschen wird abgelehnt — Undo hilft; ob Kürzen den Bogen lösen oder die Fortsetzung mitnehmen soll, ist eine Nutzerentscheidung. Eine Note auf einer vorhandenen Pause übernimmt weiterhin deren Dauer (Zyklus-25-Vertrag für Raster-Platzhalter). Teilung an Taktstrichen nach Triolen ergibt Triolenwerte (z. B. ½ T + ⅛. T), musikalisch korrekt, aber ungewohnt. Mehrere Stimmen auf derselben Saite prüft der Editor weiterhin nicht.
 
 Ergebnis Zyklus 29 (Branch `worktree-agent-ad5ee8b04f3179093`, Basis 062570a): 333b4e9 (Verlängern verschiebt), 4aac478 (Drum-Raster durchgehend), 925b0bc (Modelltest, DeleteBeat, Lücken), 3450e7f (Eingabe über den Taktstrich, Auto-Advance, tie_gap), dazu dieser Journal-Eintrag.
+
+### Zyklus 30 / Drum-Raster-Performance, Leuchten, Gitarren-Leiste, Bogen-Regel
+
+Anlass: Nutzerbefund (echtes Handy): Das durchgehende Drum-Raster (Zyklus 29) „ruckelt teils beim Scrollen und beim Spielen“. Dazu: gesetzte Zellen sollen beim Anschlag leuchten, eine dünne Gitarren-Leiste über dem Raster, und die freigegebene Haltebogen-Regel (Kürzen löst den Bogen). Während der Arbeit kam ein Zusatzwunsch hinzu: „Ich möchte den Cursor selbst schieben können … im Drum-Grid muss ich auf eine Note klicken, die entweder bewegt wird … oder ausgewählt wird“ → Positionieren getrennt vom Bearbeiten. Lokal: JVM-Harness (alle portablen Module), ViewModel-Shim, Compose Desktop 1.5.12 mit Android-Stubs (Typcheck aller Compose-Quellen und Desktop-Varianten der UI-Tests, nur Scratchpad). Robolectric und Android-Kompilat nur in CI.
+
+**1. Ursache des Ruckelns, gemessen.** Messtest `Qa30DrumGridPerfUiTest` (Robolectric; lokal dieselbe Testklasse als Compose-Desktop-Variante, Fenster 891 × 411 dp, Dichte 1, Skia-Raster headless, JVM 17, 4 Kerne; **Desktop-JVM-Werte, keine Android-Werte**). Stück: 64 Takte 4/4, 120 BPM, Drums mit 11 Kit-Zeilen (Hi-Hat 1/8, Kick 1+3, Snare 2+4), Gitarre in Vierteln. P1 Layout-Knoten je Takt (Reflexion auf den LayoutNode-Baum); P2 Scrollen per Touch über den Zellen in 240 Ein-Frame-Schritten à 24 px (1/16 und 1/32), Zeit je Schritt = Eingabe + Recomposition + Layout + Zeichnen eines Frames; P3 Wiedergabe 8 s mit Transport-Polls bei 30 Hz (jeder zweite 60-Hz-Frame), Folgen durch 4 Takte. Ausgangswert gegen den unveränderten `DrumScreen` (ee88dc2), gleiche Testfassung:
+
+| Messung (Desktop-JVM) | vorher | nachher |
+|---|---|---|
+| Layout-Knoten / Modifier je Takt, 1/16 | 547 / 3 388 | 188 / 210 |
+| Layout-Knoten / Modifier je Takt, 1/32 | 1 075 / 6 732 | 364 / 386 |
+| Scrollen 1/16: Median / p95 / max je Frame | 13,4 / 33,3 / 155,9 ms | 10,7 / 16,7 / 29,0 ms |
+| Scrollen 1/32: Median / p95 / max | 13,9 / 44,1 / 192,5 ms | 10,3 / 15,5 / 31,0 ms |
+| Wiedergabe 1/16 (240 Polls): Median / p95 / max | 3,2 / 6,9 / 89,3 ms | 3,0 / 4,5 / 23,9 ms |
+| Recompositions Takt/Zellen pro Poll im sichtbaren Teil | 0 | 0 |
+
+Ein erster Ausgangslauf mit dem Touch im Kopfbereich ergab 14,6 / 29,2 / 159,7 ms (1/16) bzw. 13,9 / 29,8 / 207,1 ms (1/32) und ein Wiedergabe-Maximum von 79,1 ms, also dieselbe Größenordnung.
+
+**Befund:**
+- (a) Recomposition pro Poll war *nicht* die Ursache. Zyklus 29 las den Playhead schon nur im Draw (G3), Polls recomponierten 0 Takte.
+- (b) **Die Ursache sind die Knoten.** Jede Zelle war ein `FilledTonalButton` (Surface, Ripple, Interaktionsquelle, Elevation-Animation, Semantik, Text): 176 Buttons je Takt bei 1/16, 352 bei 1/32. Jeder Takt, der beim Scrollen oder beim Folgen in die `LazyRow` kommt, komponiert und misst diese Knoten in *einem* Frame. Die Spitzen von 156–193 ms (Scrollen) bzw. 79–89 ms (Folgen in den nächsten Takt) sind genau diese Frames. Auf einem Handy (langsamere CPU, Dichte ~2,75) dauern sie entsprechend länger und das Ruckeln wird spürbar.
+- (c) Folgen scrollt schon nur, wenn die Spalte den sichtbaren Bereich verlässt (`DrumGridGeometry.follow`, kein `animateScrollTo` pro Poll). Unverändert.
+- (e) Die `LazyRow` hatte stabile Keys; neu ist `contentType`.
+- (f) Allokationen im Draw: Der Kappen-Pfad ist gecacht, die Zellen brauchen keine Paint- oder Path-Objekte.
+
+**Umbau.**
+- `DrumBar` zeichnet alle Zellen aller Kit-Zeilen eines Takts in EINER Ebene (`graphicsLayer` + `drawBehind`): Kreise wie die bisherigen Tonal-Buttons, ● gesetzt, · leer, Zählzeit-Felder abgesetzt.
+- Getippt wird per Koordinate (`DrumGridGeometry.cellAt`, Shim-getestet).
+- Je Zelle bleibt nur ein leichter Semantik-Knoten (`Spacer` in einem eigenen `Layout`). Er hat dieselbe Beschriftung „Kick, 3, off“ (ab Takt 2 „…, Takt n“), denselben testTag `drum-cell-<Takt>-<Feld>-<MIDI>`, Rolle Button, eine Klick-Aktion und 48 dp. Die Beschriftung wird erst gebaut, wenn Semantik gelesen wird.
+- Statische Zeichendaten je Takt (`DrumBarPaint`: x-Positionen, gesetzte Zellen, Glow-Onsets, Leisten-Geometrie) entstehen nur bei Inhaltsänderung.
+- Alle Live-Werte (`DrumLive`: Spalte, Spielzeit, Frame-Tick, klingender Gitarren-Abschnitt, Cursor, Griff) werden ausschließlich im Draw gelesen. Die Zellenebene ist gecacht; eine Invalidierung zeichnet nur Taktstrich, Overlay und Texte des Takts neu.
+
+Akzeptanz:
+- 0 Recompositions von `WorkspaceScreen`, `DrumScreen`, `DrumGrid`, `DrumGrid.bar` und `DrumGrid.cells` bei 30 Polls mit leuchtenden Zellen (`Qa30DrumGridUiTest` D5).
+- Beim Scrollen komponiert jeder Takt genau einmal beim Hereinkommen; sichtbare Takte nie erneut (P2).
+- Beim Folgen durch 4 Takte gibt es 4 Kompositionen, je eine pro neuem Takt (P3).
+
+**Editor-TAB/Notenbild-Pfad (nur geprüft):** `ScoreArea`/`ScoreCanvas` recomponieren pro Poll bewusst (Zyklus 23: nur dieser Teil liest den Transport) und zeichnen die sichtbaren Systeme in einer Canvas mit Culling. Ein Knotenproblem wie im Drum-Raster gibt es dort nicht. Offen, nicht geändert: `vm.displayedPlayhead(transport)` wird in der Composition aufgerufen (zustandsbehaftet, Zyklus 26). Der Playhead könnte wie im Drum-Raster als State nur im Draw gelesen werden; das würde die Signatur von `ScoreCanvas` ändern, deshalb nur berichtet.
+
+**2. Klick-Ereignisse leuchten.**
+- Gesetzte Zellen leuchten beim Anschlag auf und klingen über 160 ms ab (quadratisches Ease-out; Halo in der Akzentfarbe der Instrumentzeile aus `Tabino.Accents` plus heller Ring), zusätzlich zur Spaltenhervorhebung.
+- Zeitbasis: `vm.displayedPlayhead` (inkl. Bluetooth-Verzögerung, Zyklus 26) wird über `ScoreClock` (core:playback) in Partiturzeit umgerechnet. `ScoreClock` nutzt die Tempo-Karte aus `Timing.measureTimings` (Tempowechsel, Swing, Fermaten) über die Takte in Schreibreihenfolge.
+- Zwischen zwei Polls wird um die vergangene Echtzeit × Geschwindigkeit extrapoliert (höchstens 0,1 s). Das Abklingen läuft in Echtzeit (`HitGlow.intensity(onset, now, speed)`).
+- Ein einziger Frame-Ticker läuft nur bei PLAYING, hält sich an die `InfiniteAnimationPolicy` und wird unter UI-Tests abgebrochen. Er schreibt einen State, den nur der spielende Takt und der Takt davor (dessen letzte Schläge noch abklingen können) im Draw lesen.
+- Tests: `Qa30GridActivityTest` prüft die Uhr über Tempowechsel, die Intensität (1, bei halber Zeit 0,25, dann 0, monoton) mit Geschwindigkeit und welche Hits zu Planzeit t leuchten, inkl. eines 1/32 vor dem Taktstrich. `Qa30PositioningViewModelTest.a1` prüft, welche *Zellen* leuchten: nur Treffer genau auf einer Rasterzelle. Ein 25/32-Schlag leuchtet im 1/32-Raster, im 1/16-Raster nicht (dort erscheint er auch nicht als gesetzt).
+
+**3. Dünne Gitarren-Leiste.**
+- 8 dp über dem Takt-Kopf, deckungsgleich mit den Rasterspalten. Offset → x ist stückweise linear zwischen den Zellanfängen (`DrumGridActivity.xAt`), weil der Zählzeit-Abstand die Zeit nicht linear abbildet.
+- Anschläge sind 2-dp-Striche, klingende Spannen Balken; Bindungen verlängern ohne Anschlag; Pausen bleiben leer.
+- Während der Wiedergabe leuchtet der klingende Abschnitt gelb (letzter Anschlag bis nächster Anschlag oder Spannenende, `GuitarActivity.soundingAt`).
+- Mehrere Gitarren: **gemeinsame Aktivität** (Vereinigung aller Gitarrenspuren und Stimmen). Begründung: Im Drum-Raster wird der Groove gegen den Gitarrenpart gebaut, und der Schlagzeuger spielt gegen jeden Gitarrenanschlag. Der Drum-Editor hat keine eigene Gitarrenauswahl (seine Spurwahl ist die Drum-Spur), „die ausgewählte Gitarre“ wäre also willkürlich.
+- Ohne Gitarre gibt es keine Leiste; auch die Beschriftung links entfällt.
+- Semantik „Gitarren-Aktivität“ (ab Takt 2 „…, Takt n“); gezeichnet, keine Einzelknoten.
+- Tests: `Qa30GridActivityTest` (Spannen, Anschläge, Bogen, Pausen, zwei Gitarren + Bass, keine Gitarre) und `Qa30DrumGridUiTest` D3/D3b.
+
+**Zusatz: Cursor selbst schieben (Positionieren getrennt vom Bearbeiten).** Die reine Regel `CursorSnap` (core:notation) wählt den nächsten Anschlag im Fangradius, sonst die nächste Rasterposition.
+
+*Drum-Raster:*
+- Leiste, Takt-Kopf und Zählzeiten-Lineal jedes Takts sind die Positionierfläche (`drum-strip-<n>`). Tippen oder Ziehen setzt dort nur den Cursor bzw. die Startmarke.
+- Ein Griff (Linie über alle Zeilen + ▶-Kappe) folgt dem Finger über alle Takte. Am Rand wird automatisch gescrollt, solange dort noch gescrollt werden kann.
+- Eingerastet wird auf den nächsten Drum-Hit oder Gitarren-Anschlag im Radius ½ Zelle (24 dp), sonst auf die nächste Zelle. Bei jedem Wechsel des Einrastziels gibt es einen Haptik-Tick.
+- Tippen in Zellen bleibt Bearbeiten. Ohne Ziehen zeigt dieselbe Linie den Cursor als Startmarke.
+
+*Notenbild:*
+- Positionierfläche ist die Taktnummern-Zone über jedem System, bis 10 Einheiten über der obersten Notenlinie, damit Bundzahlen Noten-Tipps bleiben (`CursorSnap.laneAt`).
+- Ziehen verschiebt die Startmarke über Takte und Systeme, mit Auto-Scroll an allen Rändern. Eingerastet wird auf Beat-Anfänge mit Noten im 16-dp-Radius, sonst auf die nächste Spalte.
+- Hit-Test-Reihenfolge (in `ScoreCanvas` dokumentiert):
+  1. Positionier-Zone: konsumiert Down und alle Bewegungen, also kein Tippen/Auswählen, kein Noten-Drag, kein Bereich; Pan endet.
+  2. Noten-Drag auf der ausgewählten Note.
+  3. Bereichs-Tracker.
+  4. Tippen/Langdruck (Taktangabe vor Bereich).
+  5. Pan/Zoom.
+
+*ViewModel:*
+- `beginPositioning` pausiert bei PLAYING das Folgen.
+- `positionCursor` beim Loslassen ändert nur die Selektion: Revision und Partitur bleiben, es entsteht kein Undo-Schritt. Innerhalb eines Beats landet der Cursor auf dessen Anfang (Zyklus 23).
+- Bei PLAYING folgt genau ein Seek, danach läuft das Folgen wieder. Bei PAUSED/STOPPED startet Play dort (Zyklus 18).
+
+*Tests:*
+- `Qa30CursorSnapTest`: Radius vs. Raster, über den Taktstrich, Triolen-Raster, Zone und Ziele aus einem echten Layout.
+- `Qa30PositioningViewModelTest` V1–V4 (Shim).
+- `Qa30DrumGridUiTest` D1: Ziehen setzt den Cursor auf den Kick bei ½, ohne neue Revision und ohne Zelländerung.
+- `Qa30DrumGridUiTest` D4: Ziehen bei Wiedergabe pausiert das Folgen, kein Seek während des Ziehens, ein Seek beim Loslassen.
+- `Qa30PositionLaneGestureTest` (ui/score, Robolectric; Name nach der Modulkonvention `*GestureTest`, die im Release-Lauf ausgenommen ist): Ziehen rastet auf die Note ein, genau eine Meldung, kein Tippen/Drag/Bereich; fern von Noten die Spalte; ein Langdruck in der Zone ist kein Bereich; Tippen auf der TAB bleibt Tippen.
+
+**Angepasst:** `Qa29DrumGridUiTest.g4` wischt jetzt über die Zellen statt über die Mitte der Rasterfläche, die durch die Leiste in die Positionierfläche fiel. Das ist durch die Nutzerentscheidung „Kopfzeile = Positionierfläche“ überholt; die Aussage („Wischen pausiert das Folgen“) bleibt gleich.
+
+**4. Haltebogen-Regel (Nutzerentscheidung, ersetzt die Zyklus-25-Ablehnung).** `TieRelease` (core:editor):
+- Wird ein gebundener Ursprung gekürzt (`SetDuration`/`SetTuplet` kürzer), löst sich der Bogen. Die Fortsetzung(en), also die ganze Kette Ursprung → c1 → c2 …, werden zu Pausen gleicher Dauer. Nichts verschiebt sich. Aus einem Akkord gehen nur die gebundenen Noten.
+- „Beat löschen“ auf einer Fortsetzung löst den Bogen am Ursprung. Die Fortsetzung samt Kette wird Pause, nichts rückt vor (vorher rückten die Folgebeats vor).
+- Ein Befehl ergibt einen Undo-Schritt; der Validator bleibt grün.
+- `Qa30TieReleaseTest` (6 Tests): gegen e4db195^ waren 5 rot („Haltebogen würde unterbrochen“ bzw. Ripple).
+
+**Angepasst (begründet):** `Qa29RestNoteModelTest`, Invariante M3 („kürzer: andere Takte unverändert“), erlaubt jetzt genau die freigegebene Änderung: Die Fortsetzungskette des gekürzten Beats wird Pause, sonst bleibt alles identisch. Die Qa14-Tests „adjacent or refused“ bleiben unverändert grün (kein Bogen über eine Lücke). Kampagne 1 500 × 100 Schritte grün. Verbleibende Ablehnungen sind „Gebundene Noten müssen dieselbe Tonhöhe behalten“ (Bund auf einer Fortsetzung, ×875) und „Beat löschen“ auf einem *ungebundenen* Beat vor einem Taktstrich-Bogen (×603). Das gehört nicht zur Freigabe und bleibt abgelehnt.
+
+**Gehalten:**
+- JVM-Harness, alle portablen Module: 759/759 grün (vorher 745).
+- ViewModel-Shim: 87/87.
+- Compose-Desktop-Typcheck aller Compose-Quellen: grün.
+- Desktop-Varianten: `Qa30DrumGridPerfDesktopTest` 4/4, `Qa30DrumGridDesktopTest` 6/6, `Qa30PositionLaneDesktopTest` 3/3, `Qa29DrumGridDesktopTest` 4/4, `Qa23RenderStabilityDesktopTest` 8/8.
+
+**Nur CI (UNVERIFIED lokal):**
+- Android-Kompilat und Lint von `ProjectScreens.kt` (eigenes `Layout`, `InfiniteAnimationPolicy`, `canScrollForward`, `withTimeoutOrNull` im Pointer-Scope) und von `ScoreView.kt`.
+- Robolectric:
+  - `Qa30DrumGridPerfUiTest`: Zeiten dort nicht aussagekräftig, geprüft werden nur die Zählungen; die Knotenzählung per Reflexion meldet −1, falls die interne API anders heißt.
+  - `Qa30DrumGridUiTest`, `Qa30PositionLaneGestureTest`, `Qa29DrumGridUiTest` (G4 angepasst).
+  - `ApplicationFlowTest`: „Kick, 1, off“ per Touch-Klick über den neuen Koordinaten-Treffer.
+  - `Qa21TouchTargetTest`: Zellen sind jetzt Semantik-Knoten statt Buttons, die Leiste hat keine Klick-Aktion.
+
+**Restrisiken:**
+- Gerätebestätigung des Ruckelns fehlt. Die Desktop-Zahlen sind relativ; die Spitzen kamen eindeutig vom Komponieren neuer Takte.
+- Die Zellen haben keinen Ripple mehr; Bearbeiten zeigt sich am ●.
+- Der Frame-Ticker für das Abklingen ist in UI-Tests abgeschaltet (Policy). Seine Kosten auf dem Gerät sind nicht gemessen; er invalidiert nur den Draw von höchstens zwei Takten.
+- Die Glow-Zeitbasis ist die Schreibreihenfolge: Bei Wiederholungen oder Sprüngen klingt ein Schlag vor dem Sprung nicht nach.
+- Wischen über Leiste, Kopf oder Lineal scrollt das Raster nicht mehr, sondern positioniert. Gescrollt wird über die Zellen.
+- Die Notenbild-Zone ist schmal (Höhe der Taktnummern); das Gefühl am Gerät ist offen. Ein Langdruck dort startet keinen Bereich mehr.
