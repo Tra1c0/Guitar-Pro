@@ -62,8 +62,45 @@ class FileCrashLog(private val dir: File) : CrashReports {
         return files().isNotEmpty()
     }
 
+    /**
+     * Zyklus 31: process ends the system recorded (Android ApplicationExitInfo, read by the app at start) that the Java
+     * handler cannot see — native crashes, ANRs, low-memory kills in the foreground — become reports, each once. The first
+     * run looks back [FIRST_LOOK_BACK_MS] (so a crash of the previous version is reported after the update); a Java crash
+     * the handler already wrote (within 10 s) is not repeated. Returns the number of new reports.
+     */
+    fun recordSystemExits(exits: List<SystemExit>, environment: CrashEnvironment, now: Long): Int {
+        val seenFile = File(dir, "exit-seen")
+        val seen = runCatching { seenFile.readText().trim().toLong() }.getOrNull()
+        val since = seen ?: (now - FIRST_LOOK_BACK_MS)
+        val written = list().map { it.epochMillis }
+        var count = 0
+        for (exit in exits.filter { it.timestamp > since && it.relevant }.sortedBy { it.timestamp }.takeLast(CrashReportFormat.KEEP)) {
+            if (exit.reason == "CRASH" && written.any { kotlin.math.abs(it - exit.timestamp) < 10_000L }) continue
+            write(exit.timestamp, CrashReportFormat.systemExit(exit.timestamp, CrashRecorder.utc(exit.timestamp), environment, exit.reason, exit.description, exit.importance, exit.pssKb, exit.rssKb, exit.status))
+            count++
+        }
+        val newest = maxOf(seen ?: 0L, exits.maxOfOrNull { it.timestamp } ?: 0L, if (seen == null) now else 0L)
+        if (!dir.mkdirs() && !dir.isDirectory) return count
+        FileOutputStream(seenFile).use { it.write(newest.toString().toByteArray(Charsets.UTF_8)) }
+        return count
+    }
+
     companion object {
         val NAME = Regex("crash-(\\d{13})(?:-\\d{1,2})?\\.txt")
+        const val FIRST_LOOK_BACK_MS = 14L * 24 * 3600 * 1000
+    }
+}
+
+/**
+ * One process end as the system recorded it ([reason]: the ApplicationExitInfo name without `REASON_`; [importance] of the
+ * process at that moment, 100 = foreground, 200 = visible).
+ */
+data class SystemExit(val timestamp: Long, val reason: String, val description: String?, val importance: Int, val pssKb: Long, val rssKb: Long, val status: Int) {
+    /** Crashes, ANRs and start failures always; kills (low memory, signal) only while the app was in the foreground or visible. */
+    val relevant: Boolean get() = when (reason) {
+        "CRASH", "CRASH_NATIVE", "ANR", "INITIALIZATION_FAILURE" -> true
+        "LOW_MEMORY", "SIGNALED", "EXCESSIVE_RESOURCE_USAGE" -> importance in 1..200
+        else -> false
     }
 }
 

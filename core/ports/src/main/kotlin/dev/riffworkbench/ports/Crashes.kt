@@ -119,6 +119,22 @@ object CrashReportFormat {
         return r
     }
 
+    /**
+     * Zyklus 31: report of a process end the system recorded (Android ApplicationExitInfo, API 30+) — native crashes
+     * (Skia/HWUI/GPU), ANRs and low-memory kills never reach the Java handler. [reason] is the system's name
+     * („CRASH_NATIVE“, „LOW_MEMORY“ …), [description] its text (cut to 2 000 characters); sizes in kB.
+     */
+    fun systemExit(epochMillis: Long, utc: String, env: CrashEnvironment, reason: String, description: String?, importance: Int, pssKb: Long, rssKb: Long, status: Int): String = buildString {
+        append(HEADER).append(" (vom System gemeldet)\n")
+        append("Zeit: ").append(utc).append(" (").append(epochMillis).append(")\n")
+        append("App: ").append(env.versionName).append(" (").append(env.versionCode).append(") – Version beim Melden (nächster Start)\n")
+        append("Gerät: ").append(env.device).append(" · Android ").append(env.android).append('\n')
+        append("Ausnahme: Prozessende ").append(reason).append(description?.takeIf { it.isNotBlank() }?.let { ": " + it.take(200) } ?: "").append('\n')
+        append("Wichtigkeit: ").append(importance).append(" · Status: ").append(status).append('\n')
+        append("Speicher (PSS/RSS): ").append(pssKb / 1024).append(" MB / ").append(rssKb / 1024).append(" MB\n")
+        description?.takeIf { it.length > 200 }?.let { append("\nBeschreibung:\n").append(it.take(2000)).append('\n') }
+    }
+
     /** Minimal report when the full one cannot be built (e.g. memory is exhausted again): class, message, first frames. */
     fun minimal(epochMillis: Long, env: CrashEnvironment, thread: String, error: Throwable): String = buildString {
         append(HEADER).append(" (Notfassung)\n")

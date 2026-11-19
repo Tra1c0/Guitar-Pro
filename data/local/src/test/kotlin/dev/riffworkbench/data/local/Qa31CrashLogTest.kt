@@ -105,6 +105,36 @@ class Qa31CrashLogTest {
         assertFalse(recorder.record(Thread.currentThread(), IllegalStateException("x")))
     }
 
+    @Test fun systemExitsAreReportedOnceRelevantOnlyAndWithoutDuplicatingJavaCrashes() {
+        val log = FileCrashLog(File(dir, "crashes"))
+        val now = 1_763_550_000_000L
+        val day = 24 * 3600 * 1000L
+        // A Java crash the handler wrote itself at now - 2 days + 3 s.
+        log.write(now - 2 * day + 3_000L, "ArtiFret Absturzbericht\nAusnahme: java.lang.ArrayIndexOutOfBoundsException\n")
+        log.takeUnseen()
+        val exits = listOf(
+            SystemExit(now - 20 * day, "CRASH_NATIVE", "too old for the first run", 100, 0, 0, 11),
+            SystemExit(now - 3 * day, "CRASH_NATIVE", "Fatal signal 11 (SIGSEGV) in tid 1234 (RenderThread)", 100, 300_000, 410_000, 11),
+            SystemExit(now - 2 * day, "CRASH", "java.lang.ArrayIndexOutOfBoundsException", 100, 0, 0, 0),
+            SystemExit(now - 1 * day, "LOW_MEMORY", null, 100, 520_000, 600_000, 9),
+            SystemExit(now - day / 2, "LOW_MEMORY", null, 400, 90_000, 120_000, 9),
+            SystemExit(now - day / 3, "USER_REQUESTED", null, 100, 0, 0, 0),
+            SystemExit(now - day / 4, "ANR", "Input dispatching timed out", 100, 0, 0, 0),
+        )
+        assertEquals("native crash, foreground low-memory kill, ANR", 3, log.recordSystemExits(exits, env, now))
+        val texts = log.list().map { log.read(it.id)!! }
+        assertTrue(texts.any { it.contains("Ausnahme: Prozessende CRASH_NATIVE: Fatal signal 11 (SIGSEGV) in tid 1234 (RenderThread)") && it.contains("Speicher (PSS/RSS): 292 MB / 400 MB") })
+        assertTrue(texts.any { it.contains("Ausnahme: Prozessende LOW_MEMORY") && it.contains("Wichtigkeit: 100") })
+        assertTrue(texts.any { it.contains("Ausnahme: Prozessende ANR: Input dispatching timed out") })
+        assertEquals("the Java crash only once (from the handler)", 1, texts.count { it.contains("ArrayIndexOutOfBounds") })
+        assertFalse(texts.any { it.contains("too old") || it.contains("USER_REQUESTED") })
+        assertTrue("the start notice", log.takeUnseen())
+        // Next start: the same list adds nothing; a newer native crash is added.
+        assertEquals(0, log.recordSystemExits(exits, env, now + 1_000L))
+        assertEquals(1, log.recordSystemExits(exits + SystemExit(now + 5_000L, "CRASH_NATIVE", "again", 100, 0, 0, 6), env, now + 10_000L))
+        assertEquals(5, log.list().size)
+    }
+
     @Test fun installedHandlerReportsThenCallsThePreviousOne() {
         val log = FileCrashLog(File(dir, "crashes"))
         val before = Thread.getDefaultUncaughtExceptionHandler()

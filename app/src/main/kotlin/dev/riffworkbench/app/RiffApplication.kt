@@ -32,7 +32,10 @@ import dev.riffworkbench.platform.OfflineUpdateChecker
 import dev.riffworkbench.ports.UpdateCoordinator
 import dev.riffworkbench.ports.CrashEnvironment
 import kotlinx.coroutines.flow.MutableStateFlow
+import android.app.ActivityManager
+import android.app.ApplicationExitInfo
 import android.os.Build
+import android.annotation.TargetApi
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
@@ -57,7 +60,27 @@ open class RiffApplication : Application() {
         // Zyklus 31: the local crash log first, so a crash while the container is built is recorded too.
         val crashLog = FileCrashLog(File(filesDir, "crashes"))
         installCrashRecorder(crashLog)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) recordSystemExits(crashLog)
         container = AppContainer(this, crashLog)
+    }
+
+    private fun crashEnvironment() = CrashEnvironment(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, "${Build.MANUFACTURER} ${Build.MODEL}", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+
+    /**
+     * Zyklus 31: what the Java handler cannot see — native crashes (Skia/HWUI/GPU), ANRs, low-memory kills in the
+     * foreground — from the system's record of past process ends (Android 11+), once each, into the same log. Before the
+     * container, so the start notice includes them.
+     */
+    @TargetApi(Build.VERSION_CODES.R)
+    private fun recordSystemExits(log: FileCrashLog) {
+        if (Build.FINGERPRINT == "robolectric") return
+        try {
+            val manager = getSystemService(ActivityManager::class.java) ?: return
+            val exits = manager.getHistoricalProcessExitReasons(packageName, 0, 16).map { info ->
+                SystemExit(info.timestamp, exitReasonName(info.reason), info.description, info.importance, info.pss, info.rss, info.status)
+            }
+            log.recordSystemExits(exits, crashEnvironment(), System.currentTimeMillis())
+        } catch (_: Throwable) { }
     }
 
     /**
@@ -68,10 +91,28 @@ open class RiffApplication : Application() {
     private fun installCrashRecorder(log: FileCrashLog) {
         if (Build.FINGERPRINT == "robolectric") return
         try {
-            val environment = CrashEnvironment(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, "${Build.MANUFACTURER} ${Build.MODEL}", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
-            CrashRecorder(log, environment).install()
+            CrashRecorder(log, crashEnvironment()).install()
         } catch (_: Throwable) { }
     }
+}
+
+/** Zyklus 31: the name of an ApplicationExitInfo reason (the constant without `REASON_`). */
+@TargetApi(Build.VERSION_CODES.R)
+internal fun exitReasonName(reason: Int): String = when (reason) {
+    ApplicationExitInfo.REASON_EXIT_SELF -> "EXIT_SELF"
+    ApplicationExitInfo.REASON_SIGNALED -> "SIGNALED"
+    ApplicationExitInfo.REASON_LOW_MEMORY -> "LOW_MEMORY"
+    ApplicationExitInfo.REASON_CRASH -> "CRASH"
+    ApplicationExitInfo.REASON_CRASH_NATIVE -> "CRASH_NATIVE"
+    ApplicationExitInfo.REASON_ANR -> "ANR"
+    ApplicationExitInfo.REASON_INITIALIZATION_FAILURE -> "INITIALIZATION_FAILURE"
+    ApplicationExitInfo.REASON_PERMISSION_CHANGE -> "PERMISSION_CHANGE"
+    ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "EXCESSIVE_RESOURCE_USAGE"
+    ApplicationExitInfo.REASON_USER_REQUESTED -> "USER_REQUESTED"
+    ApplicationExitInfo.REASON_USER_STOPPED -> "USER_STOPPED"
+    ApplicationExitInfo.REASON_DEPENDENCY_DIED -> "DEPENDENCY_DIED"
+    ApplicationExitInfo.REASON_OTHER -> "OTHER"
+    else -> "UNKNOWN_$reason"
 }
 
 /** Only the composition root knows concrete implementations. All offline services share one private root. */

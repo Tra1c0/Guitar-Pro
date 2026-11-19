@@ -77,6 +77,14 @@ class Qa31CrashReportFormatTest {
         assertFalse(text.contains("Takte"))
     }
 
+    @Test fun systemExitReport() {
+        val text = CrashReportFormat.systemExit(1_763_550_000_123L, "2025-11-19T11:00:00.123Z", env, "CRASH_NATIVE", "Fatal signal 11 (SIGSEGV)" + " x".repeat(400), 100, 300_000, 410_000, 11)
+        assertTrue(text.startsWith(CrashReportFormat.HEADER + " (vom System gemeldet)"))
+        assertTrue(text.lines().any { it.startsWith("Ausnahme: Prozessende CRASH_NATIVE: Fatal signal 11 (SIGSEGV)") && it.length < 240 })
+        assertTrue(text.contains("Speicher (PSS/RSS): 292 MB / 400 MB"))
+        assertTrue("long description in full below", text.contains("Beschreibung:\nFatal signal 11"))
+    }
+
     @Test fun contextSnapshotAndClear() {
         CrashContext.route = "project/{projectId}"; CrashContext.page = "drums"; CrashContext.bars = 12; CrashContext.tracks = 3; CrashContext.grid = "1/16"
         assertEquals(CrashState("project/{projectId}", "drums", 12, 3, "1/16"), CrashContext.snapshot())
