@@ -28,6 +28,7 @@ import dev.riffworkbench.editor.Articulations
 import dev.riffworkbench.editor.EditScope
 import dev.riffworkbench.editor.EditorCommand
 import dev.riffworkbench.model.*
+import dev.riffworkbench.ports.CrashContext
 import dev.riffworkbench.ui.components.*
 import dev.riffworkbench.ui.components.R
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -64,6 +65,9 @@ class ExportActions(val bytes: (ExportResult) -> Unit, val stream: (ExportTarget
     val playing = status == TransportStatus.PLAYING
     val paused = status == TransportStatus.PAUSED
     ProbeComposition("WorkspaceScreen")
+    // Zyklus 31: the page for a crash report (no content, just the route of the page).
+    SideEffect { CrashContext.page = page.route }
+    DisposableEffect(Unit) { onDispose { CrashContext.page = null } }
     LaunchedEffect(ui.editor?.project?.id) { if (ui.editor != null) runCatching { keyboardFocus.requestFocus() } }
     val textEditing = remember { mutableStateOf(false) }
     val noticeSheets = remember { mutableIntStateOf(0) }

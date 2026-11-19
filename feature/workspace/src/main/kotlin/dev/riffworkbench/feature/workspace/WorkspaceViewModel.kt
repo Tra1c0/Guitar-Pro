@@ -423,6 +423,8 @@ class WorkspaceViewModel(
         viewModelScope.launch { preview.preview(e.project, track.id, note) }
     }
     val audioLab: AudioLab? get() = services.audioLab
+    /** Zyklus 31: crash reports kept on the device (diagnostics page). */
+    val crashReports: CrashReports? get() = services.crashReports
 
     private fun previewSelected(drumMidi: Int? = null) {
         val preview = services.preview ?: return
@@ -515,6 +517,8 @@ class WorkspaceViewModel(
 
     private fun relayout() {
         val e = session?.state?.value ?: return
+        // Zyklus 31: rough size of the open project for a crash report (sizes only, no content).
+        CrashContext.bars = e.project.measures.size; CrashContext.tracks = e.project.tracks.size; CrashContext.grid = gridName(input.value.duration)
         val trackIndex = e.project.tracks.indexOfFirst { it.id == e.selection.trackId }.coerceAtLeast(0)
         val v = view.value
         val base = if (v.compact) LayoutStyle.READ else LayoutStyle.EDIT
@@ -1294,7 +1298,7 @@ class WorkspaceViewModel(
         result
     }
     // viewModelScope is already cancelled when onCleared runs: a launch there never executes, so the microphone would stay open.
-    override fun onCleared() { tunerJob?.cancel(); services.tuner?.let { t -> kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch { t.stop() } } }
+    override fun onCleared() { CrashContext.clearProject(); tunerJob?.cancel(); services.tuner?.let { t -> kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch { t.stop() } } }
 
     init {
         // Zyklus 26: the output device selects the latency profile; a switch aborts a running recording/calibration. Last in

@@ -14,6 +14,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.navigation.NavController
+import dev.riffworkbench.ports.CrashContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.*
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -102,6 +106,14 @@ object AppRoutes {
     // Zyklus 27: after the settings are read, the automatic update check (only when switched on and due: at most every 6 h).
     LaunchedEffect(container) { when (val result = container.settings.load()) { is Outcome.Failure -> notice = result.message; is Outcome.Success -> container.updates.checkOnStart() } }
     val update by container.updates.state.collectAsStateWithLifecycle()
+    // Zyklus 31: the route (pattern, never the project id) for a crash report; a start after a crash says so once.
+    DisposableEffect(nav) {
+        val listener = NavController.OnDestinationChangedListener { _, destination, _ -> CrashContext.route = destination.route ?: "?" }
+        nav.addOnDestinationChangedListener(listener)
+        onDispose { nav.removeOnDestinationChangedListener(listener) }
+    }
+    val crashed by container.crashNotice.collectAsStateWithLifecycle()
+    var showCrashes by rememberSaveable { mutableStateOf(false) }
     // The app-level notice (export result, unreadable settings) lies over the screen above the navigation bar and closes
     // itself (QA 23); before, it was a row above the NavHost that pushed every screen down until "×" was tapped.
     RiffTheme(settings.darkTheme) { Surface(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize()) {
@@ -155,9 +167,18 @@ object AppRoutes {
             TransientNotice(message, NoticeTiming.millis(message), { if (notice == message) notice = null },
                 Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.navigationBars).padding(start = 12.dp, end = 12.dp, bottom = 88.dp))
         }
+        // Zyklus 31: after a crash, once at the next start (before an update notice): „Ansehen“ opens the stored reports.
+        if (notice == null && crashed) {
+            val en = english()
+            TransientNotice(if (en) "ArtiFret crashed — report under Diagnostics" else "ArtiFret ist abgestürzt — Bericht unter Diagnose", 12_000L, { container.crashNotice.value = false },
+                Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.navigationBars).padding(start = 12.dp, end = 12.dp, bottom = 88.dp).testTag("crash-notice")) {
+                TextButton(onClick = { container.crashNotice.value = false; showCrashes = true }, modifier = Modifier.testTag("crash-notice-view")) { Text(if (en) "View" else "Ansehen") }
+            }
+        }
+        if (showCrashes) CrashReportsDialog(container.crashLog, onDismiss = { showCrashes = false })
         // Zyklus 27: the start check found a newer build. „Installieren“ starts the download and opens Settings → Updates
         // (progress, permission hint); otherwise the notice closes itself and the update stays offered in the settings.
-        if (notice == null) update.announcement?.let { found ->
+        if (notice == null && !crashed && !showCrashes) update.announcement?.let { found ->
             val en = english()
             val text = if (en) "Update ${found.versionName} available" else "Update ${found.versionName} verfügbar"
             TransientNotice(text, 10_000L, { container.updates.dismissAnnouncement() },

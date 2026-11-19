@@ -30,6 +30,8 @@ import dev.riffworkbench.platform.AndroidUpdateInstaller
 import dev.riffworkbench.platform.GitHubUpdateChecker
 import dev.riffworkbench.platform.OfflineUpdateChecker
 import dev.riffworkbench.ports.UpdateCoordinator
+import dev.riffworkbench.ports.CrashEnvironment
+import kotlinx.coroutines.flow.MutableStateFlow
 import android.os.Build
 import java.io.File
 import java.util.UUID
@@ -50,11 +52,32 @@ class PendingExports {
 
 open class RiffApplication : Application() {
     lateinit var container: AppContainer; private set
-    override fun onCreate() { super.onCreate(); container = AppContainer(this) }
+    override fun onCreate() {
+        super.onCreate()
+        // Zyklus 31: the local crash log first, so a crash while the container is built is recorded too.
+        val crashLog = FileCrashLog(File(filesDir, "crashes"))
+        installCrashRecorder(crashLog)
+        container = AppContainer(this, crashLog)
+    }
+
+    /**
+     * Zyklus 31 „lokales Absturzprotokoll“: every uncaught exception is written synchronously into the app's private
+     * storage (last 5, ≤ 64 KB each: time, version, device, thread, screen, project sizes, stack trace); then Android's own
+     * handler ends the process as usual. Not under Robolectric: there the handler would outlive the test application.
+     */
+    private fun installCrashRecorder(log: FileCrashLog) {
+        if (Build.FINGERPRINT == "robolectric") return
+        try {
+            val environment = CrashEnvironment(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, "${Build.MANUFACTURER} ${Build.MODEL}", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+            CrashRecorder(log, environment).install()
+        } catch (_: Throwable) { }
+    }
 }
 
 /** Only the composition root knows concrete implementations. All offline services share one private root. */
-class AppContainer(application: Application) {
+class AppContainer(application: Application, val crashLog: FileCrashLog = FileCrashLog(File(application.filesDir, "crashes"))) {
+    /** Zyklus 31: a crash since the last start that was not shown yet — the start notice „ArtiFret ist abgestürzt“ (once). */
+    val crashNotice = MutableStateFlow(runCatching { crashLog.takeUnseen() }.getOrDefault(false))
     private val root = File(application.filesDir, "workbench")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     /** Outlives activity recreation (rotation, dark mode): long document writes must not be cancelled with the UI. */
@@ -89,7 +112,7 @@ class AppContainer(application: Application) {
     val formats = FormatRegistry.catalog()
     val integrations = IntegrationCatalog.entries
     val workspaceServices = WorkspaceServices(preview = transport, renderer = transport, formats = formats, tuner = tuner, assets = assets, audioDecoder = audioDecoder,
-        waveforms = StreamingWaveforms(assets, audioDecoder), audioLab = audioLab, audioRoutes = audioRoutes, routeNotices = routeNotices)
+        waveforms = StreamingWaveforms(assets, audioDecoder), audioLab = audioLab, audioRoutes = audioRoutes, routeNotices = routeNotices, crashReports = crashLog)
     private val guard = PlaybackGuard(application) { scope.launch { transport.pause() } }
     /** Zyklus 27: downloads a release APK into cache/updates and hands it to the system installer. */
     private val updateInstaller = AndroidUpdateInstaller(application)

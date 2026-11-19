@@ -82,6 +82,8 @@ data class WorkspaceServices(
     val audioRoutes: AudioRouteMonitor? = null,
     /** Zyklus 26: „Latenz nicht kalibriert“ once per device and app process (one instance in the composition root). */
     val routeNotices: RouteNoticeMemory = RouteNoticeMemory(),
+    /** Zyklus 31: crash reports kept on the device (diagnostics page „Letzte Abstürze“); null = none in this build. */
+    val crashReports: CrashReports? = null,
 )
 
 /** Export targets offered in the exchange screen. */
@@ -156,6 +158,9 @@ data class RhythmTapState(
     /** The active device has its own calibration (otherwise [latencyMs] is the device-less fallback). */
     val latencyOwn: Boolean = false,
 )
+
+/** Zyklus 31: grid name for a crash report („1/32“, „1/16 T“): the entry value without dots. */
+fun gridName(d: WrittenDuration): String = "1/${d.denominator}" + if (d.tuplets.isNotEmpty()) " T" else ""
 
 /**
  * Zyklus 29: geometry (dp) of the continuous drum grid — one LazyRow item per bar, cells at fixed x so the playhead column

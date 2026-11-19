@@ -35,6 +35,8 @@ import kotlinx.coroutines.launch
     LaunchedEffect(lab) { while (lab != null) { stats = lab.stats(); delay(500) } }
     ScrollPage(stringResource(R.string.audio_diagnostics), tr("Messwerte vom laufenden Gerät für den Prüfplan. Nichts hier ist geschätzt: Werte erscheinen, sobald die Wiedergabe einmal lief.",
         "Measurements from the running device for the test plan. Nothing here is estimated: values appear once playback has run.")) {
+        // Zyklus 31: the crash reports do not need the audio lab.
+        vm.crashReports?.let { CrashReportsSection(it) }
         if (lab == null) { NoticeCard(tr("Diagnose ist in diesem Build nicht verfügbar.", "Diagnostics are not available in this build."), true); return@ScrollPage }
         TabinoCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(tr("Live", "Live"), style = MaterialTheme.typography.titleMedium)
