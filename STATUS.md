@@ -41,6 +41,22 @@ Branch: `ccr-0b650dff-jnhups-qa`, per Fast-Forward gespiegelt nach `ccr-0b650dff
 - [ ] Langer Hall endet im Export hart nach 2 s Ausklang (≈ −82 dBFS)
 - [x] Übersteuerte Exporte melden sich jetzt (Qa22ExportClipNoticeTest): die Exportmeldung nennt jede übersteuerte Datei mit Sample-Zahl. Stems sind unabhängig vom Master-Fader (Qa22TransitionPinchLoudnessTest.stemsDoNotDependOnTheMasterFader, rot davor: Clean-Stem bei Master 1,0 +3,1 dBFS, 72 geclippt); kein Fader-Paar kann einen Stem mehr übersteuern
 
+## Arbeitsweise (seit 2026-11-19)
+Product-Engineer-Modus: Nutzerfeedback → konkrete, prüfbare Ziele; kleine reversible Entscheidungen autonom; gebündelte Rückfragen nur bei Kernverhalten/Umfang/Daten/Kosten, jeweils mit Empfehlung; Freigabe vor destruktiven/kostenpflichtigen Schritten und Veröffentlichungen. Prüfen über echte Einstiegspunkte (JVM-Suite, ViewModel-Shim, CI mit Android-Build/Lint/Robolectric); Gerät/Gehör nur beim Nutzer.
+
+## Zyklus 29 (in Arbeit): Drum-Raster und Notenwerte
+Abnahmekriterien:
+1. Jeder Takt im Drum-Editor hat exakt Schläge × Unterteilung Felder (alle Raster 1/8, 1/16, 1/32, 1/8T, 1/16T; 4/4, 3/4, 6/8, 7/8, 5/4, 12/8, Taktwechsel) — der letzte Schlag ist vollständig.
+2. Drum-Editor als eine durchgehende, horizontal scrollende Fläche über alle Takte, Taktgrenzen mit kräftiger Linie + Taktnummer; jede Zelle direkt antippbar, schreibt in ihren Takt ohne vorherige Taktauswahl.
+3. Während der Wiedergabe ist die klingende Spalte eingefärbt (inkl. Bluetooth-Verzögerung), die Ansicht folgt minimal, ohne Springen; das Raster recomponiert nicht pro Poll.
+4. Note verlängern: erst Pausen dahinter, dann verschieben sich Folgenoten; Überlauf wandert (mit Haltebogen) in den nächsten Takt, kaskadierend, am Stückende neuer Takt; ein Undo-Schritt; kürzer → Pause, nichts verschiebt sich.
+5. Kein weiterer Fehler der Klasse „Pausen/Noten“ im modellbasierten Editor-Test; JVM-Suite, ViewModel-Shim und CI grün.
+
+## Offene Entscheidungen / Aktionen des Nutzers
+- GitHub-Secrets für signierte Releases eintragen (Werte geschickt); danach erstes Release und einmalige Neuinstallation.
+- Lernfähige Glättung: lokales Tipp-/Korrektur-Protokoll + lernende Grenzwerte (Empfehlung: erst nach Gerätetest der jetzigen Auto-Glättung).
+- Gerätetests: Metronom-Gefühl (Prozent-Chip/Diagnose-Rate), Rhythmus-Auto/Taktart, Bluetooth-Kalibrierung, Drums-Klang.
+
 ## Zyklus 28 (gemergt, CI grün 63b1c98): Metronom-Tempo belegt korrekt (Ursache vermutlich verstecktes Übungstempo → Chip im Editor-Kopf; Diagnose Ausgabe/Engine-Rate); Rhythmus-Glättung „Auto“ (RhythmSmoother: Pulsverfolgung, MDL-Rasterwahl, Wiederholungs-Konsens) als Standard; Taktart-Erkennung (MeterDetector) für neue/leere Takte; Konsistenz über 32 Takte ≤ 0,08 ms. Offen: lernfähiges Profil (Vorschlag an Nutzer), Gerätetest.
 
 ## Zyklus 27 (gemergt, CI grün 6d7fb34): (a) Auto-Updates: CI signiert den Debug-Build mit festem Schlüssel aus Secrets (ANDROID_KEYSTORE_BASE64/…_PASSWORD/ANDROID_KEY_ALIAS/ANDROID_KEY_PASSWORD), versionCode = Laufnummer+1000, Release-Job veröffentlicht v<code> von ccr-0b650dff-jnhups-qa; In-App-Updater (Einstellungen → Updates, Startprüfung ≤ alle 6 h, abschaltbar, einzige Netzverbindung). Noch kein Release: Secrets fehlen (Nutzer). (b) Rhythmus tippen: Ziel „Offen“ mit Stopp/Auto-Stopp, Takte am Stückende anhängen, nahtloses Plan-Verlängern (Reprogram seamless).
