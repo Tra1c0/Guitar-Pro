@@ -1,5 +1,6 @@
 package dev.riffworkbench.feature.workspace
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -172,7 +173,8 @@ class Qa29DrumGridUiTest {
         val x = cell.positionInRoot.x
         assertTrue("G4 the sounding cell is visible: $x in $gridBox", x >= gridBox.left && x + cell.size.width <= gridBox.right + 1f)
         assertFalse(f.vm.view.value.followSuspended)
-        compose.onNodeWithTag("drum-grid").performTouchInput { swipeRight() }
+        // Zyklus 30: the top strip of the grid (guitar lane, header, ruler) positions the cursor; a swipe over the cells scrolls.
+        compose.onNodeWithTag("drum-grid").performTouchInput { swipe(Offset(left + 10f, visibleSize.height - 8f), Offset(right - 10f, visibleSize.height - 8f)) }
         compose.waitForIdle()
         assertTrue("G4 a swipe pauses the follow", f.vm.view.value.followSuspended)
         compose.onNodeWithTag("drum-follow-resume").performSemanticsAction(SemanticsActions.OnClick)

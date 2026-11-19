@@ -1,6 +1,37 @@
 package dev.riffworkbench.feature.workspace
 
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.MeasurePolicy
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.InfiniteAnimationPolicy
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.testTag
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.sp
+import dev.riffworkbench.notation.CursorSnap
+import dev.riffworkbench.playback.GuitarActivity
+import dev.riffworkbench.playback.HitGlow
+import dev.riffworkbench.playback.ScoreClock
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.isActive
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListState
@@ -172,7 +203,7 @@ import dev.riffworkbench.ui.score.pitchName
                     FilterChip(DrumGrid.step(duration) == step, { vm.setGrid(duration) }, label = { Text(label) })
                 }
             }
-            DrumGridArea(vm, track, state.selection.voice, bars, listState)
+            DrumGridArea(vm, project, track, state.selection, bars, listState)
             DrumKitMix(vm, track)
             val note = vm.selectedBeat(state)?.notes?.firstOrNull()
             if (note != null) {
@@ -199,12 +230,57 @@ private val DrumGridChoices = listOf(
 /** Sounding column (bar index, cell index) for tests: set by [DrumPlayheadFollower], null while stopped. */
 internal val DrumPlayheadKey = SemanticsPropertyKey<Pair<Int, Int>?>("DrumPlayhead")
 
-/** Fixed name column plus the lazy row of bars; the playhead column lives in `playColumn` (draw-phase reads only). */
-@Composable private fun DrumGridArea(vm: WorkspaceViewModel, track: Track, voice: Int, bars: List<DrumGrid.Bar>, listState: LazyListState) {
+/**
+ * Zyklus 30: live values of the drum grid — written by the playhead follower, the frame ticker and the positioning gesture,
+ * read ONLY in draw lambdas (and by the test probe), so playback and dragging never recompose a bar: they invalidate the
+ * draw of the visible bars that show something, nothing else.
+ */
+@Stable
+private class DrumLive {
+    /** Sounding column (bar index, cell index), null while stopped. */
+    val column = mutableStateOf<Pair<Int, Int>?>(null)
+    /** Displayed playhead (incl. the Bluetooth delay) in score seconds ([ScoreClock]) at the last poll; NaN while stopped. */
+    val now = mutableDoubleStateOf(Double.NaN)
+    @Volatile var pollNanos = 0L
+    @Volatile var speed = 1.0
+    @Volatile var playing = false
+    /** Frame tick while playing: lets the glow fade between two polls (~30 Hz). */
+    val frame = mutableLongStateOf(0L)
+    /** Sounding guitar section: bar index, from, to (whole notes). */
+    val laneSection = mutableStateOf<Triple<Int, Double, Double>?>(null)
+    /** Cursor/start marker: bar index and offset (whole notes); null when the cursor is not in a shown bar. */
+    val cursor = mutableStateOf<Pair<Int, Double>?>(null)
+    /** Positioning drag: finger x and snapped x (global dp over all bars), NaN when idle. */
+    val handle = mutableFloatStateOf(Float.NaN)
+    val snapped = mutableFloatStateOf(Float.NaN)
+
+    /** Score time for the glow: the last poll, extrapolated by the real time since (at most 0.1 s) while playing. */
+    fun scoreNow(): Double {
+        val n = now.doubleValue
+        if (!playing || n.isNaN()) return n
+        return n + ((System.nanoTime() - pollNanos) / 1e9).coerceIn(0.0, 0.1) * speed
+    }
+}
+
+/** Fixed name column plus the lazy row of bars; playhead, glow, guitar lane highlight and cursor handle are draw-phase reads of [DrumLive]. */
+@Composable private fun DrumGridArea(vm: WorkspaceViewModel, project: Project, track: Track, selection: Selection, bars: List<DrumGrid.Bar>, listState: LazyListState) {
     ProbeComposition("DrumGrid")
-    val playColumn = remember { mutableStateOf<Pair<Int, Int>?>(null) }
-    DrumPlayheadFollower(vm, bars, listState, playColumn)
+    val live = remember { DrumLive() }
+    val clock = remember(project.measures, project.tempo, project.tracks) { ScoreClock(project) }
+    // Common activity of all guitars (GuitarActivity); no guitar: no lane.
+    val lanes = remember(project.measures, project.tracks) { GuitarActivity.lanes(project) }
+    val voice = selection.voice
     val staff = track.staves.first()
+    val beatsByBar = remember(staff, bars, voice) { bars.map { b -> staff.bars.firstOrNull { it.measureId == b.measureId }?.voices?.firstOrNull { it.index == voice }?.beats.orEmpty() } }
+    val starts = remember(bars) { DrumGridGeometry.barStarts(bars) }
+    DrumPlayheadFollower(vm, bars, lanes, clock, listState, live)
+    // The cursor is the start marker (Zyklus 18); a positioning drag moves it.
+    val cursorBar = bars.indexOfFirst { it.measureId == selection.measureId }
+    val cursorOffset = selection.offset.toDouble()
+    SideEffect { live.cursor.value = if (cursorBar >= 0) cursorBar to cursorOffset else null }
+    val haptics = LocalHapticFeedback.current
+    val positioning = remember(vm, listState) { DrumPositioning(vm, listState, live) }
+    SideEffect { positioning.update(bars, starts, beatsByBar, lanes, haptics) }
     // A swipe by the user pauses the follow (like a pan on the score); programmatic scrolls do not pass nested scrolling.
     val userScroll = remember(vm) {
         object : NestedScrollConnection {
@@ -214,24 +290,28 @@ internal val DrumPlayheadKey = SemanticsPropertyKey<Pair<Int, Int>?>("DrumPlayhe
             }
         }
     }
+    val kit = track.instrument.drumKit
+    val hasLane = lanes.isNotEmpty()
     Row(Modifier.fillMaxWidth()) {
         Column(Modifier.width(76.dp), verticalArrangement = Arrangement.spacedBy(DrumGridGeometry.ROW_GAP.dp)) {
+            if (hasLane) Box(Modifier.height(DrumGridActivity.LANE.dp), contentAlignment = Alignment.CenterStart) {
+                Text(tr("Gitarre", "Guitar"), style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp, lineHeight = 8.sp), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                    modifier = Modifier.clearAndSetSemantics { })
+            }
             Spacer(Modifier.height(DrumGridGeometry.HEADER.dp))
             Spacer(Modifier.height(DrumGridGeometry.RULER.dp))
-            track.instrument.drumKit.forEach { drum ->
+            kit.forEach { drum ->
                 Box(Modifier.height(DrumGridGeometry.CELL.dp), contentAlignment = Alignment.CenterStart) { Text(drum.name, maxLines = 2, style = MaterialTheme.typography.labelMedium) }
             }
         }
         Box(Modifier.weight(1f).nestedScroll(userScroll)) {
             LazyRow(state = listState, modifier = Modifier.fillMaxWidth().testTag("drum-grid")) {
-                items(bars.size, key = { bars[it].measureId.value }) { index ->
-                    val bar = bars[index]
-                    val beats = staff.bars.firstOrNull { it.measureId == bar.measureId }?.voices?.firstOrNull { it.index == voice }?.beats.orEmpty()
-                    DrumBar(vm, track, bar, beats, playColumn)
+                items(bars.size, key = { bars[it].measureId.value }, contentType = { "bar" }) { index ->
+                    DrumBar(vm, track.id, kit, bars[index], starts[index], beatsByBar[index], lanes.getOrNull(index), clock, live, positioning)
                 }
             }
             DrumFollowChip(vm, Modifier.align(Alignment.TopEnd))
-            DrumPlayheadProbe(playColumn)
+            DrumPlayheadProbe(live.column)
         }
     }
 }
@@ -244,17 +324,32 @@ internal val DrumPlayheadKey = SemanticsPropertyKey<Pair<Int, Int>?>("DrumPlayhe
 
 /**
  * Reads the transport (shown playhead incl. the Bluetooth delay of Zyklus 26) in a coroutine, never in composition: sets
- * the sounding column and, while playing with follow on, scrolls the grid minimally to keep it visible.
+ * the sounding column, the score time of the glow and the sounding guitar section, and, while playing with follow on,
+ * scrolls the grid minimally to keep the column visible (only when it leaves the visible part, [DrumGridGeometry.follow]).
+ * A frame ticker runs only while playing, so the glow fades smoothly between polls; it writes one state that only the
+ * bars around the playhead read in their draw phase.
  */
-@Composable private fun DrumPlayheadFollower(vm: WorkspaceViewModel, bars: List<DrumGrid.Bar>, listState: LazyListState, playColumn: MutableState<Pair<Int, Int>?>) {
+@Composable private fun DrumPlayheadFollower(vm: WorkspaceViewModel, bars: List<DrumGrid.Bar>, lanes: List<GuitarActivity.BarLane>, clock: ScoreClock, listState: LazyListState, live: DrumLive) {
     val currentBars by rememberUpdatedState(bars)
+    val currentLanes by rememberUpdatedState(lanes)
+    val currentClock by rememberUpdatedState(clock)
     val density = LocalDensity.current.density
     LaunchedEffect(vm, listState) {
         vm.transport.state.collect { s ->
             val shown = vm.displayedPlayhead(s)
             val all = currentBars
             val column = shown?.let { DrumGrid.locate(all, it.position.measureId, it.position.offset) }
-            playColumn.value = column
+            live.column.value = column
+            live.playing = s.status == TransportStatus.PLAYING
+            live.speed = s.speed.takeIf { it > 0.0 } ?: 1.0
+            live.pollNanos = System.nanoTime()
+            if (shown == null) { live.now.doubleValue = Double.NaN; live.laneSection.value = null }
+            else {
+                val offset = shown.position.offset.toDouble()
+                live.now.doubleValue = currentClock.seconds(shown.position.measureId, offset)
+                val bar = column?.first ?: -1
+                live.laneSection.value = currentLanes.getOrNull(bar)?.let { GuitarActivity.soundingAt(it, offset) }?.let { (a, b) -> Triple(bar, a.toDouble(), b.toDouble()) }
+            }
             val view = vm.view.value
             if (column != null && s.status == TransportStatus.PLAYING && view.follow && !view.followSuspended) {
                 val starts = DrumGridGeometry.barStarts(all)
@@ -269,6 +364,75 @@ internal val DrumPlayheadKey = SemanticsPropertyKey<Pair<Int, Int>?>("DrumPlayhe
             }
         }
     }
+    LaunchedEffect(vm) {
+        vm.transport.state.map { it.status == TransportStatus.PLAYING }.distinctUntilChanged().collectLatest { playing ->
+            if (!playing) return@collectLatest
+            // Under UI tests the infinite-animation policy cancels this loop (the glow then advances per poll only).
+            try { while (true) infiniteFrame { t -> live.frame.longValue = t } }
+            catch (e: kotlinx.coroutines.CancellationException) { if (!currentCoroutineContext().isActive) throw e }
+        }
+    }
+}
+
+/**
+ * Zyklus 30 „Cursor selbst schieben“: the positioning strip (guitar lane, bar header, beat ruler) of every bar. Touching
+ * it only moves the cursor/start marker: the handle follows the finger over all bars (auto-scroll at the edges), snaps on
+ * the nearest hit or guitar attack within [DrumGridActivity.SNAP_RADIUS], else on the nearest cell, with a light tick per
+ * snap change; the release commits ONE [WorkspaceViewModel.positionCursor] (a seek while playing). Cells stay editing.
+ */
+private class DrumPositioning(private val vm: WorkspaceViewModel, private val listState: LazyListState, private val live: DrumLive) {
+    private var starts = FloatArray(1)
+    private var onsets: List<CursorSnap.Target> = emptyList()
+    private var grid: List<CursorSnap.Target> = emptyList()
+    private var haptics: androidx.compose.ui.hapticfeedback.HapticFeedback? = null
+    private var source: Any? = null
+    private var fingerInView = 0f
+    private var target: CursorSnap.Target? = null
+    var density = 1f
+
+    fun update(bars: List<DrumGrid.Bar>, starts: FloatArray, beats: List<List<Beat>>, lanes: List<GuitarActivity.BarLane>, haptics: androidx.compose.ui.hapticfeedback.HapticFeedback) {
+        this.haptics = haptics
+        this.starts = starts
+        val key = Triple(bars, beats, lanes)
+        if (key != source) { source = key; DrumGridActivity.snapTargets(bars, beats, lanes).let { (o, g) -> onsets = o; grid = g } }
+    }
+    private fun scroll(): Float {
+        val first = listState.firstVisibleItemIndex
+        return (starts.getOrNull(first) ?: 0f) + listState.firstVisibleItemScrollOffset / density
+    }
+    fun start(bar: Int, localX: Float) { vm.beginPositioning(); target = null; move(bar, localX) }
+    fun move(bar: Int, localX: Float) { fingerInView = (starts.getOrNull(bar) ?: 0f) + localX - scroll(); track() }
+    private fun edgeDelta(): Float {
+        val viewport = listState.layoutInfo.viewportSize.width / density
+        if (viewport <= 0f) return 0f
+        val zone = DrumGridGeometry.CELL
+        val delta = when { fingerInView < zone -> -(zone - fingerInView) / 3f; fingerInView > viewport - zone -> (fingerInView - viewport + zone) / 3f; else -> 0f }
+        // Nothing left to scroll in that direction: no auto-scroll (and no wake-ups).
+        return if ((delta < 0f && !listState.canScrollBackward) || (delta > 0f && !listState.canScrollForward)) 0f else delta
+    }
+    /** The finger rests in the edge zone and the grid can still scroll that way. */
+    fun atEdge(): Boolean = edgeDelta() != 0f
+    /** Auto-scroll while the finger rests near an edge (called about every frame without pointer events). */
+    fun edge() {
+        val delta = edgeDelta()
+        if (delta != 0f && listState.dispatchRawDelta(delta * density) != 0f) track()
+    }
+    private fun track() {
+        val x = fingerInView + scroll()
+        live.handle.floatValue = x
+        val snap = CursorSnap.snap(x, onsets, grid, DrumGridActivity.SNAP_RADIUS)
+        live.snapped.floatValue = snap?.x ?: Float.NaN
+        if (snap != null && snap != target) { if (target != null) haptics?.performHapticFeedback(HapticFeedbackType.TextHandleMove); target = snap }
+    }
+    fun release() { val t = target; end(); if (t != null) vm.positionCursor(t.measureId, t.offset) }
+    fun cancel() = end()
+    private fun end() { live.handle.floatValue = Float.NaN; live.snapped.floatValue = Float.NaN; target = null }
+}
+
+/** One frame of an endless animation; under UI tests the [InfiniteAnimationPolicy] decides (it cancels it there). */
+private suspend fun infiniteFrame(onFrame: (Long) -> Unit) {
+    val policy = currentCoroutineContext()[InfiniteAnimationPolicy]
+    if (policy == null) withFrameNanos(onFrame) else policy.onInfiniteOperation { withFrameNanos(onFrame) }
 }
 
 /** „Folgen“ again after a swipe paused it while playing (like the score's chip). */
@@ -284,55 +448,208 @@ internal val DrumPlayheadKey = SemanticsPropertyKey<Pair<Int, Int>?>("DrumPlayhe
     }
 }
 
+/** Static draw data of one bar (computed when its content changes, never per frame). */
+private class DrumBarPaint(val xs: FloatArray, val active: BooleanArray, val glowRow: IntArray, val glowCell: IntArray, val glowOnset: DoubleArray,
+                           val laneSpans: FloatArray, val laneAttacks: FloatArray)
+
 /**
- * One bar: barline, header (number, meter/tempo where they change), beat ruler, and one row of cells (48 dp) per kit element
- * at the x of [DrumGridGeometry.cellX]. The playhead tint is drawn over the column in the draw phase only.
+ * One bar (Zyklus 30: one layer instead of one button per cell): barline, guitar lane, header (number, meter/tempo where
+ * they change), beat ruler and ALL cells of all kit rows drawn in one cached graphics layer; a tap is hit-tested by
+ * coordinate ([DrumGridGeometry.cellAt]). Each cell keeps a light semantics node (label „Kick, 3, off“ — from bar 2 on with
+ * the bar —, testTag `drum-cell-<bar>-<cell>-<midi>`, click action, 48 dp) for TalkBack and the tests. Playhead column,
+ * hit glow, the sounding guitar section and the cursor handle are drawn over it in the draw phase only.
  */
-@Composable private fun DrumBar(vm: WorkspaceViewModel, track: Track, bar: DrumGrid.Bar, beats: List<Beat>, playColumn: State<Pair<Int, Int>?>) {
+@Composable private fun DrumBar(vm: WorkspaceViewModel, trackId: EntityId, kit: List<DrumElement>, bar: DrumGrid.Bar, start: Float, beats: List<Beat>,
+                                lane: GuitarActivity.BarLane?, clock: ScoreClock, live: DrumLive, positioning: DrumPositioning) {
     ProbeComposition("DrumGrid.bar")
-    val xs = remember(bar.cells) { DrumGridGeometry.cellX(bar.cells) }
-    val hits = remember(beats) { beats.associate { b -> b.offset to b.notes.map { it.pitch.midiNumber }.toSet() } }
-    val barline = MaterialTheme.colorScheme.outline
+    val rows = kit.size
+    val paint = remember(bar, beats, kit, lane, clock) {
+        val xs = DrumGridGeometry.cellX(bar.cells)
+        val hits = HashMap<Fraction, Set<Int>>()
+        beats.forEach { b -> hits[b.offset] = b.notes.map { it.pitch.midiNumber }.toSet() }
+        val active = BooleanArray(rows * bar.cells.size)
+        val gr = ArrayList<Int>(); val gc = ArrayList<Int>(); val go = ArrayList<Double>()
+        kit.forEachIndexed { r, drum -> bar.cells.forEach { c ->
+            if (hits[c.offset]?.contains(drum.midiNote) == true) { active[r * bar.cells.size + c.index] = true; gr += r; gc += c.index; go += clock.seconds(bar.index, c.offset.toDouble()) }
+        } }
+        val spans = lane?.spans.orEmpty().flatMap { (a, b) -> listOf(DrumGridActivity.xAt(bar.cells, xs, bar.length, a.toDouble()), DrumGridActivity.xAt(bar.cells, xs, bar.length, b.toDouble())) }.toFloatArray()
+        val attacks = lane?.attacks.orEmpty().map { DrumGridActivity.xAt(bar.cells, xs, bar.length, it.toDouble()) }.toFloatArray()
+        DrumBarPaint(xs, active, gr.toIntArray(), gc.toIntArray(), go.toDoubleArray(), spans, attacks)
+    }
+    val colors = MaterialTheme.colorScheme
+    val barline = colors.outline
+    val primary = colors.primary
+    val laneGround = colors.surfaceVariant
     val tint = Tabino.Sky.copy(alpha = 0.32f)
     val number = bar.index + 1
     val barWord = tr("Takt", "Bar")
+    val laneWord = tr("Gitarren-Aktivität", "Guitar activity")
     val header = buildString {
         append(barWord).append(' ').append(number)
         bar.signature?.let { append(" · ").append(it.numerator).append('/').append(it.denominator) }
         bar.tempo?.let { append(" · ♩=").append(kotlin.math.round(it).toInt()) }
     }
-    Column(Modifier.width(DrumGridGeometry.barWidth(bar.cells).dp).testTag("drum-bar-$number").drawWithContent {
+    val width = DrumGridGeometry.barWidth(bar.cells)
+    val hasLane = lane != null
+    // Offset (dp) of the cell rows below the top of the bar item; the strip above them is lane + header + ruler.
+    val rowsTop = (if (hasLane) DrumGridActivity.LANE + DrumGridGeometry.ROW_GAP else 0f) + DrumGridGeometry.HEADER + DrumGridGeometry.ROW_GAP + DrumGridGeometry.RULER + DrumGridGeometry.ROW_GAP
+    val rulerTop = rowsTop - DrumGridGeometry.ROW_GAP - DrumGridGeometry.RULER
+    val density = LocalDensity.current.density
+    positioning.density = density
+    val capPath = remember { androidx.compose.ui.graphics.Path() }
+    val onCell = remember(vm, trackId, bar.measureId) { { offset: Fraction, midi: Int -> vm.toggleDrum(trackId, bar.measureId, offset, midi) } }
+    Box(Modifier.width(width.dp).testTag("drum-bar-$number").drawWithContent {
         drawContent()
         drawRect(barline, topLeft = Offset.Zero, size = Size(2.dp.toPx(), size.height))
-        val column = playColumn.value
+        val cellPx = DrumGridGeometry.CELL.dp.toPx()
+        // Playhead column over the ruler and all rows.
+        val column = live.column.value
         if (column != null && column.first == bar.index) {
-            val top = (DrumGridGeometry.HEADER + DrumGridGeometry.ROW_GAP).dp.toPx()
-            drawRect(tint, topLeft = Offset((xs[column.second] - 2f).dp.toPx(), top), size = Size((DrumGridGeometry.CELL + 4f).dp.toPx(), size.height - top))
+            val top = rulerTop.dp.toPx()
+            drawRect(tint, topLeft = Offset((paint.xs[column.second] - 2f).dp.toPx(), top), size = Size(cellPx + 4.dp.toPx(), size.height - top))
         }
-    }, verticalArrangement = Arrangement.spacedBy(DrumGridGeometry.ROW_GAP.dp)) {
-        Box(Modifier.fillMaxWidth().height(DrumGridGeometry.HEADER.dp).padding(start = DrumGridGeometry.BAR_START.dp), contentAlignment = Alignment.CenterStart) {
-            Text(header, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, color = MaterialTheme.colorScheme.onSurface)
-        }
-        Box(Modifier.fillMaxWidth().height(DrumGridGeometry.RULER.dp)) {
-            bar.cells.forEach { cell ->
-                if (cell.beatStart) Text("${cell.beat + 1}", Modifier.absoluteOffset(x = xs[cell.index].dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // Hit glow: only the bar that plays and the one before it (whose last hits may still fade) read the clock.
+        if (column != null && (column.first == bar.index || column.first == bar.index + 1) && paint.glowOnset.isNotEmpty()) {
+            live.frame.longValue
+            val now = live.scoreNow()
+            val speed = live.speed
+            val top = rowsTop.dp.toPx()
+            val step = (DrumGridGeometry.CELL + DrumGridGeometry.ROW_GAP).dp.toPx()
+            for (k in paint.glowOnset.indices) {
+                val i = HitGlow.intensity(paint.glowOnset[k], now, speed)
+                if (i <= 0f) continue
+                val glow = Tabino.Accents[paint.glowRow[k] % Tabino.Accents.size]
+                val center = Offset(paint.xs[paint.glowCell[k]].dp.toPx() + cellPx / 2, top + paint.glowRow[k] * step + cellPx / 2)
+                drawCircle(glow.copy(alpha = 0.45f * i), radius = cellPx / 2 + 6.dp.toPx() * i, center = center)
+                drawCircle(Color.White.copy(alpha = 0.85f * i), radius = cellPx / 2 - 2.dp.toPx(), center = center, style = Stroke(3.dp.toPx()))
             }
         }
-        track.instrument.drumKit.forEach { drum ->
-            Box(Modifier.fillMaxWidth().height(DrumGridGeometry.CELL.dp)) {
-                bar.cells.forEach { cell ->
-                    val active = hits[cell.offset]?.contains(drum.midiNote) == true
-                    // „Kick, 3, off“ as before (ApplicationFlowTest, TalkBack); from bar 2 on the bar is named too.
-                    val label = "${drum.name}, ${cell.index + 1}, ${if (active) "on" else "off"}" + if (number > 1) ", $barWord $number" else ""
-                    FilledTonalButton(onClick = { vm.toggleDrum(track.id, bar.measureId, cell.offset, drum.midiNote) },
-                        modifier = Modifier.absoluteOffset(x = xs[cell.index].dp).size(DrumGridGeometry.CELL.dp).testTag("drum-cell-$number-${cell.index + 1}-${drum.midiNote}").semanticsLabel(label),
-                        contentPadding = PaddingValues(0.dp),
-                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = if (active) MaterialTheme.colorScheme.primary else if (cell.beatStart) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
-                            contentColor = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)) { Text(if (active) "●" else "·") }
+        // Sounding guitar section.
+        if (hasLane) {
+            val section = live.laneSection.value
+            if (section != null && section.first == bar.index) {
+                val a = DrumGridActivity.xAt(bar.cells, paint.xs, bar.length, section.second).dp.toPx()
+                val b = DrumGridActivity.xAt(bar.cells, paint.xs, bar.length, section.third).dp.toPx()
+                drawRoundRect(Tabino.Sun, topLeft = Offset(a, 0f), size = Size((b - a).coerceAtLeast(3.dp.toPx()), DrumGridActivity.LANE.dp.toPx()), cornerRadius = CornerRadius(2.dp.toPx()))
+            }
+        }
+        // Cursor (start marker) or, while dragging, the snapped handle plus a ghost line under the finger.
+        val handle = live.handle.floatValue
+        val markerX: Float = if (!handle.isNaN()) live.snapped.floatValue - start
+            else live.cursor.value?.takeIf { it.first == bar.index }?.let { DrumGridActivity.xAt(bar.cells, paint.xs, bar.length, it.second) } ?: Float.NaN
+        if (!markerX.isNaN() && markerX >= 0f && markerX < width) {
+            val x = (markerX - 2f).dp.toPx()
+            drawLine(primary, Offset(x, 0f), Offset(x, size.height), strokeWidth = 2.dp.toPx())
+            val capTop = rulerTop.dp.toPx()
+            val cap = 6.dp.toPx()
+            drawPath(capPath.apply { reset(); moveTo(x, capTop); lineTo(x + cap * 1.4f, capTop + cap); lineTo(x, capTop + cap * 2); close() }, primary)
+        }
+        if (!handle.isNaN() && handle - start in 0f..width) {
+            val x = (handle - start).dp.toPx()
+            drawLine(primary.copy(alpha = 0.45f), Offset(x, 0f), Offset(x, size.height), strokeWidth = 1.dp.toPx())
+        }
+    }) {
+        Column(verticalArrangement = Arrangement.spacedBy(DrumGridGeometry.ROW_GAP.dp)) {
+            // Positioning strip: lane, header, ruler. It never edits (see DrumPositioning); the cells below stay editing.
+            Column(Modifier.fillMaxWidth().testTag("drum-strip-$number").pointerInput(bar.index, positioning) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    positioning.start(bar.index, down.position.x / density)
+                    while (true) {
+                        // Only near an edge does the loop wake up without pointer events (auto-scroll); otherwise it just waits.
+                        val event = if (positioning.atEdge()) withTimeoutOrNull(16L) { awaitPointerEvent() } else awaitPointerEvent()
+                        if (event == null) { positioning.edge(); continue }
+                        val change = event.changes.firstOrNull { it.id == down.id }
+                        if (change == null) { positioning.cancel(); break }
+                        if (!change.pressed) { val cancelled = change.isConsumed; change.consume(); if (cancelled) positioning.cancel() else positioning.release(); break }
+                        change.consume()
+                        positioning.move(bar.index, change.position.x / density)
+                    }
                 }
+            }, verticalArrangement = Arrangement.spacedBy(DrumGridGeometry.ROW_GAP.dp)) {
+                if (lane != null) Spacer(Modifier.fillMaxWidth().height(DrumGridActivity.LANE.dp)
+                    .semantics { contentDescription = if (number > 1) "$laneWord, $barWord $number" else laneWord }
+                    .drawBehind {
+                        val h = size.height
+                        drawRect(laneGround, size = Size(size.width, h))
+                        var k = 0
+                        while (k + 1 < paint.laneSpans.size) {
+                            val a = paint.laneSpans[k].dp.toPx(); val b = paint.laneSpans[k + 1].dp.toPx()
+                            drawRoundRect(Tabino.Lime.copy(alpha = 0.55f), topLeft = Offset(a, h * 0.25f), size = Size((b - a).coerceAtLeast(2.dp.toPx()), h * 0.5f), cornerRadius = CornerRadius(h * 0.25f))
+                            k += 2
+                        }
+                        for (x in paint.laneAttacks) drawRect(Tabino.Lime, topLeft = Offset(x.dp.toPx(), 0f), size = Size(2.dp.toPx(), h))
+                    })
+                Box(Modifier.fillMaxWidth().height(DrumGridGeometry.HEADER.dp).padding(start = DrumGridGeometry.BAR_START.dp), contentAlignment = Alignment.CenterStart) {
+                    Text(header, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, color = colors.onSurface)
+                }
+                Box(Modifier.fillMaxWidth().height(DrumGridGeometry.RULER.dp)) {
+                    bar.cells.forEach { cell ->
+                        if (cell.beatStart) Text("${cell.beat + 1}", Modifier.absoluteOffset(x = paint.xs[cell.index].dp), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                    }
+                }
+            }
+            DrumCells(kit, bar, paint, number, barWord, onCell)
+        }
+    }
+}
+
+/**
+ * All cells of one bar: drawn in one cached layer (circles like the former tonal buttons, ● set, · empty), tapped by
+ * coordinate; one light semantics node per cell (no button, no ripple, no own pointer input).
+ */
+@Composable private fun DrumCells(kit: List<DrumElement>, bar: DrumGrid.Bar, paint: DrumBarPaint, number: Int, barWord: String, onCell: (Fraction, Int) -> Unit) {
+    ProbeComposition("DrumGrid.cells")
+    val colors = MaterialTheme.colorScheme
+    val on = colors.primary; val onDot = colors.onPrimary
+    val beatFill = colors.surfaceVariant; val fill = colors.surface; val dot = colors.onSurfaceVariant
+    val rows = kit.size
+    val n = bar.cells.size
+    val currentOnCell by rememberUpdatedState(onCell)
+    val measurePolicy = remember(paint, rows) {
+        MeasurePolicy { measurables, constraints ->
+            val cellPx = DrumGridGeometry.CELL.dp.roundToPx()
+            val fixed = Constraints.fixed(cellPx, cellPx)
+            val placeables = measurables.map { it.measure(fixed) }
+            layout(constraints.maxWidth, DrumGridGeometry.rowsHeight(rows).dp.roundToPx()) {
+                placeables.forEachIndexed { i, p -> p.place(paint.xs[i % n].dp.roundToPx(), ((i / n) * (DrumGridGeometry.CELL + DrumGridGeometry.ROW_GAP)).dp.roundToPx()) }
             }
         }
     }
+    Layout(content = {
+        kit.forEachIndexed { row, drum ->
+            bar.cells.forEach { cell ->
+                Spacer(Modifier.semantics {
+                    // Built lazily (only when semantics are read: TalkBack, tests). „Kick, 3, off“ as before; from bar 2 on with the bar.
+                    val active = paint.active[row * n + cell.index]
+                    contentDescription = "${drum.name}, ${cell.index + 1}, ${if (active) "on" else "off"}" + if (number > 1) ", $barWord $number" else ""
+                    testTag = "drum-cell-$number-${cell.index + 1}-${drum.midiNote}"
+                    role = Role.Button
+                    onClick { currentOnCell(cell.offset, drum.midiNote); true }
+                })
+            }
+        }
+    }, modifier = Modifier.fillMaxWidth().height(DrumGridGeometry.rowsHeight(rows).dp)
+        .graphicsLayer { }
+        .drawBehind {
+            val cellPx = DrumGridGeometry.CELL.dp.toPx()
+            val r = cellPx / 2
+            val step = (DrumGridGeometry.CELL + DrumGridGeometry.ROW_GAP).dp.toPx()
+            for (row in 0 until rows) for (c in 0 until n) {
+                val center = Offset(paint.xs[c].dp.toPx() + r, row * step + r)
+                val active = paint.active[row * n + c]
+                drawCircle(if (active) on else if (bar.cells[c].beatStart) beatFill else fill, radius = r, center = center)
+                drawCircle(if (active) onDot else dot, radius = if (active) 5.dp.toPx() else 1.5.dp.toPx(), center = center)
+            }
+        }
+        .pointerInput(paint, kit) {
+            detectTapGestures { pos ->
+                val hit = DrumGridGeometry.cellAt(paint.xs, rows, pos.x / density, pos.y / density) ?: return@detectTapGestures
+                currentOnCell(bar.cells[hit.second].offset, kit[hit.first].midiNote)
+            }
+        },
+        measurePolicy = measurePolicy)
 }
 
 /** Level and pan per kit element (kick louder, toms panned); one transaction per slider gesture. */

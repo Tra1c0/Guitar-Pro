@@ -195,6 +195,21 @@ object DrumGridGeometry {
      */
     fun follow(columnX: Float, scroll: Float, viewport: Float, content: Float, margin: Float = CELL + GAP): Float =
         dev.riffworkbench.notation.ViewportScroll.minimal(columnX + CELL / 2, CELL / 2, scroll, viewport, content, margin)
+
+    /** Height (dp) of the cell rows of one bar ([rows] kit elements, [ROW_GAP] between them). */
+    fun rowsHeight(rows: Int): Float = if (rows <= 0) 0f else rows * CELL + (rows - 1) * ROW_GAP
+
+    /**
+     * Zyklus 30: the cell under (x, y) dp of a bar's cell area — (row, cell index) — or null in a gap. The grid draws all
+     * cells of a bar in one layer and hit-tests by coordinate instead of one button per cell.
+     */
+    fun cellAt(xs: FloatArray, rows: Int, x: Float, y: Float): Pair<Int, Int>? {
+        if (y < 0f) return null
+        val row = (y / (CELL + ROW_GAP)).toInt()
+        if (row >= rows || y - row * (CELL + ROW_GAP) > CELL) return null
+        for (i in xs.indices) if (x >= xs[i] && x <= xs[i] + CELL) return row to i
+        return null
+    }
 }
 
 /**
