@@ -4,7 +4,7 @@ Fortsetzung nach Pausen: dieses Dokument + `docs/QA_JOURNAL.md` lesen, dann beim
 Branch: `ccr-0b650dff-jnhups-qa`, per Fast-Forward gespiegelt nach `ccr-0b650dff-jnhups`. Android-Builds/Tests nur auf GitHub Actions; lokal JVM-Harness für die portablen Module.
 
 ## Stand
-- Letzter grüner CI-Lauf: f2a6a1d (Lauf 44560397626, Build + `check` + Lint + Robolectric, APK-Artefakt `riffworkbench-debug-apk`). Vorher grün: e2c2cb4, 8e5ab38, babba9a, eb82763, 2acce85, 1eec164, d9c3c09, 7ed6d80, 2b8a1d7, 64b495b.
+- Letzter grüner CI-Lauf: 159118e (Lauf 44582996323, signiertes Release v1154). Davor f2a6a1d (Lauf 44560397626, Build + `check` + Lint + Robolectric, APK-Artefakt `riffworkbench-debug-apk`). Vorher grün: e2c2cb4, 8e5ab38, babba9a, eb82763, 2acce85, 1eec164, d9c3c09, 7ed6d80, 2b8a1d7, 64b495b.
 - Lokale JVM-Suite (portable Module): 620/620 grün auf 9579316 (+ ViewModel-Shim 59/59).
 - Zyklus 18 abgeschlossen (siehe QA_JOURNAL): Sample-Bank v2 (Feinstimmung/Pegel), Gain-Staging, Transport-Startfixes, Seek-Poller-Race, Startmarke/Zum-Anfang, ViewportScroll, Taktangabe-Sheet (Long-Press), Standard 1×4/4 + E-Standard, Umstimmen mit Konfliktplan.
 - Zyklus 19 gemergt (64b495b, JVM 549/549, CI grün): Long-Press-Bereichsauswahl mit Haptik, Drum-Pegel/erster Hit/Raster, Gitarren-Artikulationen (Natural/Pinch Harmonics, Palm-Mute-Klangfarbe), Live = Offline bitidentisch, zwei Start-Races im Transport (PLAYING→PAUSED-Flackern, Ansicht sprang).
@@ -44,6 +44,8 @@ Branch: `ccr-0b650dff-jnhups-qa`, per Fast-Forward gespiegelt nach `ccr-0b650dff
 ## Arbeitsweise (seit 2026-11-19)
 Product-Engineer-Modus: Nutzerfeedback → konkrete, prüfbare Ziele; kleine reversible Entscheidungen autonom; gebündelte Rückfragen nur bei Kernverhalten/Umfang/Daten/Kosten, jeweils mit Empfehlung; Freigabe vor destruktiven/kostenpflichtigen Schritten und Veröffentlichungen. Prüfen über echte Einstiegspunkte (JVM-Suite, ViewModel-Shim, CI mit Android-Build/Lint/Robolectric); Gerät/Gehör nur beim Nutzer.
 
+## Zyklus 31 (gemergt, CI grün 159118e, Release v1154): P0 „stürzt bei zu viel Drum-Raster ab“ — Ursache gefunden: Die klingende Spalte aus dem alten Raster indizierte nach einem Raster- oder Taktartwechsel die Zellen des neuen Takts (IndexOutOfBounds im Draw). Fix: Der Folger ortet bei Taktänderung neu, dazu ein Draw-Guard. Absturzprotokoll (UncaughtExceptionHandler, ApplicationExitInfo ab API 30, Diagnose → „Letzte Abstürze“). Stresstest 80 Takte dicht: Heap-Grenze gehalten; die Grenze „≤ 2 DrumLive, kein Wachstum“ ist eine Annahme (genaue Zahl aus CI fehlte). Gerätebestätigung offen; Absturzbericht aus der Diagnose erbeten, falls es wieder auftritt.
+
 ## Zyklus 30 (gemergt, CI grün f2a6a1d): Drum-Raster-Ruckeln behoben (Ursache: ein Button je Zelle → ganze Takte als Zeichnung; Desktop: Scroll max 156–193 → 29–31 ms), Anschlag-Leuchten, Gitarren-Leiste, Cursor schieben mit Einrasten (Drum-Kopf/Leiste, Taktnummern-Zone im Notenbild), Bogen-Regel (Kürzen löst Bogen). Gerätebestätigung offen.
 
 ## Zyklus 29 (gemergt, CI grün 75fd2ef): Drum-Raster und Notenwerte — Kriterien 1–5 laut Tests erfüllt; Raster-Befund am Gerät nicht reproduziert (alte Ansicht ersetzt, Gerätebestätigung offen). Vorschlag offen: Kürzen eines gebundenen Ursprungs löst den Bogen (Fortsetzung → Pause).
@@ -55,7 +57,7 @@ Abnahmekriterien:
 5. Kein weiterer Fehler der Klasse „Pausen/Noten“ im modellbasierten Editor-Test; JVM-Suite, ViewModel-Shim und CI grün.
 
 ## Offene Entscheidungen / Aktionen des Nutzers
-- GitHub-Secrets eingetragen (2026-11-19); erstes signiertes Release angestoßen. Danach einmalige Neuinstallation beim Nutzer (Projekte vorher als .riffproj exportieren).
+- GitHub-Secrets eingetragen (2026-11-19); signierte Releases laufen (v1151, v1154). Erstes In-App-Update v1151 → v1154 am Gerät unbestätigt. Danach einmalige Neuinstallation beim Nutzer (Projekte vorher als .riffproj exportieren).
 - Lernfähige Glättung: lokales Tipp-/Korrektur-Protokoll + lernende Grenzwerte (Empfehlung: erst nach Gerätetest der jetzigen Auto-Glättung).
 - Gerätetests: Metronom-Gefühl (Prozent-Chip/Diagnose-Rate), Rhythmus-Auto/Taktart, Bluetooth-Kalibrierung, Drums-Klang.
 
