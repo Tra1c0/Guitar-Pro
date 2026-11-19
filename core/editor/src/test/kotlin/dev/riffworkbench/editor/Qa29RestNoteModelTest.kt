@@ -15,7 +15,8 @@ import org.junit.Test
  *  M1 Success leaves no validator ERROR; Failure changes nothing.
  *  M2 No overlapping beats; a bar of the edited voice that was exactly full stays exactly full (except DeleteBeat, whose
  *     contract is "later beats move earlier" — it fills the freed end with rests since Zyklus 29, see M2b).
- *  M3 Shorter: every other beat keeps its onset (all bars). Longer: in the bar, notes behind the beat move by exactly
+ *  M3 Shorter: every other beat keeps its onset (all bars); a tied origin releases its tie and its continuations become
+ *      rests in place (Zyklus 30, user decision). Longer: in the bar, notes behind the beat move by exactly
  *     max(0, delta − free room right behind); no note is lost (ids kept), bars before the edited one are unchanged.
  *  M4 PutNote on an existing beat keeps its duration (Zyklus 25 placeholders); on an empty position the beat has the entry
  *     duration, or its tied first part when it reaches over the barline (Zyklus 29: no longer refused, see M7).
@@ -190,7 +191,13 @@ class Qa29RestNoteModelTest {
                 if (delta < Fraction.ZERO) {
                     // M3 shorter: all other beats keep their onsets.
                     for (b in beforeBeats) if (b.id != target.id && voice(after, bar).none { it.id == b.id && it.offset == b.offset }) fail("M3 shorter moved beat at ${b.offset}: ${target.duration} -> ${now.duration} before ${beforeBeats.map { it.offset to it.duration }} after ${voice(after, bar).map { it.offset to it.duration }}")
-                    for (i in after.measures.indices) if (i != bar && i < before.measures.size && voice(after, i) != voice(before, i)) fail("M3 shorter changed bar ${i + 1}")
+                    // Zyklus 30 (user decision): a tied origin releases its tie; its continuation chain becomes rests in place.
+                    val continued = HashSet<EntityId>()
+                    val track = before.tracks.first { it.id == sel.trackId }
+                    var frontier = target.notes.flatMap { n -> n.links.filter { it.kind == LinkKind.TIE }.map { it.target } }
+                    while (frontier.isNotEmpty()) { continued += frontier; frontier = track.staves.flatMap { st -> st.bars.flatMap { b -> b.voices.flatMap { v -> v.beats.flatMap { bt -> bt.notes.filter { it.id in frontier }.flatMap { n -> n.links.filter { it.kind == LinkKind.TIE }.map { it.target } } } } } }.filter { it !in continued } }
+                    fun released(v: List<Beat>) = v.map { b -> if (b.notes.none { it.id in continued }) b else b.notes.filter { it.id !in continued }.let { kept -> b.copy(notes = kept, explicitRest = kept.isEmpty() || b.explicitRest, strum = if (kept.isEmpty()) null else b.strum) } }
+                    for (i in after.measures.indices) if (i != bar && i < before.measures.size && voice(after, i) != released(voice(before, i))) fail("M3 shorter changed bar ${i + 1}")
                 } else if (delta > Fraction.ZERO) {
                     val wall = beforeBeats.filter { it.offset >= oldEnd && it.notes.isNotEmpty() }.minByOrNull { it.offset }?.offset
                     val free = (wall ?: cap(before.measures[bar])) + oldEnd * Fraction.of(-1)

@@ -169,7 +169,10 @@ internal object NoteEdits {
         val next = transform(beat.duration)
         if (next == beat.duration) return p
         if (next.length() > beat.duration.length()) return DurationRipple.lengthen(p, s, beat, next, ids)
-        return mapVoice(p, s) { v, _, m -> v.copy(beats = resizedInPlace(v.beats, beat, next, m, ids)) }
+        val shortened = mapVoice(p, s) { v, _, m -> v.copy(beats = resizedInPlace(v.beats, beat, next, m, ids)) }
+        // Zyklus 30: a tied origin that gets shorter releases its tie; the continuation(s) become rests (nothing moves).
+        val tied = beat.notes.filter { n -> n.links.any { it.kind == LinkKind.TIE } }.map { it.id }.toSet()
+        return if (next.length() < beat.duration.length() && tied.isNotEmpty()) TieRelease.release(shortened, s.trackId, tied) else shortened
     }
 
     /** [beats] with [beat] set to [next]; see [setDurationInPlace]. */
@@ -220,6 +223,14 @@ internal object NoteEdits {
     fun deleteBeat(p: Project, s: Selection, ids: IdSource): Project {
         val beat = selectedBeat(p, s) ?: return p
         val removedIds = beat.notes.map { it.id }.toSet()
+        // Zyklus 30: deleting a tied continuation releases the tie at its origin; the continuation (chain) becomes a rest of
+        // the same duration and nothing moves (the ripple would tear the bar's other ties apart).
+        val origins = TieRelease.origins(track(p, s), removedIds)
+        if (origins.isNotEmpty()) {
+            val released = TieRelease.release(p, s.trackId, origins)
+            val rest = mapVoice(released, s) { v, _, _ -> v.copy(beats = v.beats.map { b -> if (b.offset != beat.offset) b else b.copy(notes = emptyList(), explicitRest = true, strum = null) }) }
+            return Links.prune(rest, removedIds)
+        }
         val edited = mapVoice(p, s) { v, _, m ->
             val wasFull = v.beats.maxOfOrNull { it.offset + it.duration.length() } == capacity(m) && gapless(v.beats)
             val shifted = rippled(v.copy(beats = v.beats.filterNot { it.offset == beat.offset }), beat.offset, beat.duration.length() * Fraction.of(-1), m)
