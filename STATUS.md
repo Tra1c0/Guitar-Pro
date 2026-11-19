@@ -55,7 +55,7 @@ Abnahmekriterien:
 5. Kein weiterer Fehler der Klasse „Pausen/Noten“ im modellbasierten Editor-Test; JVM-Suite, ViewModel-Shim und CI grün.
 
 ## Offene Entscheidungen / Aktionen des Nutzers
-- GitHub-Secrets für signierte Releases eintragen (Werte geschickt); danach erstes Release und einmalige Neuinstallation.
+- GitHub-Secrets eingetragen (2026-11-19); erstes signiertes Release angestoßen. Danach einmalige Neuinstallation beim Nutzer (Projekte vorher als .riffproj exportieren).
 - Lernfähige Glättung: lokales Tipp-/Korrektur-Protokoll + lernende Grenzwerte (Empfehlung: erst nach Gerätetest der jetzigen Auto-Glättung).
 - Gerätetests: Metronom-Gefühl (Prozent-Chip/Diagnose-Rate), Rhythmus-Auto/Taktart, Bluetooth-Kalibrierung, Drums-Klang.
 
