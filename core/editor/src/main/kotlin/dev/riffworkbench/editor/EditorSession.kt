@@ -238,7 +238,7 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
             NoteEdits.updateSelectedBeat(p, s) { it.copy(fermata = c.fermata) }
         }
         is EditorCommand.SetStrum -> NoteEdits.updateSelectedBeat(p, s) { it.copy(strum = c.strum) }
-        EditorCommand.DeleteBeat -> NoteEdits.deleteBeat(p, s)
+        EditorCommand.DeleteBeat -> NoteEdits.deleteBeat(p, s, ids)
         is EditorCommand.InsertBeat -> NoteEdits.insertBeat(p, s, c.duration, ids)
         is EditorCommand.SetText -> requireText(c.text, "Text").let { NoteEdits.setText(p, s, c.text, c.kind, ids) }
         is EditorCommand.InsertMeasures -> StructureEdits.insert(p, c.index, c.count, c.signature, ids)
@@ -292,7 +292,32 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
         }
         is EditorCommand.ToggleDrum -> drumToggle(p, s, c)
         is EditorCommand.ApplyRhythm -> RhythmEdits.apply(p, c, ids)
-        else -> updateBeat(p, s, createIfMissing = c != EditorCommand.Delete) { beat, track, existed ->
+        is EditorCommand.PutNote -> enter(p, s, c.duration) { beatEdit(p, s, c.copy(duration = it)) }
+        is EditorCommand.PutRest -> enter(p, s, c.duration) { beatEdit(p, s, c.copy(duration = it)) }
+        else -> beatEdit(p, s, c)
+    }
+
+    /**
+     * Zyklus 29 (model test „Pausen und Noten“: an entry whose value did not fit before the next beat or the barline was
+     * refused with „Beat überschreitet den Takt“ / „Beats derselben Stimme überlappen“, e.g. a dotted quarter on beat 4):
+     * an entry on an empty position gets the longest value that fits ([Durations.fitting]) and then grows to the entry
+     * value by the Zyklus-29 rule ([DurationRipple]: following beats move later, over the barline with a tie). Entries on an
+     * existing beat keep its duration (Zyklus 25 placeholders); a position inside a beat stays refused.
+     */
+    private fun enter(p: Project, s: Selection, wanted: WrittenDuration, place: (WrittenDuration) -> Project): Project {
+        val beats = NoteEdits.selectedVoice(p, s)?.beats.orEmpty()
+        val m = p.measures.firstOrNull { it.id == s.measureId } ?: return place(wanted)
+        if (beats.any { it.offset == s.offset } || CursorSteps.covering(beats, s.offset) != null) return place(wanted)
+        val end = beats.filter { it.offset > s.offset }.minOfOrNull { it.offset } ?: NoteEdits.capacity(m)
+        if (end <= s.offset || wanted.length() <= end + s.offset * Fraction.of(-1)) return place(wanted)
+        val fitted = Durations.fitting(wanted, end + s.offset * Fraction.of(-1)) ?: return place(wanted)
+        val placed = place(fitted)
+        val beat = NoteEdits.selectedBeat(placed, s) ?: return placed
+        return DurationRipple.lengthen(placed, s, beat, wanted, ids)
+    }
+
+    /** Note, rest, delete and mark on the beat at the cursor (created for entries). */
+    private fun beatEdit(p: Project, s: Selection, c: EditorCommand): Project = updateBeat(p, s, createIfMissing = c != EditorCommand.Delete) { beat, track, existed ->
             when (c) {
                 is EditorCommand.PutNote -> {
                     val note = if (track.instrument.tuning.isNotEmpty()) {
@@ -329,7 +354,6 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
                 else -> beat
             }
         }
-    }
 
     /**
      * Drum step grid (Zyklus 23, „über 16tel nicht nutzbar“): a hit on a finer grid slot that lies inside an existing beat
@@ -387,7 +411,7 @@ class EditorSession(project: Project, private val ids: IdSource, private val his
         val fret = (if (c.toString == s.string) note.fret else null) ?: NoteEdits.fretFor(track.instrument, c.toString, note.pitch.midiNumber)
             ?: throw IllegalArgumentException("Ton ist auf dieser Saite nicht spielbar")
         val target = s.copy(measureId = c.toMeasure, offset = c.toOffset, string = c.toString, rangeEnd = null)
-        val placed = apply(apply(p, s, EditorCommand.Delete), target, EditorCommand.PutNote(fret = fret, duration = c.duration))
+        val placed = beatEdit(apply(p, s, EditorCommand.Delete), target, EditorCommand.PutNote(fret = fret, duration = c.duration))
         // The note itself travels (same id, so links from and to it survive); only string and fret change.
         val moved = updateBeat(placed, target, createIfMissing = false) { beat, _, _ ->
             beat.copy(notes = beat.notes.map { n -> if (n.string != c.toString) n else note.copy(string = c.toString, fret = fret) },

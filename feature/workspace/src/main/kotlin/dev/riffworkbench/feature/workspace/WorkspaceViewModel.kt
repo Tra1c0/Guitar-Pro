@@ -230,7 +230,7 @@ class WorkspaceViewModel(
             // Only an entry that changed the score owns an undo step the new bar may join (an unchanged re-entry has none).
             val changed = state.value.editor?.project?.revision != current.project.revision
             if (slot >= 0 && !input.value.chordMode) { fillRhythmSlot(slot, current.selection, changed, settings.settings.value.autoAdvance); return }
-            if (settings.settings.value.autoAdvance && !input.value.chordMode) move(1, sameUndoStep = changed)
+            if (settings.settings.value.autoAdvance && !input.value.chordMode) move(1, sameUndoStep = changed, overTies = true)
         }
     }
     /** Fret pad: one tap enters and commits the fret; the pad covers 0–24, so no two-digit preview is needed. */
@@ -306,9 +306,25 @@ class WorkspaceViewModel(
      * Moves the cursor by one beat; past the last bar a bar is added. [sameUndoStep] (auto-advance after an entry): that bar
      * joins the entry's undo step, so one Undo takes back what one tap did (QA 21: the first Undo after the last note of the
      * last bar only removed the empty new bar).
+     *
+     * [overTies] (Zyklus 29, auto-advance after a fret): an entry that reached over the barline continues tied in the next
+     * bar (EditorSession.enter); the cursor steps over those tied continuations of the entered beat, so the next fret is a
+     * new note instead of re-pitching the continuation (refused: „Gebundene Noten müssen dieselbe Tonhöhe behalten“).
      */
-    fun move(direction: Int, sameUndoStep: Boolean = false) {
+    fun move(direction: Int, sameUndoStep: Boolean = false, overTies: Boolean = false) {
         val current = state.value.editor ?: return
+        if (overTies && direction > 0) {
+            var left = selectedBeat(current)?.notes.orEmpty()
+            move(1, sameUndoStep)
+            repeat(32) {
+                val e = state.value.editor ?: return
+                val here = selectedBeat(e)?.notes.orEmpty()
+                if (left.isEmpty() || here.isEmpty() || !here.all { n -> left.any { o -> o.links.any { it.kind == LinkKind.TIE && it.target == n.id } } }) return
+                left = here
+                move(1, sameUndoStep)
+            }
+            return
+        }
         val p = current.project; val s = current.selection; val index = p.measures.indexOfFirst { it.id == s.measureId }
         val step = selectedBeat(current)?.takeIf { direction > 0 }?.duration?.length() ?: input.value.duration.length()
         val length = p.measures[index].pickupLength ?: p.measures[index].signature.length()
@@ -570,12 +586,21 @@ class WorkspaceViewModel(
         var project = e.project
         val editor = EditorSession(project, ids)
         editor.select(e.selection)
+        // Zyklus 29: a chord value that reaches over the next beat or the barline is written with the value that fits and
+        // then grows as one beat (following beats move later, all strings tied over the barline) — not string by string.
+        val entry = input.value.duration
+        val fitted = if (selectedBeat(e) != null) entry else {
+            val m = e.project.measures.first { it.id == e.selection.measureId }
+            val end = voiceBeats(e.project, e.selection.trackId, m.id, e.selection.voice).filter { it.offset > e.selection.offset }.minOfOrNull { it.offset } ?: (m.pickupLength ?: m.signature.length())
+            Durations.fitting(entry, end + e.selection.offset * Fraction.of(-1)) ?: entry
+        }
         chord.frets.forEachIndexed { string, fret -> if (fret != null && string < track.instrument.tuning.size) {
             editor.select(editor.state.value.selection.copy(string = string))
-            // All or nothing: a chord that does not fit here is reported, never written partially or silently dropped.
-            val r = editor.dispatch(EditorCommand.PutNote(fret = fret, duration = input.value.duration))
+            // All or nothing: a chord that cannot be written here is reported, never written partially or silently dropped.
+            val r = editor.dispatch(EditorCommand.PutNote(fret = fret, duration = fitted))
             if (r is Outcome.Failure) return showNotice(r.message)
         } }
+        if (fitted != entry) { val r = editor.dispatch(EditorCommand.SetDuration(entry)); if (r is Outcome.Failure) return showNotice(r.message) }
         project = editor.state.value.project
         if (command(EditorCommand.Replace(project, e.project.revision)) is Outcome.Success) previewSelected()
     }

@@ -158,16 +158,17 @@ internal object NoteEdits {
     }
 
     /**
-     * Changes the selected beat's duration in place (Zyklus 25, Nutzerentscheidung „Notenwert ändern ohne Verschieben“):
-     * every later onset of the voice keeps its position. Shorter: the freed time becomes rest(s) right behind the beat
-     * (split into writable values). Longer: only into rests (or empty room) behind the beat, which are consumed or
-     * shortened; a note in the way rejects the change („Kein Platz: nächste Note bei …“) and nothing changes. Replaces
-     * the former ripple, which shifted all later beats of the bar.
+     * Changes the selected beat's duration (Zyklus 25 „Notenwert ändern ohne Verschieben“, Zyklus 29 „Verlängern verschiebt“).
+     * Shorter: every later onset of the voice keeps its position, the freed time becomes rest(s) right behind the beat (split
+     * into writable values). Longer: see [DurationRipple] — rests right behind are consumed first, then the following beats
+     * move later, over the barline into the next bars (ties at the barline, a bar appended at the end of the piece). The
+     * Zyklus-25 refusal („Kein Platz …“) is replaced by this user decision.
      */
     fun setDurationInPlace(p: Project, s: Selection, ids: IdSource, transform: (WrittenDuration) -> WrittenDuration): Project {
         val beat = selectedBeat(p, s) ?: return p
         val next = transform(beat.duration)
         if (next == beat.duration) return p
+        if (next.length() > beat.duration.length()) return DurationRipple.lengthen(p, s, beat, next, ids)
         return mapVoice(p, s) { v, _, m -> v.copy(beats = resizedInPlace(v.beats, beat, next, m, ids)) }
     }
 
@@ -211,11 +212,30 @@ internal object NoteEdits {
         return v.copy(beats = shifted.sortedBy { it.offset })
     }
 
-    fun deleteBeat(p: Project, s: Selection): Project {
+    /**
+     * Removes the selected beat; later beats of the voice move earlier. Zyklus 29 (model test, „Probleme mit Pausen und
+     * Noten“): a bar that was exactly full stays exactly full — the freed end becomes rest(s) instead of a gap that the next
+     * entry would fill with the entry value and leave the bar unfinished.
+     */
+    fun deleteBeat(p: Project, s: Selection, ids: IdSource): Project {
         val beat = selectedBeat(p, s) ?: return p
         val removedIds = beat.notes.map { it.id }.toSet()
-        val edited = mapVoice(p, s) { v, _, m -> rippled(v.copy(beats = v.beats.filterNot { it.offset == beat.offset }), beat.offset, beat.duration.length() * Fraction.of(-1), m) }
+        val edited = mapVoice(p, s) { v, _, m ->
+            val wasFull = v.beats.maxOfOrNull { it.offset + it.duration.length() } == capacity(m) && gapless(v.beats)
+            val shifted = rippled(v.copy(beats = v.beats.filterNot { it.offset == beat.offset }), beat.offset, beat.duration.length() * Fraction.of(-1), m)
+            val end = shifted.beats.maxOfOrNull { it.offset + it.duration.length() } ?: Fraction.ZERO
+            val fill = if (wasFull && end < capacity(m)) Durations.decompose(capacity(m) + end * Fraction.of(-1), beat.duration.tuplets) else null
+            if (fill == null) shifted else {
+                var at = end
+                shifted.copy(beats = shifted.beats + fill.map { d -> Beat(ids.next(), at, d, explicitRest = true).also { at += d.length() } })
+            }
+        }
         return Links.prune(edited, removedIds)
+    }
+    private fun gapless(beats: List<Beat>): Boolean {
+        var end = Fraction.ZERO
+        for (b in beats.sortedBy { it.offset }) { if (b.offset != end) return false; end = b.offset + b.duration.length() }
+        return true
     }
 
     fun insertBeat(p: Project, s: Selection, duration: WrittenDuration, ids: IdSource): Project = mapVoice(p, s) { v, _, m ->

@@ -102,10 +102,15 @@ class AutosaveTest {
         val beat = repo.stored.tracks.first().staves.first().bars[1].voices.first().beats.single()
         assertEquals(Fraction.of(1, 4), beat.offset); assertEquals(2, beat.notes.single().string); assertEquals(5, beat.notes.single().fret)
     } }
+    /**
+     * All or nothing. Zyklus 29: a chord value that reaches over the barline is no longer refused (it is tied over, see
+     * Qa29EntryOverflowViewModelTest), so the refusal is exercised with a chord that cannot be played (fret 30 > 24 on
+     * the third string, after two strings were already placed) — still reported and nothing written.
+     */
     @Test fun aChordThatDoesNotFitIsReportedAndNotRepeatable() = runTest { harness { vm, repo, _ ->
         vm.select(vm.state.value.editor!!.selection.copy(offset = Fraction.of(15, 16)))
         vm.setDuration(1)
-        vm.insertChord(ChordDefinition(EntityId("chord-e"), "E", listOf(40, 47, 52, 56, 59, 64), frets = listOf(0, 2, 2, 1, 0, 0))); advanceUntilIdle()
+        vm.insertChord(ChordDefinition(EntityId("chord-x"), "X", listOf(40, 47, 70, 56, 59, 64), frets = listOf(0, 2, 30, 1, 0, 0))); advanceUntilIdle()
         assertEquals(0L, repo.stored.revision)
         assertNotNull(vm.state.value.notice)
     } }

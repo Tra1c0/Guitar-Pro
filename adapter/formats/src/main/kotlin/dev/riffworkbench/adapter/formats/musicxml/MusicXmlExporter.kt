@@ -69,7 +69,30 @@ private class MusicXmlWriter(private val project: Project, private val losses: L
         }
         for (track in project.tracks) for (staff in track.staves) for (bar in staff.bars) for (voice in bar.voices) for (beat in voice.beats) for (note in beat.notes)
             note.links.filter { it.kind == LinkKind.TIE }.forEach { tieTargets += it.target }
+        reportTieGaps()
         computeSpans()
+    }
+
+    /**
+     * Zyklus 29 (QA15 campaign, seed 15022): a tie whose target does not start where its origin ends — the editor keeps a
+     * tie when a bar is inserted or duplicated between the two notes (by design) — has no MusicXML form: a tie always joins
+     * the next note, so the import attaches it to whatever note follows. Reported as a loss instead of silently changing.
+     */
+    private fun reportTieGaps() {
+        val start = HashMap<EntityId, Pair<Int, Fraction>>()
+        val end = HashMap<EntityId, Pair<Int, Fraction>>()
+        for (track in project.tracks) for (staff in track.staves) for (bar in staff.bars) {
+            val mi = measureIndex[bar.measureId] ?: continue
+            for (voice in bar.voices) for (beat in voice.beats) for (note in beat.notes) { start[note.id] = mi to beat.offset; end[note.id] = mi to beat.offset + beat.duration.length() }
+        }
+        for (track in project.tracks) for (staff in track.staves) for (bar in staff.bars) for (voice in bar.voices) for (beat in voice.beats) for (note in beat.notes)
+            for (l in note.links) if (l.kind == LinkKind.TIE) {
+                val (om, oe) = end[note.id] ?: continue
+                val (tm, ts) = start[l.target] ?: continue
+                val m = measures[om]
+                val adjacent = (tm == om && ts == oe) || (tm == om + 1 && ts == Fraction.ZERO && oe == (m.pickupLength ?: m.signature.length()))
+                if (!adjacent) losses.add("tie_gap", "Haltebögen zu einer nicht unmittelbar folgenden Note (z. B. nach eingefügten Takten) werden als gewöhnliche Haltebögen exportiert", note.id)
+            }
     }
 
     fun write(): String {
