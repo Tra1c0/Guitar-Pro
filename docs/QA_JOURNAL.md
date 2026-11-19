@@ -1265,3 +1265,119 @@ Akzeptanz:
 - Die Glow-Zeitbasis ist die Schreibreihenfolge: Bei Wiederholungen oder Sprüngen klingt ein Schlag vor dem Sprung nicht nach.
 - Wischen über Leiste, Kopf oder Lineal scrollt das Raster nicht mehr, sondern positioniert. Gescrollt wird über die Zellen.
 - Die Notenbild-Zone ist schmal (Höhe der Taktnummern); das Gefühl am Gerät ist offen. Ein Langdruck dort startet keinen Bereich mehr.
+
+### Zyklus 31 / Absturz Drum-Raster, Absturzprotokoll
+
+Anlass: P0-Nutzerbefund (echtes Handy, Release v1151 = 06c2b77): „Er stürzt bei zu viel Drum-Grid ab.“ Keine Logcat, keine Details. Lokal: Compose Desktop 1.5.12 mit Android-Stubs (Desktop-Varianten der UI-Tests, Fenster 891 × 411 dp, Dichte 1, JVM 17, 4 Kerne, **Desktop-JVM-Werte, keine Android-Werte**), JVM-Harness (portable Module), ViewModel-Shim. Robolectric und Android-Kompilat nur in CI.
+
+**1. Ursache, reproduziert.** `Qa31DrumGridStressUiTest` (Desktop-Variante gegen 06c2b77, Takt im Bild, Draw erzwungen):
+- S1: Raster 1/32, Wiedergabe steht in Takt 1 auf Zelle 30 (Offset 29/32), Pause (oder zwischen zwei Polls), Wechsel auf 1/16 → `java.lang.ArrayIndexOutOfBoundsException: Index 29 out of bounds for length 16` in `DrumBar` (Draw-Lambda `drawWithContent`, `paint.xs[column.second]`).
+- S2: Raster 1/16, Pause in Takt 3 auf Zelle 16, Takt 3 wird 2/4 → `Index 15 out of bounds for length 8`, gleiche Stelle.
+
+Mechanismus: Die klingende Spalte (Takt, Zelle) aus Zyklus 29/30 wird nur bei Transport-Polls neu berechnet. Ändern sich die Zellen des Takts (gröberes Raster, Taktart, Takte eingefügt/gelöscht), zeigt sie bis zum nächsten Poll auf eine Zelle des alten Rasters. In der Pause kommt nie ein Poll. Beim Abspielen kommt der nächste Poll nach bis zu ~33 ms, der Draw nach dem Rasterwechsel ist meist früher. Ist der Takt der Spalte sichtbar (beim Folgen ist er es), wirft der Draw; eine Ausnahme im Draw beendet die App sofort. „Zu viel Drum-Grid“ passt: Absturz nur nach feinem Raster (1/32, 1/16 T, 1/16) beim Zurückschalten mit einer Spalte jenseits der neuen Zellenzahl. Ohne sichtbaren Takt kein Absturz (erster Desktop-Lauf: Das Folgen hatte so weit gescrollt, dass der schmalere Takt 1 aus dem Bild fiel). **Ob genau das der Gerätebefund ist, ist ohne Logcat nicht belegt.** Es ist der einzige gefundene Absturz im Drum-Raster; das Protokoll (Teil 4) liefert beim nächsten Mal Stacktrace, Raster und Taktzahl.
+
+**2. Speicher und Last — kein Befund.** Geprüft wie verlangt:
+- (a) Es gibt keine Bitmap-/Offscreen-Caches. Die Zellenebene ist ein `graphicsLayer` ohne Alpha/Effekt (Kompositionsstrategie Auto), also ein RenderNode mit Displayliste (~700 Kreise je Takt bei 1/32 × 11), kein Offscreen-Puffer; die befürchteten ~29 MB je Takt entstehen nicht. Kein `ImageBitmap`, `Picture`, `drawWithCache` im UI-Code. GPU-Speicher am Gerät nicht gemessen.
+- S3, 1000 Takte, 11 Zeilen, **jede 1/32-Zelle gesetzt** (352 000 Noten), Taktwechsel 4/4 ↔ 3/4, Gitarre: Heap nach GC 6,2 MB leer → 72,0 MB mit offenem Raster. Runde 1: nach Scrollen über alle 1000 Takte + 3 Flings 73,5 MB, nach 120 s Wiedergabe (7 200 Frames, 3 600 Polls, Folgen über 60 Takte) 73,4 MB, nach 6 Rasterwechseln, Zell-Tipps, 3 Positionier-Zügen und 3 × Neuaufbau (Konfigurationswechsel) 125,5 MB. Runde 2: 127,2 / 127,1 / 125,4 MB — kein Wachstum. Lebende `DrumBarPaint` nach GC: 1–2, `DrumLive`: 1. Vor dem Fix dieselben Werte (73,4 / 73,4 / 125,5; 127,1 / 127,0 / 125,6). Der Sprung um ~52 MB ist das Notenbild-Layout der Drum-Spur: Der erste Zell-Tipp wählt die Drum-Spur, das ViewModel setzt sie (auch wenn der Editor nicht sichtbar ist) und hält ein Layout. Es wächst nicht.
+- JVM-Sonde (`Qa31DrumMemoryTest`, `-Dqa31.probe=full`), behaltener Heap Projekt / Notenbild-Layout der Drum-Spur / Wiedergabeplan:
+
+| Stück (11 Zeilen) | Projekt | Layout | Plan |
+|---|---|---|---|
+| 100 Takte, 1/16 voll | 2,7 MB | 2,8 MB | 2,5 MB |
+| 300 Takte, 1/32 voll | 15,5 MB | 16,5 MB | 14,5 MB |
+| 1000 Takte, 1/16 voll | 26,6 MB | 29,4 MB | 24,0 MB |
+| 1000 Takte, 1/16 T voll | 40,3 MB | 43,7 MB | 37,0 MB |
+| 1000 Takte, 1/32 50 % | 29,8 MB | 31,6 MB | 24,0 MB |
+| 1000 Takte, 1/32 voll | 51,6 MB | 56,3 MB (649 ms) | 49,0 MB (229 ms) |
+
+  Abgeleitete Daten des Drum-Bildschirms (Takte, Zellen, Beats je Takt, Leisten, Uhr, Snap-Ziele) bei 1000 Takten 1/32 voll: 4,4 MB, 35 ms. Ein OOM ist erst bei extremen Stücken denkbar: 1000 Takte voll 1/32 ergeben Projekt + 2 Layouts beim Neusetzen + 2 Pläne beim Wiedergabe-Tausch ≈ 300 MB Spitze. `android:largeHeap="true"` ist gesetzt (typisch 512 MB).
+- (b) remember-Caches: alle an Inhalt/Raster gekeyt, kein Ansammeln (S3).
+- (c) Ein Frame-Ticker je Bildschirm (`collectLatest`), kein Ticker je Takt.
+- (d) Semantik: 352 leichte Knoten je Takt bei 1/32 × 11, 1–3 Takte komponiert (P1: 364 Layout-Knoten je Takt).
+- (e) Gitarren-Leiste: nicht pro Frame, aber `GuitarActivity.lanes` suchte je Takt in allen Takten (quadratisch).
+- (f) Snap-Ziele entstehen nur bei Inhaltsänderung, aber der Vergleich prüfte jede Note per `equals` bei jeder Recomposition. Pro Poll wurden die Taktanfänge über alle Takte neu gerechnet (0,13 ms bei 1000 Takten).
+- (g) Weitere Draw-Indizes geprüft (Leuchten, Leiste, Zellen, Messung): jeweils aus demselben `DrumBarPaint`, konsistent. `xAt` teilt nie durch 0, `DrumGrid.cells` ist begrenzt.
+
+**3. Fix.**
+- `DrumPlayheadFollower` startet neu, wenn sich die Takte ändern (`LaunchedEffect(vm, listState, bars)`). Der StateFlow liefert den aktuellen Transportstand sofort erneut, und die stehende Spalte wird im neuen Raster geortet (S1: 1/32-Zelle 30 → 1/16-Zelle 15).
+- Der Draw nimmt die Spalte nur, wenn der Takt diese Zelle hat (`column.second in paint.xs.indices`). Das deckt den einen Frame vor der Neuortung ab.
+- Mitgenommen (Last, nicht Absturz): Taktanfänge je Raster gemerkt statt pro Poll; Beats je Takt und Gitarren-Leiste per Takt-ID (linear); Snap-Ziele per Identität der gemerkten Listen.
+- Test-Hook `LiveObjects` (schwache Referenzen, nur in Tests aktiv) zählt lebende Zeichendaten.
+
+**Performance vorher/nachher** (`Qa30DrumGridPerfDesktopTest`, je 2 Läufe, Median / p95 / max je Frame):
+
+| Messung | vorher (06c2b77) | nachher |
+|---|---|---|
+| Scrollen 1/16 | 11,6 / 16,6 / 33,8 · 11,0 / 16,5 / 28,1 ms | 11,4 / 16,9 / 32,2 · 10,4 / 14,5 / 31,9 ms |
+| Scrollen 1/32 | 10,7 / 14,1 / 26,3 · 10,3 / 13,4 / 26,2 ms | 10,5 / 14,8 / 30,4 · 10,2 / 13,8 / 20,2 ms |
+| Wiedergabe 1/16, 240 Polls | 3,3 / 5,4 / 13,2 · 3,1 / 4,7 / 10,8 ms | 3,2 / 4,9 / 15,0 · 3,0 / 4,6 / 10,6 ms |
+| Recompositions je Poll (sichtbar) | 0 | 0 |
+| Layout-Knoten je Takt 1/16 / 1/32 | 188 / 364 | 188 / 364 |
+
+Unverändert im Rahmen der Streuung.
+
+**Tests.**
+- `Qa31DrumGridStressUiTest` (Robolectric, nur CI; Desktop-Variante lokal grün mit 1000 Takten / 120 s über `-Dqa31.bars`/`-Dqa31.playSeconds`, CI-Standard 80 Takte / 10 s):
+  - S1: beide Fälle (Pause und zwischen Polls), Wechsel 1/32 → 1/16, 1/8, 1/8 T, 1/16 T.
+  - S2: Taktartwechsel.
+  - In S1/S2 wird der Draw jeweils erzwungen (`captureToImage`); „nicht unterstützt“ wird toleriert, die Draw-Ausnahme nicht.
+  - S3 Speichergrenze: ≤ Start + 60 MB je Runde, Runde 2 ≤ Runde 1 + 15 MB, ≤ 16 lebende `DrumBarPaint`, ≤ 1 `DrumLive`.
+  - Gegen 06c2b77: S1/S2 rot (Ausnahmen oben), S3 grün.
+- `Qa31DrumMemoryTest` (JVM/Shim): abgeleitete Drum-Daten bei 1000 Takten 1/32 voll < 16 MB (gemessen 4,6 MB, 35 ms).
+
+**4. Absturzprotokoll (neu).**
+
+*Ablauf:*
+- `RiffApplication.onCreate` legt zuerst `FileCrashLog` (`files/crashes`) an und installiert `CrashRecorder` als Default-Handler (nicht unter Robolectric).
+- Bei einer nicht gefangenen Ausnahme:
+  1. Bei `OutOfMemoryError` (auch als Cause) zuerst den 512-KB-Reservepuffer freigeben.
+  2. Bericht formatieren (`CrashReportFormat`, core:ports, rein).
+  3. Synchron schreiben: Temp-Datei, `fsync`, Umbenennen, Marker `unseen`; die ältesten über 5 löschen.
+  4. Danach den vorherigen Handler aufrufen, Android beendet den Prozess wie gewohnt.
+- Scheitert der volle Bericht, wird eine Notfassung geschrieben (Klasse, 40 Frames). Scheitert das Schreiben, passiert nichts weiter. Nichts im Handler wirft.
+
+*Inhalt:*
+- Zeit (UTC + Epoch), versionName/versionCode, Hersteller/Modell, Android-Version/API, Thread.
+- Route (Muster, nie die Projekt-ID) und Arbeitsbereich-Seite; Takt-/Spurzahl und Raster des offenen Projekts (`CrashContext`, gesetzt vom NavController-Listener, von `WorkspaceScreen` und von `WorkspaceViewModel.relayout`).
+- Heap genutzt/max, Ausnahmezeile, vollständiger Stacktrace mit Causes und Suppressed.
+- Höchstens 64 KB UTF-8: Der Kopf bleibt, vom Stacktrace bleiben Anfang und Ende mit der Markierung „[gekürzt …]“.
+- Keine Titel, Namen, Noten.
+
+*Vom System gemeldete Prozessenden (Zusatz):* Native Abstürze (Skia/HWUI/GPU), ANRs und Low-Memory-Kills erreichen den Java-Handler nicht. Ab Android 11 liest die App beim Start `ActivityManager.getHistoricalProcessExitReasons` und legt neue relevante Einträge einmalig ins selbe Protokoll:
+- CRASH_NATIVE, ANR, INITIALIZATION_FAILURE immer.
+- CRASH nur, wenn der Handler ihn nicht schon schrieb (±10 s).
+- Kills (LOW_MEMORY, SIGNALED, EXCESSIVE_RESOURCE_USAGE) nur im Vordergrund/sichtbar.
+- Inhalt: Grund, Systembeschreibung, Wichtigkeit, Status, PSS/RSS.
+- Der erste Start blickt 14 Tage zurück; so erscheint ein Absturz der Version v1151 nach dem Update.
+
+*Anzeige:*
+- Diagnose-Seite „Letzte Abstürze“ (`CrashReportsSection`, auch ohne Audio-Labor): Liste (neueste zuerst, Zeit + Ausnahmezeile); Tippen zeigt den Text; „Teilen“ (`ACTION_SEND` text/plain über die Systemauswahl, kein Netzwerk, keine automatische Übertragung); „Löschen“; „Alle löschen“.
+- Nach einem Absturz beim nächsten Start einmal „ArtiFret ist abgestürzt — Bericht unter Diagnose“ mit „Ansehen“. „Ansehen“ öffnet dieselbe Ansicht als Dialog, auch aus der Bibliothek. Der Hinweis hat Vorrang vor dem Update-Hinweis.
+
+*Tests:*
+- `Qa31CrashReportFormatTest` (core:ports, 9): Kopfzeilen; kein Projekt; Causes/Suppressed; 64-KB-Kürzung mit Anfang/Ende bei StackOverflow-Spur und Mehrbyte-Zeichen; keine halben Surrogatpaare; Titel; Notfassung; Kontext; System-Exit-Bericht.
+- `Qa31CrashLogTest` (data:local, 9): Rotation 5 / ≤ 64 KB / gleiche Millisekunde; `unseen` einmalig; keine Pfade außerhalb des Musters; voller Bericht mit Kontext; **OOM-Pfad simuliert** (Reserve vor dem Formatieren frei); Notfassung bei werfendem Stacktrace; Schreibfehler wirft nicht; installierter Handler ruft danach den vorherigen; System-Exits (Auswahl, keine Dubletten, einmalig).
+- `Qa31CrashReportsUiTest` (Robolectric, nur CI; Desktop-Variante lokal grün, 4): Liste, Text, Teilen genau dieses Textes, Löschen, Alle löschen, Share-Intent, Abschnitt auf der echten Diagnose-Seite, `CrashContext` aus dem ViewModel.
+
+**Gehalten:**
+- JVM-Harness, alle portablen Module: 777/777 grün (vorher 759).
+- ViewModel-Shim: 89/89 (vorher 87).
+- Compose-Desktop: Typcheck aller Compose-Quellen grün; alle 33 Desktop-Varianten grün (Qa23 8, Qa29 4, Qa30 Raster 6, Qa30 Perf 4, Qa30 Positionierzone 3, Qa31 Stress 3, Qa31 Abstürze 4).
+- `tools/verify_architecture.py` grün.
+
+**Nur CI (UNVERIFIED lokal):**
+- Android-Kompilat und Lint:
+  - `RiffApplication`: `ApplicationExitInfo` hinter API-30-Prüfung mit `@TargetApi`, `BuildConfig`.
+  - `MainActivity`: `NavController.OnDestinationChangedListener`, Hinweis, Dialog.
+  - `CrashReportsSection`: `Intent`, `Dialog`.
+  - `ProjectScreens.kt`.
+- Robolectric:
+  - `Qa31DrumGridStressUiTest`. Ob `captureToImage` dort zeichnet, ist offen; die Spalten-Prüfung ist unabhängig davon rot vor dem Fix.
+  - `Qa31CrashReportsUiTest`.
+  - Alle bestehenden App-Tests mit dem neuen Start (Handler und Exit-Gründe sind unter Robolectric aus).
+
+**Restrisiken:**
+- Der Gerätebefund ist nicht bestätigt. Der gefundene Absturz passt zum Wortlaut, belegt ist er erst mit einem Bericht.
+- Ein nativer Absturz wird erst beim nächsten Start und nur ab Android 11 erfasst, ohne Stacktrace: Die App liest nur die Systembeschreibung, nicht den Tombstone.
+- Extreme Stücke (1000 Takte, jede 1/32-Zelle) brauchen ~300 MB Spitze, weil das ViewModel das Notenbild der Drum-Spur auch im Drum-Bildschirm setzt; unverändert.
+- `CrashContext` ist ein Prozess-Singleton: Bei zwei Arbeitsbereichen gilt der zuletzt gesetzte Stand.
