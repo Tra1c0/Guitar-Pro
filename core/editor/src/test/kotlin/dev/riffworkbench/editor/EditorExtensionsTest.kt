@@ -44,14 +44,21 @@ class EditorExtensionsTest {
      * moved the later beats to 1/8 and 3/16). Now later onsets keep their place: lengthening into a note is refused without
      * change, lengthening into a rest consumes it, shortening (triplet) leaves a rest behind; overflow is still refused.
      */
-    @Test fun durationChangesKeepLaterOnsetsAndRefuseOverflow() {
+    /**
+     * Zyklus 29 (Nutzerentscheidung „Diese sollen sich dann verschieben“): a longer value with a note right behind moves
+     * the following beats instead of the Zyklus-25 refusal; over the barline the beat continues tied in the next bar. The
+     * remaining coverage (rest consumption, triplet, shorter → rest) is unchanged. Was `durationChangesKeepLaterOnsetsAndRefuseOverflow`.
+     */
+    @Test fun durationChangesKeepLaterOnsetsAndMoveThemWhenBlocked() {
         val e = session()
         listOf(0L, 1L, 2L).forEach { e.at(f(it, 16)); e.ok(EditorCommand.PutNote(fret = it.toInt())) }
         e.at(Fraction.ZERO)
         val before = e.state.value.project
-        val blocked = e.dispatch(EditorCommand.SetDuration(WrittenDuration(8)))
-        assertTrue(blocked is Outcome.Failure && (blocked as Outcome.Failure).message.startsWith("Kein Platz: nächste Note bei Zählzeit"))
-        assertEquals(before, e.state.value.project)
+        e.ok(EditorCommand.SetDuration(WrittenDuration(8)))
+        assertEquals(listOf(f(0, 1), f(1, 8), f(3, 16)), e.voice().beats.map { it.offset })
+        valid(e.state.value.project)
+        assertTrue(e.undo() is Outcome.Success)
+        assertEquals(before.copy(revision = 0), e.state.value.project.copy(revision = 0))
         e.at(f(1, 16)); e.ok(EditorCommand.PutRest(WrittenDuration(16)))
         e.at(Fraction.ZERO); e.ok(EditorCommand.SetDuration(WrittenDuration(8)))
         assertEquals(listOf(f(0, 1), f(1, 8)), e.voice().beats.map { it.offset })
@@ -61,7 +68,14 @@ class EditorExtensionsTest {
         assertTrue(e.voice().beats[1].explicitRest && e.voice().beats[1].duration.length() == f(1, 24))
         valid(e.state.value.project)
         e.at(f(1, 8)); e.ok(EditorCommand.SetDuration(WrittenDuration(2)))
-        assertTrue(e.dispatch(EditorCommand.SetDuration(WrittenDuration(1))) is Outcome.Failure)
+        // Over the barline: 7/8 in this bar, 1/8 tied at the start of an appended bar.
+        e.ok(EditorCommand.SetDuration(WrittenDuration(1)))
+        val p = e.state.value.project
+        assertEquals(2, p.measures.size)
+        val tail = p.tracks[0].staves[0].bars[1].voices[0].beats.first()
+        assertEquals(f(1, 8), tail.duration.length())
+        assertEquals(LinkKind.TIE, e.voice().beats.last().notes.single().links.single().kind)
+        valid(p)
     }
 
     @Test fun insertBeatShiftsLaterBeats() {

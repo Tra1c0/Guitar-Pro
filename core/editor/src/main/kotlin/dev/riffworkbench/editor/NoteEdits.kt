@@ -158,16 +158,17 @@ internal object NoteEdits {
     }
 
     /**
-     * Changes the selected beat's duration in place (Zyklus 25, Nutzerentscheidung „Notenwert ändern ohne Verschieben“):
-     * every later onset of the voice keeps its position. Shorter: the freed time becomes rest(s) right behind the beat
-     * (split into writable values). Longer: only into rests (or empty room) behind the beat, which are consumed or
-     * shortened; a note in the way rejects the change („Kein Platz: nächste Note bei …“) and nothing changes. Replaces
-     * the former ripple, which shifted all later beats of the bar.
+     * Changes the selected beat's duration (Zyklus 25 „Notenwert ändern ohne Verschieben“, Zyklus 29 „Verlängern verschiebt“).
+     * Shorter: every later onset of the voice keeps its position, the freed time becomes rest(s) right behind the beat (split
+     * into writable values). Longer: see [DurationRipple] — rests right behind are consumed first, then the following beats
+     * move later, over the barline into the next bars (ties at the barline, a bar appended at the end of the piece). The
+     * Zyklus-25 refusal („Kein Platz …“) is replaced by this user decision.
      */
     fun setDurationInPlace(p: Project, s: Selection, ids: IdSource, transform: (WrittenDuration) -> WrittenDuration): Project {
         val beat = selectedBeat(p, s) ?: return p
         val next = transform(beat.duration)
         if (next == beat.duration) return p
+        if (next.length() > beat.duration.length()) return DurationRipple.lengthen(p, s, beat, next, ids)
         return mapVoice(p, s) { v, _, m -> v.copy(beats = resizedInPlace(v.beats, beat, next, m, ids)) }
     }
 

@@ -6,8 +6,8 @@ import org.junit.Test
 
 /**
  * Zyklus 25, Nutzerentscheidung „Notenwert ändern ohne Verschieben“: SetDuration/SetTuplet on an existing beat keep every
- * later onset in place. Shorter leaves rests right behind the beat, longer consumes rests (or empty room) and is refused
- * without any change when a note is in the way. Red against the former ripple (later beats moved).
+ * later onset in place. Shorter leaves rests right behind the beat, longer consumes rests (or empty room); with a note in
+ * the way the Zyklus-29 rule moves the following notes (formerly refused). Red against the former ripple (later beats moved).
  */
 class Qa25DurationInPlaceTest {
     private var sequence = 0
@@ -59,19 +59,18 @@ class Qa25DurationInPlaceTest {
         assertEquals(listOf(f(0, 1), f(1, 2)), e.beats().map { it.offset }); e.valid()
     }
 
-    @Test fun longerWithoutRoomIsRefusedWithoutAnyChange() {
+    /**
+     * Zyklus 29 replaces the Zyklus-25 refusal („Kein Platz …“) by the user's decision: the following notes move. Was
+     * `longerWithoutRoomIsRefusedWithoutAnyChange`; the full rule is covered by Qa29DurationRippleTest.
+     */
+    @Test fun longerWithoutRoomMovesTheFollowingNotes() {
         val e = session(); e.bar()
-        e.at(Fraction.ZERO)
-        val before = e.state.value
-        val r = e.dispatch(EditorCommand.SetDuration(WrittenDuration(2)))
-        assertTrue(r is Outcome.Failure)
-        assertEquals("Kein Platz: nächste Note bei Zählzeit 2", (r as Outcome.Failure).message)
-        assertSame(before, e.state.value)
-        // Over the barline: refused as well.
-        e.at(f(1, 2)); assertTrue(e.dispatch(EditorCommand.SetDuration(WrittenDuration(1))) is Outcome.Failure)
-        assertEquals(before.project, e.state.value.project)
-        // Dotting the quarter before another quarter: also no room.
-        e.at(Fraction.ZERO); assertTrue(e.dispatch(EditorCommand.SetDuration(WrittenDuration(4, 1))) is Outcome.Failure)
+        e.at(Fraction.ZERO); e.ok(EditorCommand.SetDuration(WrittenDuration(2)))
+        assertEquals(listOf(f(0, 1), f(1, 2), f(3, 4)), e.onsets())
+        assertEquals(f(1, 1), e.filled()); e.valid()
+        // The half reaches over the barline: a quarter here, a tied quarter in the appended bar.
+        assertEquals(2, e.state.value.project.measures.size)
+        assertEquals(LinkKind.TIE, e.beats().last().notes.single().links.single().kind)
     }
 
     @Test fun undoRestoresTheBarExactly() {
