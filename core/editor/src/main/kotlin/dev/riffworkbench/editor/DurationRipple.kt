@@ -90,9 +90,9 @@ internal object DurationRipple {
             carried = withRestsInGaps(carried, split)
             val length = carried.maxOf { it.offset + it.duration.length() }
             val result = settle(carried + makeRoom(existing, Fraction.ZERO, length, cap, split), cap, split)
-            var bar = result.first
-            // A bar that was empty receives only the carried content: it is filled with rests to the barline.
-            if (existing.isEmpty()) bar = bar + split.rests(bar.maxOf { it.offset + it.duration.length() }, cap, emptyList())
+            // A bar that was empty (or appended) gets only the moved content, no filler rests: the next entry there takes the
+            // entry value (a note on an existing rest keeps the rest's duration, Zyklus 25), like every bar being typed.
+            val bar = result.first
             written[m.id] = bar
             carried = result.second
         }

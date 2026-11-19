@@ -26,15 +26,19 @@ class Qa29DurationRippleTest {
         val errors = ScoreValidator.validate(p).filter { it.severity == Severity.ERROR }
         assertTrue(errors.toString(), errors.isEmpty())
     }
-    /** Every bar of the voice gapless and exactly full (or empty). */
-    private fun EditorSession.full(track: Int = 0) {
+    /**
+     * Every bar of the voice gapless and exactly full (or empty); [growing] bars were empty before (or appended) and only
+     * received moved content: gapless from the downbeat, no filler rests behind it (the next entry takes the entry value).
+     */
+    private fun EditorSession.full(track: Int = 0, growing: Set<Int> = emptySet()) {
         val p = state.value.project
         p.measures.forEachIndexed { i, m ->
             val beats = beats(i, track)
             if (beats.isEmpty()) return@forEachIndexed
             var end = Fraction.ZERO
             for (b in beats) { assertEquals("Takt ${i + 1} lückenlos", end, b.offset); end = b.offset + b.duration.length() }
-            assertEquals("Takt ${i + 1} exakt gefüllt", m.signature.length(), end)
+            if (i in growing) { assertTrue("Takt ${i + 1} nicht übervoll", end <= m.signature.length()); assertTrue("Takt ${i + 1} endet mit Inhalt", beats.last().notes.isNotEmpty() || track != 0) }
+            else assertEquals("Takt ${i + 1} exakt gefüllt", m.signature.length(), end)
         }
     }
     private fun EditorSession.quarters(bar: Int, vararg frets: Int?) = frets.forEachIndexed { i, fret ->
@@ -94,9 +98,9 @@ class Qa29DurationRippleTest {
         val now = onsets(e).toMap()
         val then = e.run { before.measures.indices.flatMap { b -> before.tracks[0].staves[0].bars[b].voices[0].beats.map { it.notes.single().fret!! to (f(b.toLong(), 1) + it.offset) } } }.toMap()
         for ((fret, t) in then) if (fret != 1) assertEquals("Bund $fret", t + f(1, 4), now[fret])
-        assertEquals(listOf(Triple(f(0, 1), 12, f(1, 4)), Triple(f(1, 4), null, f(3, 4))), e.shape(3))
+        assertEquals(listOf(Triple(f(0, 1), 12, f(1, 4))), e.shape(3))
         // The appended bar exists (empty) in every other track too: validated by bar alignment.
-        e.valid(); e.full()
+        e.valid(); e.full(growing = setOf(3))
         // One undo step restores everything, the appended bar included.
         assertTrue(e.undo() is Outcome.Success)
         assertEquals(before.copy(revision = 0), e.state.value.project.copy(revision = 0))
@@ -126,8 +130,8 @@ class Qa29DurationRippleTest {
         assertEquals(2, p.measures.size)
         assertEquals(before.tracks[0].staves[0].bars[1].voices[1], p.tracks[0].staves[0].bars[1].voices[1])
         assertEquals(before.tracks.drop(1), p.tracks.drop(1))
-        assertEquals(listOf(Triple(f(0, 1), 4, f(1, 2)), Triple(f(1, 2), null, f(1, 2))), e.shape(1))
-        e.valid(); e.full()
+        assertEquals(listOf(Triple(f(0, 1), 4, f(1, 2))), e.shape(1))
+        e.valid(); e.full(growing = setOf(1))
     }
 
     @Test fun drumHitsOverTheBarlineContinueAsRestsWithoutTie() {
@@ -141,8 +145,8 @@ class Qa29DurationRippleTest {
         assertTrue(last.notes.single().links.isEmpty())
         val next = e.beats(1, drums)
         assertTrue(next.all { it.explicitRest && it.notes.isEmpty() })
-        assertEquals(f(1, 1), next.fold(Fraction.ZERO) { a, b -> a + b.duration.length() })
-        e.valid(); e.full(drums)
+        assertEquals(f(1, 4), next.fold(Fraction.ZERO) { a, b -> a + b.duration.length() })
+        e.valid(); e.full(drums, growing = setOf(1))
     }
 
     /** Model-test finding (seeds 29126/29197): empty room inside the moved material reached the next bar as a gap. */
@@ -156,7 +160,7 @@ class Qa29DurationRippleTest {
         e.at(0, Fraction.ZERO); e.ok(EditorCommand.SetDuration(WrittenDuration(1)))
         assertEquals(listOf(Triple(f(0, 1), 2, f(1, 8)), Triple(f(1, 8), null, f(1, 8)), Triple(f(1, 4), 3, f(1, 4)), Triple(f(1, 2), 4, f(1, 4)), Triple(f(3, 4), 5, f(1, 4))), e.shape(1))
         assertEquals(listOf(6, 7, 8), e.beats(2).mapNotNull { it.notes.firstOrNull()?.fret })
-        e.valid(); e.full()
+        e.valid(); e.full(growing = setOf(2))
     }
 
     /** Model-test finding (seeds 29003/29007/29025): DeleteBeat left a full bar with a gap at its end. */

@@ -104,6 +104,12 @@ class Qa15FormatRoundTripTest {
                 "link.hammer_on" to setOf("hammer_pull"), "link.pull_off" to setOf("hammer_pull"),
                 "art.slide" to setOf("slide"), "link.legato_slide" to setOf("slide", "slur"), "link.slur" to setOf("slur"), "measure.pickup" to setOf("irregular_measure"),
                 "beat.duration" to setOf("divisions"), "note.missing" to setOf("tab_position"), "note.extra" to setOf("tab_position"), "beat.missing" to setOf("unplayable", "tab_position"),
+                // Zyklus 29: a tie target is addressed by its string like a note (note.missing/extra above). Two voices on one
+                // string at the same time (the editor allows it; since the lengthening rule moves tied continuations, the
+                // generator reaches it: seeds 15007/15018/15022, both voices tied on string 6) cannot be written as TAB in
+                // MusicXML; the import re-strings one note and reports tab_position — the same honest loss, now for the tie.
+                // tie_gap (new export loss, seed 15022): a tie kept over an inserted/duplicated bar has no MusicXML form.
+                "link.tie" to setOf("tab_position", "tie_gap"),
             ),
         ).let { it + ("mxl" to it.getValue("musicxml")) }
     }

@@ -18,7 +18,8 @@ import org.junit.Test
  *  M3 Shorter: every other beat keeps its onset (all bars). Longer: in the bar, notes behind the beat move by exactly
  *     max(0, delta − free room right behind); no note is lost (ids kept), bars before the edited one are unchanged.
  *  M4 PutNote on an existing beat keeps its duration (Zyklus 25 placeholders); on an empty position the beat has the entry
- *     duration (or it fails).
+ *     duration, or its tied first part when it reaches over the barline (Zyklus 29: no longer refused, see M7).
+ *  M7 (printed) refusals per command and message: entries are no longer refused for lack of room.
  *  M5 Undo restores exactly the state before the step (project modulo revision), redo exactly the state after it.
  *  M6 Other tracks and other voices are unchanged (bars appended at the end aside).
  *
@@ -38,6 +39,8 @@ class Qa29RestNoteModelTest {
     }
 
     private fun f(n: Long, d: Long) = Fraction.of(n, d)
+    /** Refusals per command and message over the run (printed: what users would see as notices). */
+    private val outcomes = java.util.concurrent.ConcurrentHashMap<String, Int>()
     private val entries = listOf(WrittenDuration(4), WrittenDuration(8), WrittenDuration(16), WrittenDuration(8, 1), WrittenDuration(8, tuplets = listOf(TupletRatio(3, 2))), WrittenDuration(2), WrittenDuration(32))
     private val values = listOf(WrittenDuration(1), WrittenDuration(2), WrittenDuration(4), WrittenDuration(8), WrittenDuration(16), WrittenDuration(32), WrittenDuration(2, 1), WrittenDuration(4, 1), WrittenDuration(8, 1))
 
@@ -77,6 +80,17 @@ class Qa29RestNoteModelTest {
         private fun beatsHere() = voice(p, p.measures.indexOfFirst { it.id == sel.measureId })
         private fun selectedBeat() = beatsHere().firstOrNull { it.offset == sel.offset }
 
+        /** WorkspaceViewModel.move(1, overTies = true) after a fret: steps over the tied continuations of the entered beat (Zyklus 29). */
+        private fun advanceOverTies(sameUndoStep: Boolean) {
+            var left = selectedBeat()?.notes.orEmpty()
+            advance(sameUndoStep)
+            repeat(32) {
+                val here = selectedBeat()?.notes.orEmpty()
+                if (left.isEmpty() || here.isEmpty() || !here.all { n -> left.any { o -> o.links.any { it.kind == LinkKind.TIE && it.target == n.id } } }) return
+                left = here
+                advance(sameUndoStep)
+            }
+        }
         /** WorkspaceViewModel.move(1) after an entry (auto-advance). */
         private fun advance(sameUndoStep: Boolean) {
             val index = p.measures.indexOfFirst { it.id == sel.measureId }
@@ -115,8 +129,9 @@ class Qa29RestNoteModelTest {
                     if (result is Outcome.Success) {
                         val now = selectedBeat()
                         if (target != null && now?.duration != target.duration) fail("M4 PutNote changed an existing beat's duration ${target.duration} -> ${now?.duration}")
-                        if (target == null && now?.duration != entry) fail("M4 PutNote on an empty position: ${now?.duration} instead of $entry")
-                        if (r.nextInt(5) != 0) { val changed = p.revision != before.revision; if (changed) check(p, before, bar, fullBefore, op); advance(changed); afterAdvance(before); return }
+                        // Zyklus 29: the entry value, or its first part when it reaches over the barline (tied on in the next bar).
+                        if (target == null && now?.duration != entry && !(now != null && now.duration.length() < entry.length() && p.measures.size >= before.measures.size && now.notes.all { n -> n.links.any { it.kind == LinkKind.TIE } })) fail("M4 PutNote on an empty position: ${now?.duration} instead of $entry")
+                        if (r.nextInt(5) != 0) { val changed = p.revision != before.revision; if (changed) check(p, before, bar, fullBefore, op); advanceOverTies(changed); afterAdvance(before); return }
                     }
                 }
                 is Op.Rest -> { val r = Random(op.seed)
@@ -142,7 +157,7 @@ class Qa29RestNoteModelTest {
                     return
                 }
             }
-            if (result is Outcome.Failure) { if (p !== before && !same(p, before)) fail("M1 failure changed the score: ${(result as Outcome.Failure).message}"); return }
+            if (result is Outcome.Failure) { outcomes.merge("${op::class.simpleName}: ${(result as Outcome.Failure).message}", 1, Int::plus); if (p !== before && !same(p, before)) fail("M1 failure changed the score: ${(result as Outcome.Failure).message}"); return }
             if (result != null && p.revision != before.revision) {
                 check(p, before, bar, fullBefore, op, target)
                 if (checkUndo) { undo.addLast(before); redo.clear() }
@@ -216,6 +231,7 @@ class Qa29RestNoteModelTest {
             runner.violation?.let { failures += "seed $seed: $it" }
             if (failures.size >= 3) break
         }
+        println("QA29 refusals: " + outcomes.entries.sortedByDescending { it.value }.joinToString { "${it.key} ×${it.value}" })
         assertTrue(failures.joinToString("\n\n"), failures.isEmpty())
     }
 }
